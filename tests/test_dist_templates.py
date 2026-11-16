@@ -1,17 +1,13 @@
 """The store distribution templates, and the two traps they exist for.
 
-Both failures these guard against are **silent and remote**: the upload
-succeeds, the store accepts it, and the damage shows up on a player's
-machine. That is why they are asserted here rather than left to a
-reviewer's eye on a generated file nobody re-reads.
+Both failures are silent: the upload succeeds and the damage shows on
+a player's machine.
 
 1. `steam_appid.txt` reaching a depot. It overrides the App ID Steam
-   supplies and makes `SteamAPI_RestartAppIfNecessary` return false, so a
-   customer who launches the executable directly plays with no client
-   attached -- no overlay, no achievements, no cloud saves, no error.
-2. An itch.io channel name that names no platform. itch.io reads the
-   channel to decide what an upload *is*; one that matches none of its
-   tokens is tagged for nothing and offered to nobody.
+   supplies, so a customer who launches the executable directly plays
+   with no client attached.
+2. An itch.io channel name that names no platform. The upload is
+   tagged for nothing and offered to nobody.
 """
 
 from __future__ import annotations

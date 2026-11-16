@@ -1,20 +1,11 @@
 """`UIRenderer.draw_texture` can name a region of its texture.
 
-Until it could, the UI half of the engine was the only one that could
-not address an atlas: `RenderCommand.source_rect` has always reached the
-world renderers, and the pygame backend blits regions straight out of a
-sheet on its fast path -- but a HUD icon or a nine-patch slice had to be
-handed a surface somebody had already cut. The nine-patch renderer, which
-needs nine differently-stretched regions of one texture, is why it was
-worth closing.
+A HUD icon or a nine-patch slice draws one region of an atlas, as a
+sprite does through `RenderCommand.source_rect`.
 
-The two real UI renderers share one `blit_texture`, so both are run
-through the same cases: their `draw_texture` bodies were byte-identical
-before, by coincidence rather than by construction, and a region that
-worked on pygame and not on ModernGL would be worse than no region at
-all. The ModernGL one is driven through its offscreen surface directly,
-which is where it composes every pixel; no GL context is needed for that
-and none is created here.
+The surface-based UI renderers share one `blit_texture` and are run
+through the same cases here, each driven through the surface it
+composes onto.
 """
 
 from __future__ import annotations

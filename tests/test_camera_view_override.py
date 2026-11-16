@@ -1,17 +1,9 @@
 """An editor can take the view from a game that drives its camera.
 
-Studio shows the game's own framebuffer, so there is exactly one camera:
-panning the viewport has to move the camera the game renders with. And a
-game whose follow system writes that camera every tick wins -- measured on
-a demo, a pan put the camera at (-97, 178) and forty frames later the
-follow system had it at (204, 387), so the click that followed landed on
-whatever had moved under the cursor. That is what "the middle button broke
-selection" was.
-
-Godot and Unity sidestep the question by rendering the editor view
-themselves. With one camera, the answer is an override: the game keeps
-writing where *it* wants the camera, those writes are recorded and not
-displayed, and releasing hands it back wherever the game had got to.
+Studio shows the game's own framebuffer, so there is one camera, and
+a game's follow system writes it every tick. While the view is
+overridden, the game's writes are recorded and not displayed, and
+releasing hands the camera back wherever the game had got to.
 """
 
 from __future__ import annotations

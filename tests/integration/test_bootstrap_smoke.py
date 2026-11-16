@@ -1,18 +1,13 @@
 """Bootstrap smoke test.
 
-The audit's central finding wasn't any single bug: 1,022 passing tests, clean
-ruff and clean mypy coexisted with an engine whose public entry point could
-not run, because nothing in the suite executed the real `_setup_container()`
-(`tests/integration/test_app_flow.py` hand-builds a container that omits
-`RenderGraph`, so it silently takes the working render path and passes).
+Runs the real `create_application()` and
+`create_sandbox_application()` through a real scene for about 30
+frames and asserts a clean shutdown. A test that hand-builds its
+container does not execute `_setup_container()`, and the entry point
+has been broken before with the rest of the suite green.
 
-This test runs the real `create_application()` / `create_sandbox_application()`
-through a real scene for ~30 frames and asserts clean shutdown. It is
-deliberately left unmarked so it runs in `make test-unit` and `make ci`, not
-only under the opt-in `-m integration` gate that already missed six critical
-bugs once (LOG-1, BOOT-1, BOOT-2, BOOT-3) before this ticket existed.
-
-This is the seed of the integration suite that demo migration will grow into.
+Left unmarked on purpose, so it runs in `make test-unit` and
+`make ci`, not only under `-m integration`.
 """
 
 import os

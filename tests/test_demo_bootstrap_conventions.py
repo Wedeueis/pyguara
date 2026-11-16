@@ -1,16 +1,11 @@
 """A demo that builds a `RenderGraph` must share the graph's framebuffers.
 
-`RenderGraph` constructs a `FramebufferManager` internally, and every pass
-resolves its buffers through *that* one. A demo that builds a second manager
-gets a parallel set of framebuffers the graph never looks at: wasted VRAM
-today, and a trap later, because a named buffer claimed on the demo's manager
-silently never reaches the graph.
+`RenderGraph` constructs a `FramebufferManager`, and every pass
+resolves its buffers through that one. A demo that builds a second
+manager gets framebuffers the graph never reads, and a named buffer
+declared on it never reaches the graph.
 
-`mourisco_ressonancia` did exactly that until it was fixed; the two demos
-written after it avoid it and say why in a comment. This is the guard that
-keeps the next one from repeating it -- a source check rather than a runtime
-one, because the ModernGL demos need a GL context the test suite has no way
-to provide (see `tests/integration/test_demos_render.py`).
+A source check, not a runtime one, so it needs no GPU.
 """
 
 from __future__ import annotations
@@ -90,8 +85,8 @@ def _calls_engine_bootstrap(source: str) -> bool:
 def test_a_demo_builds_its_container_through_the_engine(bootstrap: Path) -> None:
     """A demo asks the engine for the wiring every game needs.
 
-    Hand-rolling it is not just duplication -- it drifts. Before #196, **no
-    demo at all** registered `RandomService`, so
+    Hand-rolling it is not just duplication -- it drifts. Before #196, no
+    demo at all registered `RandomService`, so
     `protocolo_bandeira/ai_behaviors.py` reached for bare `random.random()`
     and that demo cannot be reproduced or replayed; only two of twelve
     registered `SpatialHash`. Neither could have happened to a demo that
@@ -157,22 +152,10 @@ def _builds_a_framebuffer_manager(path: Path) -> bool:
 def test_only_the_render_graph_builds_a_framebuffer_manager() -> None:
     """The engine must not hand games an orphaned manager either.
 
-    `_setup_container()` used to construct a `FramebufferManager`, register
-    *that* in the container, and then build a `RenderGraph` -- which makes
-    its own. So `container.get(FramebufferManager)` returned a manager no
-    pass ever read, and a game declaring an HDR buffer on it, the obvious
-    correct thing to do, was declaring it into nothing. Silently.
-
-    This is the same defect the demo check above has guarded against since
-    `mourisco_ressonancia` hit it; the guard simply never looked at the
-    engine, where it mattered more -- the orphan was the one registered in
-    DI, so a well-behaved game would find it in preference to any other.
-
-    Proven at runtime before it was fixed, with a real GL window under
-    SDL's offscreen driver: two distinct manager ids, and a buffer declared
-    on the registered one reading back as `None` on the graph's. That probe
-    cannot live in the suite, for the reason this module's docstring gives,
-    so the invariant is checked here instead.
+    The `FramebufferManager` registered in the container has to be the
+    `RenderGraph`'s own. If bootstrap built a second one and registered
+    that, a game declaring an HDR buffer on `container.get(
+    FramebufferManager)` would declare it on a manager no pass reads.
     """
     offenders = sorted(
         str(path.relative_to(PYGUARA_DIR))
@@ -195,19 +178,12 @@ ASSIGNS_THE_SCENE_CAMERA = re.compile(r"\bself\.camera\s*=")
 
 @pytest.mark.parametrize("scenes", SCENES, ids=lambda p: str(p.parent.name))
 def test_a_scene_with_its_own_camera_assigns_it(scenes: Path) -> None:
-    """`Scene.camera` is the camera the scene renders with, full stop.
+    """`Scene.camera` is the camera the scene renders with.
 
-    Everything that turns a world position into a screen one from outside
-    the frame reads it: Studio's viewport, its picking, and the transform
-    gizmo. A scene that overrides `render()` and draws with a camera of
-    its own -- which several here do, because they draw by hand rather
-    than through the render system -- leaves that attribute holding the
-    base class's untouched camera at the origin.
-
-    Nothing fails. The frame looks right, because the scene is using the
-    camera it meant to; only the editor is wrong, and it is wrong
-    quietly: `guara_falcao` drew the gizmo hundreds of pixels from the
-    entity it belonged to, which is a confusing way to find out.
+    Studio's viewport, its picking and the transform gizmo read it. A
+    scene that overrides `render()` and draws with a camera of its own
+    must assign that camera to the attribute. Otherwise the frame looks
+    right and the editor draws its gizmo away from the entity.
     """
     source = scenes.read_text(encoding="utf-8")
     if not CONSTRUCTS_A_CAMERA.search(source):

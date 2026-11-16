@@ -1,17 +1,13 @@
 """The game-feel layer built on top of the simulation.
 
-Chipmunk simulates rigid bodies; it knows nothing about characters, ground or
-jumping. Everything that makes a platformer feel right -- knowing you are
-standing on something, coyote time, jump buffering, one jump per landing --
-is PyGuara's own, and all of it rests on the ground raycast telling the truth.
+Knowing you are standing on something, coyote time, jump buffering and
+one jump per landing are PyGuara's own, and all of them rest on the
+ground probe telling the truth.
 
-It did not. The ray starts just below the character's feet, but a Chipmunk
-segment query is a swept circle whose radius reached back into the character's
-own collider, so every character detected itself and read as permanently
-grounded -- in mid-air, and with no ground in the world at all. Coyote time
-never started, jump buffering had nothing to buffer for, and the landing that
-clears the one-jump-per-landing flag never happened, so a character stopped
-being able to jump until it died.
+The regression behind these: a ground ray that reached back into the
+character's own collider, so every character read as permanently
+grounded. Coyote time never started, and after one jump a character
+could not jump again.
 """
 
 from __future__ import annotations
@@ -488,22 +484,15 @@ class TestCeilingHeadBump:
     def _flush_ceiling(self, world: Platformer) -> Entity:
         """A box whose underside sits exactly at the player's head.
 
-        Player half-height is `PLAYER_HEIGHT / 2`, resting at `RESTING_Y`,
-        so the head line is `RESTING_Y - PLAYER_HEIGHT / 2 == GROUND_TOP -
-        PLAYER_HEIGHT`. A wide, thin ceiling centred there gives zero
-        clearance -- the same geometry the demo's moving platform produces.
+        The head line is `GROUND_TOP - PLAYER_HEIGHT`. A wide, thin ceiling
+        centred there gives zero clearance, as the demo's moving platform
+        does.
 
-        Built KINEMATIC rather than STATIC so a test can move it later:
-        `PhysicsSystem.sync_kinematic_transforms()` mirrors a kinematic
-        body's position from its `Transform` every tick, but a static
-        body's shape is set once and never re-synced.
-
-        Wall jump is off, matching `guara_falcao`'s own controller
-        (`level_builder.py`: `wall_jump_enabled=False`). Left on, a ceiling
-        this wide overlaps the character's side probes too, and the
-        character wall-jumps off it instead of head-bumping -- a different
-        path (`_perform_wall_jump`) that never touches `_jump_used` at all,
-        and so never reproduces the bug this class is about.
+        KINEMATIC, not STATIC, so a test can move it:
+        `PhysicsSystem.sync_kinematic_transforms()` mirrors a kinematic body
+        from its `Transform` every tick. Wall jump is off, as in
+        `guara_falcao`; left on, the character would wall-jump off a ceiling
+        this wide and never take the head-bump path.
         """
         world.controller.wall_jump_enabled = False
         head_line = GROUND_TOP - PLAYER_HEIGHT

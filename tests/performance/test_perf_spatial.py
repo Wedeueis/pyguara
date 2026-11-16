@@ -1,25 +1,12 @@
 """`SpatialHash` throughput: rebuild cost and query cost.
 
-Two properties are worth pinning, and they are different in kind.
+The rebuild must stay linear in key count; `FlockingSystem` does a
+full one every tick. A query must stay flat in key count, or the index
+has stopped indexing.
 
-The **rebuild** is linear in key count, and `FlockingSystem` does a full
-one every tick rather than maintaining the hash incrementally. That choice
-is defended in its docstring on correctness grounds (an incremental hash
-can accumulate a stale entry for a despawned entity), and the measurement
-backs it up: the rebuild is a small fraction of a flocking tick. This
-guard exists so that stays true.
-
-A **query** is supposed to be flat in key count -- that is the entire
-point of a spatial index. If the per-query cost starts climbing with the
-number of keys in the hash, the index has stopped indexing, and the guard
-below is what notices.
-
-Both complexity guards run against the **Python** store, which is what
-`build_hash`'s `accelerate=False` default is for: they are about the
-Python index's own asymptotics, and pointing them at whichever store a
-contributor happens to have built would make them measure something
-different on two machines. The native store has its own guards further
-down, and the sweeps report both.
+Both complexity guards run against the Python store
+(`accelerate=False` in `build_hash`), so they measure the same thing
+on every machine. The native store has its own guards further down.
 """
 
 from __future__ import annotations
@@ -119,20 +106,12 @@ def test_the_native_store_is_wired_up_and_materially_faster() -> None:
     """One tick of the shape every consumer has: re-sync, then query.
 
     `SpatialIndexSystem` re-inserts every tracked entity each tick and the
-    consumers then query once per entity, so a tick is `count` inserts
-    into an index that already holds those keys, plus `count` queries.
-    Both halves are timed because they do not win equally -- the inserts
-    are 4.9x and the queries 20.5x -- and timing only the queries would
-    quote a number no consumer ever sees. Together: 17x.
+    consumers query once per entity, so both halves are timed. Generating
+    the positions is outside the timed region, since it is the same Python
+    work on both stores.
 
-    The scatter is deliberately *outside* the timed region. Generating
-    positions is identical Python work in both branches, so including it
-    would dilute the ratio and make this guard less able to do its one
-    job, which is to notice the native path has stopped being taken at
-    all. A loader that finds no library falls back to Python exactly as
-    designed and every parity test *skips*, so this is one of the few
-    places a silently absent extension fails. Asserted at 4x against a
-    measured 17x for that reason.
+    The bound is loose: its job is to notice that the native path stopped
+    being taken, which nothing else fails on.
     """
     count = 1000
     spread = uniform_spread_for(count)
@@ -161,18 +140,13 @@ def test_the_native_store_is_wired_up_and_materially_faster() -> None:
 def test_alternating_writes_and_queries_stays_within_its_known_penalty() -> None:
     """The one regime where the native store is asymptotically worse.
 
-    The native grid rebuilds on the first query after any write, which is
-    free when a caller fills the whole index and then sweeps it -- one
-    rebuild for `count` queries, which is what every consumer in the
-    engine does. A caller that alternates instead pays one rebuild per
-    query: O(n^2) against Python's O(n).
+    The native grid rebuilds on the first query after any write. That is
+    one rebuild per tick for a caller that fills the index and then sweeps
+    it, and one per query for a caller that alternates.
 
-    Measured: 1.9x *faster* at 250 keys, 0.52x at 1000, 0.13x at 4000. So
-    this is not a guard against a regression, it is a guard on a cost that
-    is already there and must not grow -- and the number in the docstring
-    of `SpatialHash` has to keep matching it. If someone makes the rebuild
-    incremental, this test should start failing in the good direction and
-    both docstrings want rewriting.
+    This guards a known cost that must not grow. If the rebuild becomes
+    incremental, this test should fail in the good direction, and
+    `docs/agents/native-extension.md` wants updating.
     """
     count = 4000
     spread = uniform_spread_for(count)
@@ -200,18 +174,12 @@ def test_alternating_writes_and_queries_stays_within_its_known_penalty() -> None
 
 @pytest.mark.performance
 def test_the_native_advantage_does_not_wash_out_with_density() -> None:
-    """The ratio is supposed to be flat in `k`, and that is the whole case.
+    """The native advantage is about flat in `k`, candidates per query.
 
-    ADR 0004 originally ruled this port out because the crossing scales
-    with how many candidates a query returns. It does -- but so does the
-    Python broad-phase, at about twenty times the cost per candidate, so
-    the ratio barely moves. Measured 20.5x at k=17 and 22.6x at k=32, and
-    16.6x in the degenerate case where every key is everyone's neighbour.
-
-    This is the test that would catch the original objection turning out
-    to be right after all: if the crossing ever starts to dominate, the
-    ratio at high density collapses while the low-density one above stays
-    green.
+    The crossing scales with how many candidates a query returns, and so
+    does the Python broad-phase, at a higher cost per candidate. If the
+    crossing ever came to dominate, the ratio at high density would
+    collapse while the low-density guard stayed green.
     """
     count = 1000
     spread = uniform_spread_for(count)

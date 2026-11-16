@@ -276,7 +276,7 @@ def _factory(manager: EntityManager, index: int):
 
 class TestFilteringDisabledLeavesTheIndexIntact:
     """The disabled filter is a set difference, and for a single-type query
-    `_matching_entity_ids` returns the **live component index** rather than a
+    `_matching_entity_ids` returns the live component index rather than a
     copy. So the difference has to build a new set: the in-place spellings
     (`-=`, `difference_update`) would delete those ids from the index itself,
     and the entities would stop matching every later query -- including after

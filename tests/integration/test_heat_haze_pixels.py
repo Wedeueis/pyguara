@@ -1,14 +1,11 @@
 """The heat haze's ground heat is where its `horizon` says: below it.
 
-`horizon` runs from 0.0 at the top of the frame to 1.0 at the bottom, and
-heat builds from it downwards, towards the ground. The shader read GL's
-`v_uv.y`, which runs up from the bottom, so for as long as the effect
-existed the heat built towards the *top* of the frame instead -- found
-porting it to WGSL, where both conventions had to be spelled out. The
-WGSL still computes in that y-up convention, so its noise matches what
-was approved; this pins the direction on top of it.
+`horizon` runs from 0.0 at the top of the frame to 1.0 at the bottom,
+and heat builds from it downwards. The shader computes in a y-up
+convention, which once made the heat build towards the top; this pins
+the direction.
 
-Measured through the sun glow alone, since that is the shader's `ground`
+Measured through the sun glow alone, which is the shader's `ground`
 term made visible: no refraction, no dust.
 """
 

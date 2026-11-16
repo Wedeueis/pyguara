@@ -1,26 +1,12 @@
 """ECS throughput: pool churn and component queries.
 
-`EntityPool` exists so that a game with high-frequency spawn and despawn
-does not churn the garbage collector -- its own docstring says so. A pool
-whose release cost grows with how much of it is in use does not deliver
-that, and the largest pool anywhere else in the suite is size 4, which is
-why it went unnoticed.
+`EntityPool.release()` must cost the same whatever order entities come
+back in. When the active set was a list, releasing newest-first was
+quadratic. It is a dict keyed on entity id now.
 
-**Release order used to be the whole story here**, and the guard below is
-what holds the fix in place. When the active set was a list, `release()`
-did an `in` scan followed by a `list.remove()` -- two linear scans from
-index 0 -- so cost depended entirely on the order entities came back:
-
-- *Oldest-first* found its match at index 0 and removed it with a C-level
-  memmove. Near-linear, and reassuring, and an accident.
-- *Newest-first* scanned the whole list every time. Quadratic:
-  500 -> 2.1 ms, 1000 -> 8.3, 2000 -> 32.9, **3000 -> 73.4 ms**, four and
-  a half frames to put a pool away.
-
-The active set is now a dict keyed on entity id, so release is O(1) in
-any order. `test_pool_churn_is_linear` measures the worst of the old
-orders precisely because it was the one that fell over; keep it that way,
-or a regression back to a list would pass unnoticed.
+`test_pool_churn_is_linear` measures newest-first on purpose; keep it
+that way, or a regression to a list would pass. The figures are in
+`docs/guides/performance.md`.
 """
 
 from __future__ import annotations
@@ -104,22 +90,11 @@ def _spawn_with_cached_query(count: int) -> None:
 def test_spawning_into_a_cached_query_is_linear() -> None:
     """Spawning 4x the entities should cost about 4x, not 16x.
 
-    The second quadratic this module has caught, and the same shape as the
-    pool one above: `QueryCache.on_component_added` rebuilt the whole
-    result frozenset for every component added, so each new entity copied
-    a set that every previous entity had grown.
-
-    Measured before the fix, spawning with one cached query registered
-    against spawning with none:
-
-        500 -> 1.6x, 1000 -> 2.4x, 2000 -> 4.0x, 4000 -> 5.4x
-
-    -- the cached column quadrupling as N doubled (17.5ms, 56.3ms,
-    214.2ms). After: 34.6ms at 4000, and the ratio flat at ~1.0-1.3x.
-
-    The cache now holds a mutable set and hands out an immutable snapshot
-    that it drops on the next change, so a change is O(1) and a read
-    between changes is free.
+    `QueryCache.on_component_added` once rebuilt the whole result set for
+    every component added, so each new entity copied a set every previous
+    one had grown. The cache now holds a mutable set and hands out an
+    immutable snapshot that it drops on the next change. The figures are
+    in `docs/guides/performance.md`.
     """
     small = measure(lambda: _spawn_with_cached_query(500))
     large = measure(lambda: _spawn_with_cached_query(2000))

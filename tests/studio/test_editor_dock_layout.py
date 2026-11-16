@@ -1,17 +1,11 @@
 """The dock layout is responsive, and it is remembered.
 
-Two things that used to be hand-rolled and should not have been.
+The layout is built once: ImGui's dockspace keeps each node's share of
+its parent and rescales when the window changes, so a splitter the
+developer dragged survives a resize.
 
-The layout was rebuilt from scratch -- `dock_builder_remove_node` and a
-fresh set of splits -- every time the window changed size. ImGui's dockspace
-already keeps each node's share of its parent and rescales when the root
-changes, which is the behaviour wanted; rebuilding threw away every splitter
-the developer had dragged, on every resize.
-
-And nothing was remembered between runs, so an authoring tool re-arranged
-itself every morning. ImGui's own settings file stores each window's dock
-node, size and collapsed state and restores them by title; writing a second
-one on top of it would be a worse version of something that works.
+The arrangement persists between runs through ImGui's own settings
+file, which stores each window's dock node, size and collapsed state.
 """
 
 from __future__ import annotations

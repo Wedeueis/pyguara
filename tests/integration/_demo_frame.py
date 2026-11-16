@@ -1,16 +1,14 @@
 """Render one demo and write its last frame as raw RGB. Run as a script.
 
+The backend is whatever `PYGUARA_BACKEND` names. `test_wgpu_demos.py`
+runs this once per backend, each in a process of its own.
+
+The clock is pinned to 1/60 s. Every demo moves by elapsed time, and a
+headless wgpu frame is slower than a pygame one, so on a real clock
+the two backends would draw different moments of the same scene.
+
+Usage:
     python tests/integration/_demo_frame.py <demo> <out.rgb>
-
-The backend is whatever `PYGUARA_BACKEND` names. `test_wgpu_demos.py` runs
-this once per backend, each in a process of its own, because the wgpu
-device and the ModernGL tests' OpenGL context cannot share one.
-
-**The clock is pinned to 1/60 s.** Every demo moves by elapsed time, and
-the wgpu backend's headless frames are slower than pygame's (each is read
-back from the GPU), so on a real clock the two backends draw different
-moments of the same scene. The first comparison of `ecs_mental_model`
-found its hero 4 px apart for exactly that reason.
 """
 
 from __future__ import annotations

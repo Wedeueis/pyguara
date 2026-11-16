@@ -1,22 +1,11 @@
 """What generation costs, and the complexity class that decides it.
 
-`generate_wfc` was the last unmeasured item in RFC-0003's list of native
-candidates -- ADR 0004's Track R item 1 says so explicitly, and says to
-measure before claiming. Measured, the claim it would have supported was
-about the wrong thing: **95% of a 48x48 generation was choosing which
-cell to collapse next**, by listing every undecided cell and sorting it
-once per collapse. That is Decision 6 -- the algorithmic question before
-the boundary -- and it is the second row after the render batcher where
-asking it first moved `T_py` out from under a port.
+`generate_wfc` picks the next cell to collapse through an entropy
+heap. The guard is a ratio, so it holds on any machine: generation
+must stay near-linear in the cell count. Listing and sorting every
+undecided cell per collapse, which the heap replaced, is quadratic.
 
-The guard here is the one that matters, and it is a ratio rather than a
-budget so it holds on any machine: generation has to stay in its
-complexity class. A scan-and-sort per collapse costs **16-19x for 4x the
-cells**; the entropy heap costs **4.4x**, which is what a near-linear
-algorithm looks like. A regression to the former is not a slow patch, it
-is a 64x64 grid going from 27 ms to 3.5 seconds.
-
-The absolute figures live in `docs/guides/performance.md`, produced by
+The absolute figures are in `docs/guides/performance.md`, produced by
 the sweeps, which assert nothing.
 """
 

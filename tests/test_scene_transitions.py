@@ -649,7 +649,7 @@ class TestTheCircularWipeActuallyDrawsACircle:
 
     The class promised "expands a circle from center" and drew a
     full-screen fade behind a `# TODO: Proper circular mask rendering`. Not
-    approximately a fade: its output was **byte-identical** to
+    approximately a fade: its output was byte-identical to
     `FadeTransition`'s at the same progress, which is what the first test
     here pins. Nothing covered this class before, which is how a stub
     stayed shipped and exported.
@@ -763,7 +763,7 @@ class TestTheCircularWipeActuallyDrawsACircle:
 
         A fan of 68 quads between the arc and the window edge tiles the
         same region, but `pygame.draw.polygon` fills boundary pixels, so
-        adjacent quads blend a translucent cover **twice** along every
+        adjacent quads blend a translucent cover twice along every
         shared edge -- measured as (0, 50, 0) spokes against (0, 100, 0) on
         a 50%-black cover over green. One outline cannot do that, and this
         asserts it: exactly two colours in the frame.
@@ -783,28 +783,13 @@ class TestTheCircularWipeActuallyDrawsACircle:
     ) -> None:
         """The whole frame, both ways, at three aspect ratios.
 
-        **This is the test the earlier ones should have been.** Two real
-        defects got past a centre/corner check, a 24-point ring walk, a
-        distinct-colour count and an area assertion, and were found by
-        rendering the frame and looking at it:
+        A pixel inside the polygon's apothem must show the scene and a pixel
+        outside the circumradius must not. The 2px margin is for integer
+        vertex rounding.
 
-        - The outline's seam ran from the window's left edge to whichever
-          ring vertex the construction produced first -- on the *right* of
-          the circle -- so it crossed the hole. Its two traversals
-          coincide and ought to cancel, but a scanline fill counts a
-          vertex lying exactly on a row inconsistently, and the result was
-          a dotted line of cover colour across the revealed scene. Invisible
-          to a distinct-colour check, because the colour is one already in
-          the frame, and about 0.3% of the area, under the area tolerance.
-        - The outer loop was the window itself, so once the circle grew
-          past the window edges -- which it is, for most of a wipe -- the
-          cover stopped being an annulus and the fill left a 42-pixel band
-          of cover colour across the top of the revealed scene.
-
-        A pixel inside the polygon's apothem must show the scene and a
-        pixel outside the circumradius must not. The 2px margin is for
-        integer vertex rounding, which moves the drawn edge by up to half
-        a pixel either way.
+        Every pixel is checked because two defects passed spot checks, a
+        colour count and an area tolerance: a seam drawn across the hole, and
+        a band of cover left once the circle grew past the window's edges.
         """
         transition = CircularWipeTransition(TransitionConfig(duration=1.0))
         surface = self._frame(progress, transition=transition, size=(width, height))

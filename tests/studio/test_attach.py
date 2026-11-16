@@ -1,37 +1,13 @@
 """`attach_studio`: putting the whole thing into a running application.
 
-Two properties get the most attention here.
+The session follows the scene: each scene owns its `EntityManager`, so
+the session, and its undo history, is rebuilt on a scene switch.
 
-The first is that **the session follows the scene**. Each scene owns its
-own `EntityManager`, so a session built at attach time would be editing
-the world of whichever scene happened to be active -- usually none, since
-`attach_studio` runs before `app.run()`. It is also the only correct
-answer for the undo history: one that spanned a scene switch would be
-reverting commands into a world that never saw them applied.
-
-The second is that **importing Studio must not import Dear ImGui**. The
-dependency-free JSON-lines transport goes through `pyguara/studio/
-__init__.py`, which imports this module, so a module-level ImGui import
-here would make the transport need ImGui after all -- precisely the
-coupling the optional MCP extra was kept out of. That regression happened
-once already, when the default dock layout was first wired up, and the
-surface for it grew when the ImGui editor layer moved into this same
-package: `pyguara.studio.layer` is now one unguarded import away from
-every module the transport loads.
-
-**Both halves of that are asserted in a subprocess, and the reason is
-worth reading before changing it.** This file used to install an
-`importlib` meta-path finder that raised on `imgui_bundle`, pop
-`pyguara.studio*` out of `sys.modules`, and re-import. A meta-path finder
-is consulted only on a `sys.modules` miss, and by the time any test runs,
-`imgui_bundle` is already cached -- imported by another test module, or,
-under exactly the regression this guards, by this file's own
-collection-time `from pyguara.studio.attach import ...`. So the blocker
-was never reached and the test passed either way. It was verified
-vacuous: adding `from pyguara.studio.layer import EditorLayer` to
-`pyguara/studio/__init__.py` left it green. A fresh interpreter has
-nothing cached, which is the only place either property can be tested at
-all.
+Importing Studio must not import Dear ImGui, because the JSON-lines
+transport loads `pyguara/studio/__init__.py`. That is asserted in a
+subprocess: in this process `imgui_bundle` is already in
+`sys.modules`, so an import blocker would never be consulted and the
+test would pass either way.
 """
 
 from __future__ import annotations

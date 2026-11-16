@@ -1,6 +1,6 @@
 """Tests for the audio system.
 
-These drive the **real** pygame mixer under the ``dummy`` SDL driver with
+These drive the real pygame mixer under the ``dummy`` SDL driver with
 real ``Sound`` buffers. Only ``pygame.mixer.music`` -- the file-streaming API,
 which needs a real file on disk -- is mocked. The previous version of this
 file patched ``pygame.mixer`` wholesale, so channel ids, stereo volume, the

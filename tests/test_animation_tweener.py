@@ -348,20 +348,16 @@ def test_interpolation_is_not_clamped_so_elastic_easings_still_overshoot():
 
 
 class TestAPositionTweenIsRenderedSmoothly:
-    """`TweenSystem` runs on the fixed step, so a tween moves a position 60
-    times a second however fast the display is.
+    """A tweened position is interpolated between fixed steps.
 
-    A physics body already copes: `PhysicsSystem` sets
-    `Transform.interpolate`, the scene manager snapshots `previous_position`
-    before each tick, and the render path lerps between them. A tween on an
-    entity with no `RigidBody` had none of that, so at 120 or 144 Hz the
-    sprite held still for two or three frames and then jumped -- the judder
-    `render_position`'s own docstring describes.
+    `TweenSystem` runs on the fixed step. A tween on an entity with no
+    `RigidBody` opts its transform into `Transform.interpolate`, as
+    `PhysicsSystem` does for a body, so the sprite does not judder on a
+    display faster than the fixed rate.
 
-    Opting the transform in keeps the fixed step, and with it the ordering
-    guarantee (a tween driving a position is applied before steering, AI or
-    the scene's update reads it) and reproducibility under replay, both of
-    which moving the tick to `variable_update` would cost.
+    Staying on the fixed step keeps the ordering guarantee (a tween is
+    applied before steering, AI or the scene's update reads the position)
+    and reproducibility under replay.
     """
 
     def test_tweening_a_position_switches_on_interpolation(self) -> None:

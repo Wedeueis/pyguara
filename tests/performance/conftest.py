@@ -1,23 +1,13 @@
 """Shared machinery for the performance suite.
 
-Two kinds of test live in `tests/performance/`, and they exist for
-different reasons:
+Guards (`@pytest.mark.performance`) assert a complexity class, never a
+wall-clock time: they time one operation at N and at a multiple of N
+in the same process and assert the ratio, which cancels machine speed.
 
-*Guards* (`@pytest.mark.performance`) assert a **complexity class**, never
-a wall-clock time. They measure the same operation at N and at a multiple
-of N in the same process and assert the ratio between them. That cancels
-machine speed out entirely, which is what makes them safe to run on a
-shared CI runner: a laptop, a loaded container and a CI box all agree that
-a linear algorithm costs roughly 4x as much for 4x the work, even though
-they disagree about every absolute number involved.
-
-*Sweeps* (`@pytest.mark.performance` **and** `@pytest.mark.slow`) are
-`pytest-benchmark` runs at sizes too large for CI. They assert nothing.
-Their job is to produce the numbers in `docs/guides/performance.md`, via
-`make benchmark`.
-
-Neither kind should ever run under coverage -- tracing every line costs
-more than the code being timed, and turns every measurement into noise.
+Sweeps (`performance` and `slow`) are `pytest-benchmark` runs at sizes
+too large for CI. They assert nothing; `make benchmark` uses them to
+produce the numbers in `docs/guides/performance.md`. Neither kind
+should run under coverage.
 """
 
 from __future__ import annotations
@@ -168,7 +158,7 @@ def build_hash(
         count: How many keys.
         spread: Width and height of the square to scatter over.
         seed: Scatter seed.
-        accelerate: Which store to build. Defaults to **False**, not to
+        accelerate: Which store to build. Defaults to False, not to
             the engine-wide setting, because the complexity guards above
             are about the Python index's own asymptotics and would
             otherwise measure whichever store a contributor happens to

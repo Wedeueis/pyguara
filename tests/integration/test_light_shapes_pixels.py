@@ -1,15 +1,11 @@
 """Real-GPU pixel readback for the three light shapes.
 
-`LightType.SPOT` and `DIRECTIONAL` are shapes cut in `light.frag`, so
-there is nothing about them a CPU test can see -- `tests/test_lighting.py`
-can prove the cone's cosine is precomputed and handed over, and no more.
-Whether a fragment 30 degrees off the cone axis is actually dark is a
-question only the GPU answers.
+`LightType.SPOT` and `DIRECTIONAL` are shapes cut in the light shader,
+so a CPU test cannot see them: `tests/test_lighting.py` can prove the
+cone's cosine is computed and handed over, and no more.
 
-So this drives the real `LightPass` against a standalone context and a
-real `FramebufferManager`, then reads the lightmap back. It is the same
-shape as `test_moderngl_pixels.py`, for the same reason: the pass's other
-tests run against mocks, and a mock cannot fail this.
+This drives the real `LightPass` against a real `FramebufferManager`
+and reads the lightmap back.
 """
 
 from __future__ import annotations

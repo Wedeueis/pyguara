@@ -1132,17 +1132,15 @@ class TestDispatchAfter:
 
 
 class TestOwnerIsHeldWeakly:
-    """`HandlerRecord.owner` was `id(owner)`, with a docstring claiming a
-    subscription "cannot keep the owner alive". It can, and does: the usual
-    call passes a bound method, which holds its `self` -- normally the owner
-    -- strongly. The `id()` indirection bought nothing for that, and cost
-    something: once an owner is collected its id can be reused, so clearing
-    by a *new* object could match a stale record belonging to something else.
+    """A subscription's owner is held weakly, where the object allows it.
 
-    The reference is now weak where the object allows it, which makes the
-    identity honest. The retention is unchanged and is now documented
-    rather than denied -- making callbacks weak too would silently drop
-    handlers bound to temporaries, which is a separate decision.
+    The weak reference makes identity reliable: a collected owner reports
+    as gone, where an `id()` could be reused by a later object and match
+    its records.
+
+    A bound-method handler still holds its `self`, usually the owner,
+    strongly. That retention is intended, and documented on
+    `HandlerRecord`.
     """
 
     def test_clearing_by_owner_still_drops_that_owners_handlers(self):

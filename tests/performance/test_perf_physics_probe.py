@@ -1,24 +1,13 @@
-"""What the character sweep costs, and why the number is worth having.
+"""What the character sweep costs.
 
-`CharacterMover` moves an entity one **whole pixel** at a time along each
-axis, testing every step -- the module docstring states that outright, and
-it is the guarantee that stops a fast mover tunnelling through a wall. Each
-of those steps calls `IPhysicsEngine.overlap_box`, and `PymunkEngine`
-answers it by constructing a fresh kinematic `pymunk.Body` **and** a fresh
-`pymunk.Poly` on the CFFI heap (`_probe_shape`, a `@staticmethod`, so there
-is nowhere to cache them).
+`CharacterMover` moves an entity one whole pixel at a time along each
+axis and tests every step. On the Python path each step calls
+`IPhysicsEngine.overlap_box`, which builds a fresh `pymunk.Body` and
+`pymunk.Poly`. So the cost grows with how fast things move, not how
+many there are.
 
-So the cost is two CFFI allocations per pixel per axis per character per
-tick, and it grows with how fast things move rather than how many there
-are.
-
-**This module measures and does not fix.** RFC-0003's Marco 4 moves the
-whole sweep into Rust against static AABBs, which removes the CFFI path
-rather than optimising it -- so a Python-side fix (a cached probe body, or
-routing `overlap_box` through the `space.bb_query` that `region_query`
-already uses) would be thrown away. These numbers are that milestone's
-acceptance criterion, and if RFC-0003 is declined they are the
-justification for doing the Python fix after all.
+This module measures that path. ADR 0009 records the native sweep
+that replaces it for static solids.
 """
 
 from __future__ import annotations

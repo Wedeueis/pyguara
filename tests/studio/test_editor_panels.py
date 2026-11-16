@@ -1,20 +1,12 @@
 """The Hierarchy and Inspector panels, run as real ImGui frames.
 
-No GL anywhere: ImGui's core builds frames without it, so these drive the
-panels over a real `EntityManager` and assert on what they did.
+ImGui builds frames without a GPU, so these drive the panels over a
+real `EntityManager` and assert on what they did.
 
-Where a test needs a widget to report an *edit*, it patches that one widget
-function to claim a change. That is a deliberate seam, not a mock of the
-unit under test: driving a real drag-float would mean synthesising pixel
-drags against font metrics, while the behaviour actually worth pinning is
-this module's -- does an accepted edit write through, and does anything
-mirroring the component get told. Both were bugs in the editor that was
-deleted:
-
-- `_draw_dataclass` called `setattr` unconditionally, so any `frozen=True`
-  component raised `FrozenInstanceError`.
-- Mutations went straight onto the component, with nothing notified, so
-  physics bodies and render batches kept stale data.
+Where a test needs a widget to report an edit, it patches that one
+widget function to claim a change. What is pinned is this module's
+behaviour: an accepted edit writes through, a frozen component is not
+written, and anything mirroring the component is notified.
 """
 
 from __future__ import annotations
@@ -508,20 +500,14 @@ class _Toasts:
 
 @pytest.mark.unit
 class TestWhereAnAcceptedEditGoes:
-    """The one branch the merge of the two Inspectors introduced.
+    """Where an accepted edit goes, with and without an attachment.
 
-    There used to be two classes: the editor layer's `InspectorPanel`,
-    which wrote straight onto the component, and Studio's subclass, which
-    overrode the write to go through `set_field`. One class with an
-    optional attachment replaces them, so the choice is now a runtime
-    branch rather than a type -- and a branch is worth a test where a
-    subclass was self-evident.
+    `InspectorPanel` takes an optional attachment. Without one it writes
+    directly, which `TestInspectorPanel` above covers. With one the edit
+    becomes a `set_field` operation.
 
-    The direct-write half is covered by `TestInspectorPanel` above, every
-    test in which constructs `InspectorPanel()` with no attachment. These
-    cover the other half, and the thing that must never happen: a direct
-    write *while* a session exists, which is the second mutation seam
-    Studio's whole design exists to not have.
+    These cover that half, and the thing that must never happen: a direct
+    write while a session exists.
     """
 
     def test_an_edit_becomes_a_set_field_operation(

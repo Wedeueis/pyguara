@@ -1,16 +1,11 @@
 """The editor owns the whole window, not the game's frame inside it.
 
-With `display.keep_aspect` the game renders at its configured size and the
-render graph letterboxes it into the window, whatever shape the window is
-dragged to. The editor is not the game. Under ModernGL it inherited the
-letterbox's viewport and every panel was squeezed into it -- on a 2000x876
-window, a horizontal scale of 0.73: compressed text, and the round sun in
-the Viewport panel drawn as an ellipse taller than wide.
+With `display.keep_aspect` the game renders at its configured size and
+the render graph letterboxes it into the window. The editor must not
+inherit that letterbox: it draws to the window's own target, laid out
+for the window's size, and clears the window, not the frame.
 
-On wgpu there is no viewport to inherit -- each ImGui command clips itself
--- but the same three things decide it: the editor draws to the window's
-own target, laid out for the window's size, and clears the window rather
-than the frame. `test_attach.py`'s whole-window scenario checks the pixels.
+`test_attach.py`'s whole-window scenario checks the pixels.
 """
 
 from __future__ import annotations

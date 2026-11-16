@@ -1,41 +1,13 @@
 """What `Batcher.create_batches` must produce, pinned apart from how.
 
-These assert the *output*, not the loop that builds it, and they exist
-because the batcher is about to be rewritten for speed: at 20,000 sprites
-it was the largest single Python cost in the engine, and almost all of it
-was work it threw away. A rewrite like that is only safe if "the batches
-are identical" is something a test can say, so this says it first.
+These assert the output over randomised input:
 
-Five properties carry it, and the last two are the ones sabotage had to
-find -- every careless rewrite this file was tried against passed the
-first three.
-
-1. **Destinations are the camera transform, exactly.** `world * zoom +
-   offset`, not approximately -- the batcher is the only place the engine
-   applies it to a sprite, and `tests/test_batching_enhanced.py` already
-   has the viewport cases that caught it double-counting the origin.
-2. **An enabled column is parallel to `destinations`; a disabled one is
-   empty.** Every backend indexes the optional lists by the same `i` it
-   uses for a destination, so a short column is an `IndexError` in a
-   renderer or, worse, a sprite wearing the next sprite's tint.
-3. **A neutral command inside an enabled batch keeps the neutral value.**
-   One rotated sprite among a thousand upright ones enables the whole
-   batch's transform column, and the other thousand entries have to be
-   zero rotation and unit scale. An implementation that fills the column
-   lazily has to go back and fill in what it skipped, and getting that
-   backfill wrong shifts every sprite's transform by one.
-4. **Batches break exactly at a texture or material change**, and nowhere
-   else -- a tint or a rotation mid-batch must not split the draw call,
-   which is the whole reason the columns exist.
-5. **A flag is on when, and only when, some command in that batch needs
-   it.** Properties 2 and 3 both describe a column *once its flag is on*,
-   so neither notices a command whose data is dropped because it never
-   turned the flag on -- a sprite scaled but not rotated, or white but
-   fading. It draws as though nobody had asked, and nothing complains.
-
-`tests/test_batching_enhanced.py` holds the worked examples with
-hand-written expectations; this holds the invariants over randomised
-input, so a case nobody thought to write out is still covered.
+1. Destinations are exactly `world * zoom + offset`.
+2. An enabled column is parallel to `destinations`; a disabled one is
+   empty.
+3. A neutral command inside an enabled batch keeps the neutral value.
+4. Batches break at a texture or material change, and nowhere else.
+5. A flag is on when, and only when, a command in the batch needs it.
 """
 
 from __future__ import annotations
@@ -542,19 +514,13 @@ def test_a_batch_flag_depends_only_on_that_batch_s_own_commands() -> None:
 
 @pytest.mark.unit
 def test_a_flag_is_on_exactly_when_some_command_in_the_batch_needs_it() -> None:
-    """Both directions, which the assertions above only half cover.
+    """A flag is on when, and only when, a command in that batch needs it.
 
-    Everything else here says what a column holds *once its flag is on*,
-    and what the flags are for an all-neutral batch. Neither notices a
-    command whose data is quietly dropped because it failed to turn its
-    flag on in the first place -- a sabotage that tested only
-    `rotation != 0.0` survived every other test in this file, because a
-    scaled-but-unrotated sprite then lands in a batch with
-    `transforms_enabled` false and its scale discarded. It draws at 1:1
-    and nothing says otherwise.
-
-    So the claim has to be an equality: the flag is on when, and only
-    when, a command in that batch needs it.
+    The other tests say what a column holds once its flag is on. They do
+    not notice a command whose data is dropped because it never turned the
+    flag on: a sprite scaled but not rotated would land in a batch with
+    `transforms_enabled` false and draw at 1:1. So the claim is an
+    equality, checked in both directions.
     """
     rng = random.Random(555)
     commands = _random_commands(rng, 600)
@@ -601,21 +567,11 @@ def test_one_channel_away_from_neutral_still_enables_its_column(
 ) -> None:
     """Each field decides on its own, and a batch of one proves it.
 
-    The neutral test has to be sensitive to every channel separately,
-    because a command that differs in exactly one has no other command to
-    turn the flag on for it. Two sabotages survived everything else in
-    this file by collapsing one channel:
-
-    - testing the tint as `red != 255 or green != 255 or blue != 255`
-      drops the alpha, so a white sprite fading out draws fully opaque for
-      its whole life;
-    - testing the transform as `rotation != 0.0 or scale_x != 1.0` drops a
-      scale that is only in y, so a sprite squashed vertically draws at
-      full height.
-
-    Neither has a loud failure. The sprite just renders as though nobody
-    had asked, which is why this is parametrised over single channels
-    rather than left to randomised commands that vary several at once.
+    A command that differs from neutral in exactly one channel has no
+    other command to turn the flag on for it. A tint test that ignores
+    alpha draws a fading white sprite fully opaque; a transform test that
+    ignores `scale_y` draws a squashed sprite at full height. Neither
+    fails loudly, so this is parametrised over single channels.
     """
     texture = _Texture("one")
     command = RenderCommand(

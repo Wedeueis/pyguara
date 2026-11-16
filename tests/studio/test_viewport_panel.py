@@ -1,17 +1,12 @@
-"""The viewport panel, running real ImGui frames with no GL anywhere.
+"""The viewport panel, running real ImGui frames with no GPU.
 
-`imgui.create_context()` needs no OpenGL, so a test can run genuine
-frames over a genuine world and assert on what the panel did. That seam
-is the whole reason `EditorLayer` separates building a frame from
-rasterising one, and it is what caught two real API errors here that a
-mock would have accepted: `imgui.image()` takes an `ImTextureRef` rather
-than a bare int in ImGui 1.92, and this binding's `add_rect` orders
-thickness before flags.
+`imgui.create_context()` needs no GPU, so a test runs real frames over
+a real world and asserts on what the panel did. Real frames also check
+the binding's signatures, which a mock would accept wrongly.
 
-Window size has to be set before each `draw`, because the panel calls
-`imgui.begin` itself and an auto-sized window has a zero content region
--- in which case every interesting path early-returns and the tests
-would pass while exercising only the toolbar.
+Window size is set before each `draw`: the panel calls `imgui.begin`
+itself, and an auto-sized window has a zero content region, in which
+every interesting path returns early.
 """
 
 from __future__ import annotations

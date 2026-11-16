@@ -1,19 +1,11 @@
 """Trigger volumes, end to end through the real pymunk backend.
 
-The component-level tests in ``tests/test_trigger_volumes.py`` dispatch
-``OnTriggerEnter``/``Exit`` by hand and never touch pymunk. That hid two
-breakages for a long time:
-
-* ``CollisionSystem`` assumed the sensor was always the first entity in a
-  contact pair. Chipmunk's pair order is arbitrary, so trigger events came
-  out with ``trigger_entity`` and ``other_entity`` swapped about half the
-  time, and ``TriggerSystem`` silently dropped every swapped one.
-* A ``TriggerVolume`` entity built the documented way -- ``Transform`` plus
-  ``TriggerVolume``, no ``RigidBody`` -- never entered the simulation at
-  all, because ``PhysicsSystem`` only registers shapes for entities that
-  have a ``RigidBody``.
-
-These drive the whole stack the way ``application/bootstrap.py`` wires it.
+``tests/test_trigger_volumes.py`` dispatches ``OnTriggerEnter`` and
+``OnTriggerExit`` by hand and never touches pymunk. These drive the
+whole stack the way ``application/bootstrap.py`` wires it, and cover
+two things that only show there: Chipmunk's contact-pair order is
+arbitrary, so the sensor may be either entity; and a ``TriggerVolume``
+entity with no ``RigidBody`` must still enter the simulation.
 """
 
 from __future__ import annotations

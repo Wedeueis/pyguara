@@ -4,7 +4,7 @@ The fixture is built as a Python dict and dumped, not pasted as JSON: an
 LDtk file is mostly editor bookkeeping, and a 200-line literal would
 bury the half-dozen fields these tests actually depend on.
 
-What is being checked throughout is the **translation**, since LDtk and
+What is being checked throughout is the translation, since LDtk and
 Tiled disagree about four things that matter -- a file is a world rather
 than a map, tile ids are per-tileset rather than global, tile layers are
 sparse rather than dense, and IntGrid layers have no tileset at all.

@@ -1,16 +1,14 @@
 """The editor gets input events before the game does.
 
-The regression this locks: `attach_editor()` installs a render pass, so the
-ImGui panels drew from the first frame -- but nothing ever called
-`EditorLayer.process_event`. Every click and keystroke fell straight
-through to the game, so the editor rendered and could not be used. A
-`grep` for the method found a definition and no call sites.
+The regression this locks: the editor's panels drew, but nothing
+called `EditorLayer.process_event`, so every click and keystroke went
+to the game.
 
-Tested against `Application._process_input` with a fake window, rather
-than through a real ImGui layer, because what is being asserted is the
-*routing*: that an attached sink is consulted, that a consumed event stops
-there, and that an unconsumed one carries on to the `InputManager`.
-`tests/studio/test_editor_input.py` covers the translation itself.
+Tested against `Application._process_input` with a fake window, since
+what is asserted is the routing: an attached sink is consulted, a
+consumed event stops there, and an unconsumed one reaches the
+`InputManager`. `tests/studio/test_editor_input.py` covers the
+translation.
 """
 
 from __future__ import annotations

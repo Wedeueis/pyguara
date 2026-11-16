@@ -603,16 +603,9 @@ def _drawn_entity(world: object) -> str:
 def editing_and_playing_are_separate() -> None:
     """Edit, play, stop -- the lifecycle every editor has.
 
-    Studio used to attach to a *running* game and edit it live, which is
-    Unity's play mode without the discard, and every confusing symptom
-    came from it: a gizmo drag overwritten by the controller on the next
-    tick, a pan reclaimed by the follow system, an edit outlived before it
-    could be seen.
-
-    Godot runs the game in its own process, Unreal in its own world, Unity
-    in the same world and throws the changes away on Stop. All three agree
-    on the part that matters: the scene you edit and the game you run are
-    not the same thing at the same time.
+    The scene being edited and the game being run are not the same thing
+    at the same time: Play snapshots the world, an edit made while playing
+    is refused, and Stop restores the snapshot.
     """
     from pyguara.studio.agent.journal import Actor
     from pyguara.studio.session import EditorMode

@@ -1,16 +1,9 @@
 """Copying a world and putting it back -- what Stop restores.
 
-`PlayControlsPanel` used to say outright that there was no "reset to where
-play began", and the reason was good: the only mechanism for restoring a
-world was `SceneSerializer`, which silently skips any component the
-registry does not know -- which is every component a *game* defines unless
-it registered them. A reset that quietly dropped the player's controller
-would be worse than no reset.
-
-`WorldSnapshot` does not go through the serializer. It copies the live
-components, the way the command stack already captures a subtree, so a
-component it has never heard of is copied exactly as well as one it has.
-Measured on `guara_falcao`: 252 entities, 14 ms each way, nothing lost.
+`WorldSnapshot` copies the live components and does not go through
+`SceneSerializer`, which skips any component the registry does not
+know. So a component a game defines and never registered is copied
+like any other, and a reset loses nothing.
 """
 
 from __future__ import annotations

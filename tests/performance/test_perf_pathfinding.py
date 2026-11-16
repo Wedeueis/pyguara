@@ -1,30 +1,13 @@
 """What a flow-field recompute costs, and what the accelerator buys.
 
-The engine's largest measured margin, and the one that changed what a
-port was *for*. Nothing here existed before ADR 0004: `tests/performance/`
-covered ECS, flocking, spatial, GL, render-CPU and the pools, and a
-recompute -- the single most expensive operation in the engine -- was
-unmeasured.
+Two things are guarded. `FlowFieldService.recompute` skips a recompute
+that would reproduce the field it holds. And the sweep itself is
+native, which bounds the worst case when a goal really does move. See
+ADR 0004, Decision 6.
 
-Measured, a 96x96 Python recompute is **85 ms**, which is 516% of a 16.7 ms
-frame. That is not a slow feature, it is a feature that cannot be used at
-interactive rates: one goal crossing one cell boundary drops five frames.
-Two things came out of knowing that, in this order, and the order is
-Decision 6 of ADR 0004:
-
-1. `FlowFieldService.recompute` learned to skip a recompute that would
-   reproduce the field it already holds. 3114x on the unchanged path, and
-   a shipped demo's 30% of a frame down to 0.01%.
-2. The sweep itself went native: 85 ms -> 1.36 ms. The guard did not make
-   this unnecessary, it corrected the reason for it -- from throughput to
-   the worst case, which the guard cannot help with because a goal really
-   does move.
-
-The guards here are ratios, never wall-clock budgets, so they are safe on
-a shared runner; the absolute figures live in
-`docs/guides/performance.md`. The one exception is the native comparison,
-which is a ratio between the two stores in the same process -- also
-machine-independent.
+The guards are ratios, never wall-clock budgets; the native comparison
+is a ratio between the two stores in one process. The absolute figures
+are in `docs/guides/performance.md`.
 """
 
 from __future__ import annotations
@@ -126,20 +109,13 @@ def test_the_native_store_is_wired_up_and_materially_faster() -> None:
     """That the accelerator is reached at all, which is easy to lose.
 
     `pyguara/native.py` falls back silently when the extension is missing
-    or stale -- that is the point of it -- so a broken build, a renamed
-    class or a lookup that stopped finding `target/release/` all present
-    as "the Python sweep, and nobody noticed".
+    or stale, so a broken build would show only as the Python sweep.
 
-    A fifth of the Python cost, where the measured margin is sixty-threefold
-    at 96x96 and includes the per-recompute upload of the wall mask. The
-    assertion is loose because a shared runner is noisy and because the
-    exact figure belongs in `docs/guides/performance.md` rather than in a
-    test that would then need retuning per machine.
-
-    Note that this *skips* without the extension rather than failing, so it
-    is not what catches a broken lookup on a machine that has one --
+    Asserted at a fifth of the Python cost, loosely, for a shared runner;
+    the exact figure is in `docs/guides/performance.md`. This skips
+    without the extension;
     `tests/test_flow_field_service.py::TestTheStoreIsOneEngineWideChoice`
-    is, by asserting the service agrees with `native.in_use()`.
+    is what catches a broken lookup.
     """
     graph = _graph(64)
     goal = _goal_of(graph)

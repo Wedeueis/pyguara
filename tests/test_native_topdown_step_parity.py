@@ -1,18 +1,12 @@
 """Does `TopDownSystem`'s batched step move every body exactly as `step_body` does?
 
-`TopDownSystem` hands every body it moves to the engine's `step_bodies` in
-one call, and steps only what that declines through `step_body`. This suite
-runs the same walk in two worlds -- one whose engine has no mirror, so
-every body goes through `step_body` and Chipmunk, and one that batches --
-and compares every position and remainder after every tick.
+The same walk runs in two worlds: one whose engine has no mirror, so
+every body goes through `step_body`, and one that batches. Every
+position and remainder is compared after every tick.
 
-The comparison is on `repr`, not `==`. `==` would let `-0.0` pass for
-`0.0` and an `int` pass for a `float`, and both are differences: the first
-is the reason the centre is handed over already offset, and the second
-encodes differently on the wire.
-
-`TestTheBatchIsActuallyTaken` is what keeps the rest honest. A batch that
-declined every body would agree with the reference perfectly.
+The comparison is on `repr`, so `-0.0` does not pass for `0.0` nor an
+`int` for a `float`. `TestTheBatchIsActuallyTaken` checks that the
+batch is used; one that declined every body would agree perfectly.
 """
 
 from __future__ import annotations

@@ -1,18 +1,11 @@
 """Core never imports a kit.
 
-`pyguara.kits`' own docstring states the rule: "`pyguara/` core is
-genre-agnostic and never imports from here." Until #132 that was prose,
-and prose does not fail a build -- two core modules had already broken it.
-`physics/debug_draw.py` imported `PlatformerController` to draw a
-platformer's probes, and `application/bootstrap.py` registered the same
-component into every game's `ComponentRegistry`.
+`pyguara.kits` states the rule: core is genre-agnostic and never
+imports from it. A violation looks like an ordinary import, so this
+check fails the build on one.
 
-Neither was noticed, because a violation looks like an ordinary import.
-This is the check that makes it look like a failure instead.
-
-Parsed rather than grepped: a docstring naming `pyguara.kits`, as several
-core modules legitimately do when explaining where something moved to, is
-not an import.
+The source is parsed, not grepped: a docstring that names
+`pyguara.kits` is not an import.
 """
 
 from __future__ import annotations

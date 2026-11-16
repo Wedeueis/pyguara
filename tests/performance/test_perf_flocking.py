@@ -1,21 +1,12 @@
 """How many boids can `FlockingSystem` steer in a frame?
 
-This is the measurement the crowd-scale question turns on, so it is worth
-being precise about what is being measured.
+A flocking tick is O(n * k): n agents, each visiting the k neighbours
+the spatial hash returns, so density is a second variable.
 
-A flocking tick is O(n . k): n agents, each visiting the k neighbours the
-spatial hash hands back. That means **density is a second independent
-variable**, and a suite that varies only n is measuring half the story.
-Two regimes are covered here:
-
-*Uniform* holds agents-per-cell constant while n grows, which isolates the
-n term and is the one the linearity guard is about.
-
-*Clumped* packs every agent into a fixed area regardless of n, so k grows
-with n and the tick goes quadratic by construction. This is not a
-pathological case: it is a horde converging on a player, which is exactly
-what the demo this suite exists for will do every run. The guard here
-bounds how badly that degrades, rather than pretending it does not.
+Uniform holds agents-per-cell constant while n grows, which isolates
+the n term; the linearity guard uses it. Clumped packs every agent
+into a fixed area, so k grows with n and the tick goes quadratic, as a
+horde converging on a player does. Its guard bounds how badly.
 """
 
 from __future__ import annotations
@@ -115,19 +106,12 @@ def test_clumping_degrades_flocking_but_within_bounds() -> None:
 
 @pytest.mark.performance
 def test_the_native_store_is_wired_up_and_materially_faster() -> None:
-    """1000 agents is where this stopped fitting in a frame.
+    """The native tick is a small fraction of the Python one at 1000 agents.
 
-    A Python tick at 1000 agents is 16 ms, which is 96% of a 16.7 ms
-    frame: not a system that needs tuning, a crowd size the engine could
-    not carry. Natively it is 1.9 ms.
-
-    The guard is a ratio rather than a wall-clock budget so it means the
-    same thing on a slower machine, and it is loose -- measured at 11%,
-    asserted under 35% -- because its job is to notice that the native
-    path stopped being taken at all. That has happened before: a loader
-    that finds no library falls back to Python exactly as designed and
-    every parity test *skips*, so this is one of the few places a
-    silently absent extension becomes a failure.
+    A ratio, not a wall-clock budget, and a loose one: its job is to
+    notice that the native path stopped being taken. A loader that finds
+    no library falls back to Python and every parity test skips, so this
+    is one of the few places a missing extension fails.
     """
     count = 1000
     spread = uniform_spread_for(count)
@@ -146,25 +130,15 @@ def test_the_native_store_is_wired_up_and_materially_faster() -> None:
 
 @pytest.mark.performance
 def test_the_native_store_is_the_one_that_survives_a_horde() -> None:
-    """Clumping is the case the port is really for.
+    """Clumping degrades the native store less than the Python one.
 
-    A flock converging on the player makes k proportional to n, so the
-    tick goes quadratic -- `test_clumping_degrades_flocking_but_within_bounds`
-    bounds how badly in Python and accepts 25x. The native store's
-    advantage *grows* in exactly that regime, because what clumping
-    multiplies is the per-neighbour arithmetic rather than the crossing.
+    A flock converging on the player makes k proportional to n. Clumping
+    multiplies the per-neighbour arithmetic, which is where the native
+    store gains. Asserted: native degradation under 0.8 of Python's.
 
-    Measured at 2000 agents: Python 2.2x clumped over uniform, native 1.2x
-    -- a ratio of 0.55. So this asserts the native degradation is under 0.8
-    of the Python one: the thing a horde actually needs, and not something
-    the uniform-density ratio above would ever show. A native store that
-    degraded no better than Python would sit at 1.0.
-
-    The four timings are interleaved because they are a ratio of ratios.
-    Measured one after another, each sits in its own slice of whatever else
-    the machine is doing: 8 runs against 24 busy processes spread 0.17-0.96,
-    and an idle machine reached 0.86. Interleaved, the same load spreads
-    0.43-0.72 and idle 0.52-0.61.
+    The four timings are interleaved because this is a ratio of ratios;
+    measured one after another, the result spreads too widely on a busy
+    machine.
     """
     count = 2000
     uniform = uniform_spread_for(count)

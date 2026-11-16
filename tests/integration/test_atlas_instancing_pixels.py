@@ -1,23 +1,12 @@
 """An atlas draws its regions correctly, in one batch.
 
-The capability this locks in: before per-instance UVs, the GL sprite path
-sampled the whole texture for every instance, so an atlas could only be
-drawn by slicing it into one texture per region -- which forces one batch
-per region, the exact batching an atlas exists to avoid.
+Two things are asserted. The pixels: a four-quadrant atlas of four
+known colours makes a wrong region read as the wrong colour. And the
+batch count: slicing the sheet into one texture per region would pass
+a pixel test and defeat the point of an atlas.
 
-Two halves, and both matter:
-
-- the *pixels*, because a UV rect that is off by a flip, an origin or a
-  scale still draws something plausible. A four-quadrant atlas with four
-  known colours makes a wrong region read as the wrong colour rather than
-  as a subtle smear;
-- the *batch count*, because getting the pixels right by slicing the sheet
-  into separate textures would pass a pixel test and defeat the point.
-
-Here against pygame, which blits a sub-rect. The wgpu renderer is held to
-pygame's atlas pixels in `test_wgpu_pixels.py` (it multiplies UVs in a
-shader, which is the kind of thing that silently differs); its ModernGL half
-went with that backend.
+Run against pygame, which blits a sub-rect. The wgpu renderer is held
+to pygame's atlas pixels in `test_wgpu_pixels.py`.
 """
 
 from __future__ import annotations

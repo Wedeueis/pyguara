@@ -1,16 +1,12 @@
 """Generating the instruction files coding agents read.
 
-Most of these tests are about one property: **nothing outside the
-generated markers is ever touched**. An instruction file is mostly
-hand-written knowledge -- why a system is the way it is, what broke last
-time -- and a generator that overwrites it is a generator nobody runs
-twice. Everything else here is downstream of that.
+Most of these tests are about one property: nothing outside the
+generated markers is ever touched.
 
-The rest pin the facts about the tool landscape that the shims depend on,
-because they are the kind of thing that looks like an arbitrary choice six
-months later: Claude Code reads `CLAUDE.md` and never merges it with
-`AGENTS.md`, Cursor uses the `.mdc` rules directory, Gemini CLI uses its
-own file, and Codex truncates at 32 KiB.
+The rest pin the facts about each tool that the shims depend on:
+Claude Code reads `CLAUDE.md` and does not merge it with `AGENTS.md`,
+Cursor uses the `.mdc` rules directory, Gemini CLI uses its own file,
+and Codex truncates at 32 KiB.
 """
 
 from __future__ import annotations

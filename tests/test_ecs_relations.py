@@ -208,17 +208,14 @@ class TestCascadeDestroy:
     def test_a_subscriber_cannot_parent_onto_a_dying_entity(
         self, world: EntityManager
     ) -> None:
-        """Attaching a child to something already being destroyed would
-        leave that child orphaned *and* holding a dangling parent id: the
-        parent's cascade has already been decided, so the newcomer is
-        never reached.
+        """Attaching a child to an entity being destroyed raises.
 
-        The subscriber fires here on a **child's** removal, which is the
-        case that matters: that runs partway through the parent's teardown.
-        The parent is soft-dead before any of it begins, so the attempt
-        raises rather than half-succeeding. (Cascading before soft-death --
-        the obvious ordering -- leaves the parent alive at exactly this
-        moment, and the link is silently accepted.)
+        It would otherwise leave that child orphaned and holding a dangling
+        parent id, since the parent's cascade has already been decided.
+
+        The subscriber fires on a child's removal, partway through the
+        parent's teardown. The parent is soft-dead before the cascade begins,
+        which is what makes the attempt raise.
         """
         world.create_entity("enemy")
         world.create_entity("aura")

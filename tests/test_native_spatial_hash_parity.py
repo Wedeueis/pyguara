@@ -1,32 +1,15 @@
 """Do the two `SpatialHash` stores agree, and in what sense?
 
-The fifth parity suite, and it sits in the **bit-exact** regime rather
-than the tolerance one, for the reason `docs/adr/0004-the-native-boundary.md`
-Decision 5 gives: an index decides which enemy a magnet pulls, which
-target a bullet hits and who is a flockmate, so a membership that differs
-by one key is a different game, not a rounding difference. There is no
-tolerance to state -- `query_radius` confirms every candidate against an
-exact squared distance, so who is in range is a property of the positions
-alone, and both stores compute it from the same floats with the same
-spelling.
+Membership is compared exactly: an index decides which target a
+bullet hits and who is a flockmate. See ADR 0004, Decision 5.
 
-**Exactly one thing diverges, and it is the result's order.** Python
-yields from `set[K]`, so its order is the keys' hash order; for the string
-keys the engine actually uses, `PYTHONHASHSEED` randomises that per
-process, which means the Python store is not even reproducible against
-*itself* across two runs. The native store returns slot order. Neither is
-canonical and there is nothing to be exact to, so every comparison here
-sorts -- and `TestTheOrderIsTheOnlyDivergence` pins that this is a known
-property of the Python index rather than an excuse made for the native
-one. This mirrors the flocking suite's finding, and issue #324.
+The order of a result differs between the stores and is not defined
+on either, so every comparison here sorts;
+`TestTheOrderIsTheOnlyDivergence` pins that. The native-only guards
+at the end have no Python counterpart: a coordinate outside the
+native cell range, and a query spanning too many cells, both raise.
 
-The native-only guards at the end have no Python counterpart on purpose,
-and say so: Python accepts a coordinate the native cell range cannot
-represent, and has no limit on how many cells a query may span. Both are
-failures chosen over silent divergence.
-
-All of it skips when the extension is absent, so a contributor without
-Rust sees a green suite having tested none of it.
+All of it skips when the extension is absent.
 """
 
 from __future__ import annotations
@@ -313,7 +296,7 @@ class TestQueryRectAgrees:
         assert sorted(python.query_rect(bounds)) == sorted(native.query_rect(bounds))
 
     def test_each_edge_is_included_or_excluded_by_both(self) -> None:
-        """`Rect.contains_point` is **half-open**: `left <= x < right`.
+        """`Rect.contains_point` is half-open: `left <= x < right`.
 
         So the left and top edges are in and the right and bottom are out,
         matching `pygame.Rect.collidepoint`. Writing the native test as
@@ -448,17 +431,12 @@ class TestMutationAgrees:
     ) -> None:
         """`query_point` and `query_rect` rely on liveness alone.
 
-        `query_radius` rejects a removed slot on distance, because the
-        native store parks it at NaN -- so a removal looks covered when
-        only the radius query is tested. These two have no distance test,
-        which makes the liveness check the single thing standing between a
-        caller and a key that no longer exists. Removing the mask guard
-        beside it changed nothing and was dropped; removing *this* has to
-        fail, and this is the test that makes it.
+        `query_radius` rejects a removed slot on distance, because the native
+        store parks it at NaN. These two queries have no distance test, so
+        the liveness check is all that keeps a removed key out.
 
-        The origin is deliberate: NaN casts to cell 0, so a freed slot
-        sits in cell (0, 0)'s bucket and these are the queries that would
-        hand it back.
+        The origin is deliberate: NaN casts to cell 0, so a freed slot sits
+        in cell (0, 0)'s bucket.
         """
         python, native = _both(cell_size=64.0)
         for index in (python, native):
@@ -664,24 +642,14 @@ class TestTheNativeStoreRefusesWhatPythonMerelySurvives:
     def test_a_key_that_re_enters_while_being_hashed_raises(self) -> None:
         """Every native method holds an exclusive borrow for its duration.
 
-        So a key whose `__hash__` calls back into the same index gets
-        `RuntimeError: Already borrowed`, where the Python store -- whose
-        state is ordinary dicts -- simply works. No engine key does this;
-        they are entity id strings. It is pinned because `SpatialHash`
-        otherwise promises to take whatever hashable key the caller likes,
-        and an unstated divergence is the thing this file exists to
-        prevent.
+        So a key whose `__hash__` calls back into the same index raises
+        `RuntimeError: Already borrowed`, where the Python store works. No
+        engine key does this; they are entity id strings.
 
-        The re-entry is fired exactly once below. Left unbounded it
-        recurses forever in the *Python* store too -- the nested query
-        hashes the same key again -- so "Python tolerates this" means it
-        tolerates a bounded re-entry, not that it is safe for arbitrary
-        keys. Neither store is.
-
-        The *safe* version of the same shape is the one that matters and
-        is tested in `tests/test_common_spatial.py`: a query materialises
-        its result before returning, so iterating one while removing keys
-        works on both stores.
+        The re-entry fires once. Unbounded, it would recurse for ever in the
+        Python store too. The safe version of this shape, iterating a query
+        result while removing keys, is tested in
+        `tests/test_common_spatial.py`.
         """
         python = SpatialHash[object](cell_size=64.0, accelerate=False)
         native = SpatialHash[object](cell_size=64.0, accelerate=True)

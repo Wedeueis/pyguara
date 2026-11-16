@@ -1,15 +1,10 @@
 """The transform gizmo, dragged for real through ImGui frames.
 
-The requirement every test here circles is **one drag, one undo entry,
-spanning the whole drag**. That is why the gizmo does not emit a command
-per frame, and why on release it puts the starting values back before
-applying a command: a command captures its inverse when applied, so one
-applied against a world already holding the final values would record
-"from final to final" and undo would restore nothing.
-
-`pyguara/tools/gizmos.py` has no drag state, no handle hit-test and no
-write-back to a `Transform` anywhere in it, so none of this is regression
-cover -- it is the contract being established.
+The requirement every test here circles is one drag, one undo entry,
+spanning the whole drag. So the gizmo emits no command per frame, and
+on release it puts the starting values back before applying one
+command: a command captures its inverse when applied, and must see
+the old values.
 """
 
 from __future__ import annotations

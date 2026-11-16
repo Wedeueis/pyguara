@@ -1,23 +1,13 @@
-"""The two spark stores must agree, or the accelerator is a bug factory.
+"""The two spark stores must agree.
 
-The sibling of `tests/test_native_particle_parity.py`, and the same trade:
-keeping a native pool alongside the Python one buys an installable
-pure-Python engine and costs two implementations that have to behave the
-same.
+The native path has two render routes. A renderer that implements
+`ShapeBatchRenderer` receives packed instance rows; any other receives
+one `draw_circle` or `draw_line` per spark. Both are compared with
+what the Python pool draws.
 
-Sparks need more of this than particles did, because the native path has
-two render routes rather than one. A renderer that implements
-`ShapeBatchRenderer` receives packed instance rows; anything else receives
-one `draw_circle` or `draw_line` per spark. Both must draw what the Python
-pool would have drawn, so both are compared here.
-
-Skipped wholesale when the extension is not built, which is the normal
-state for a contributor without a Rust toolchain -- `cargo build --release`
-makes these run.
-
-Floats are compared with a tolerance because the native pool stores f32
-where Python uses f64; `tests/test_native_particle_parity.py` argues why
-that trade is acceptable for a visual effect.
+Floats are compared with a tolerance, as in
+`tests/test_native_particle_parity.py`. Skipped when the extension is
+not built.
 """
 
 from __future__ import annotations

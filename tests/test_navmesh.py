@@ -754,7 +754,7 @@ def _samples_off_mesh(mesh: NavMesh, path: list[Vector2], per_leg: int = 50) -> 
     """Count points *strictly inside* each leg that are off the mesh.
 
     The endpoints are skipped on purpose. A funnel waypoint is a mesh
-    **vertex** -- the corner the corridor bends around -- so it sits on
+    vertex -- the corner the corridor bends around -- so it sits on
     the boundary of every polygon meeting there, and `contains_point`
     excludes it. That is a property of the point test, not of the path;
     what matters to something walking the route is that the segments
@@ -1007,7 +1007,7 @@ class TestTheFunnelRestartsFromEachNewApex:
     """The subtle line, and the one a reader is most likely to simplify.
 
     When the funnel's bounds cross, the vertex they crossed over becomes
-    the new apex and the scan **restarts from that vertex's index** --
+    the new apex and the scan restarts from that vertex's index --
     `index = apex_index + 1`, not `index += 1`. Portals already passed
     can still constrain the path from the new apex, and skipping them is
     not a missed optimisation: it produces a path that leaves the mesh.
@@ -1046,7 +1046,7 @@ class TestTheFunnelRestartsFromEachNewApex:
     def test_a_u_turn_keeps_both_of_its_corners(self) -> None:
         """A comb: east along the top, south down the right, back west.
 
-        The funnel emits the corner at (30, 20) **twice** here -- the
+        The funnel emits the corner at (30, 20) twice here -- the
         bounds cross again at a portal sharing the apex's own vertex --
         and a duplicate has zero area against anything, so the collinear
         prune read `A, A` as collinear and dropped the real corner. The

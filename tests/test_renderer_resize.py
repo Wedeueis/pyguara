@@ -1,15 +1,9 @@
 """A renderer follows the window it draws into.
 
-`IRenderer.width` and `height` were read-only, so nothing could tell a
-renderer the window had changed -- and the ModernGL one builds its
-orthographic projection from exactly those two numbers. Left on the size
-it was constructed with, it maps the *original* pixel rectangle onto the
-new framebuffer: the world is scaled by `new/old` on each axis
-independently, which is a stretch whenever the two aspect ratios differ.
-
-Measured on the demo at the window shape this was reported from, a
-1280x720 renderer in a 1990x820 window stretched the world 1.37x
-horizontally. The visible symptom was the sun drawn as an ellipse.
+A renderer left on the size it was constructed with maps the original
+pixel rectangle onto the new framebuffer, which stretches the world
+whenever the aspect ratio changed. These pin that `resize` reaches the
+renderer's `width` and `height`.
 """
 
 from __future__ import annotations

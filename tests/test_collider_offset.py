@@ -2,7 +2,7 @@
 
 The field is documented as "local offset from the RigidBody center" and was
 honoured in exactly two places: the pymunk CIRCLE branch, and
-`physics/debug_draw.py`. The pymunk BOX branch -- the **default** shape
+`physics/debug_draw.py`. The pymunk BOX branch -- the default shape
 type -- dropped it, and so did every mover probe. The debug overlay
 therefore drew a collider in one place while the simulation used another.
 

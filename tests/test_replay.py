@@ -735,7 +735,7 @@ class TestReplayInputWiring:
 class TestGamepadIdentitySurvivesTheRoundTrip:
     """A recorded gamepad event carries which pad produced it.
 
-    It did not. `InputManager._on_gamepad_button` **had** `controller_id`
+    It did not. `InputManager._on_gamepad_button` had `controller_id`
     and dropped it on the way to the recorder, so on playback every pad
     arrived as None, `player_for(device, None)` resolved them all to one
     player, and a two-pad co-op session replayed as one character driven by
@@ -806,19 +806,13 @@ class TestGamepadIdentitySurvivesTheRoundTrip:
 class TestTheRecordedStore:
     """A replay records which implementation produced it.
 
-    The other half of `docs/adr/0004-the-native-boundary.md`'s Decision 4.
-    The native and Python stores are each deterministic and **cannot** be
-    made identical to each other: `SpatialHash` yields neighbours in
-    Python `set` iteration order, which depends on insertion order and the
-    probe sequence and which no Rust can reproduce, so float sums differ
-    in their last bits and a chaotic system such as a flock diverges from
-    there.
+    ADR 0004, Decision 4. The native and Python stores are not
+    bit-identical: a spatial query yields neighbours in a different
+    order, so float sums differ in their last bits and a flock diverges.
 
-    That makes "which store ran" part of a replay's identity, exactly as
-    its seed is. Recording it is what lets playback refuse instead of
-    quietly drifting -- which is the failure this exists to prevent,
-    because a playback that matches for a few seconds and then stops is
-    far harder to diagnose than an error at load.
+    So "which store ran" is part of a replay's identity, as its seed is.
+    Recording it lets playback refuse at load, where it would otherwise
+    drift after a few seconds.
     """
 
     def test_a_recording_stamps_the_store_that_made_it(self) -> None:

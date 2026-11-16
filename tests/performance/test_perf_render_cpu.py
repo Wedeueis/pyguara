@@ -1,26 +1,14 @@
 """CPU-side render cost: sorting, batching, and what culling would save.
 
-Everything here runs without a GPU, which makes these the **portable**
-numbers -- the ones worth quoting as an engine limit. GL timings depend on
-the driver underneath (see `test_perf_gl.py`), so they describe a machine
-rather than the engine.
+Everything here runs without a GPU, so these are the portable numbers.
 
-`test_the_screen_transform_is_not_done_with_vectors` is a third kind of
-test beside the guards and the sweeps `conftest.py` describes: it compares
-**two implementations in one process**, which cancels machine speed out
-the same way a complexity ratio does. It exists because the batcher's
-largest optimisation is invisible in its output -- transforming a position
-with `Vector2` arithmetic and with float arithmetic give bit-identical
-results -- so nothing but a timing can notice it being undone. The native
-stores' guards are asserted the same way, and for the same reason.
+`test_the_screen_transform_is_not_done_with_vectors` compares two
+implementations in one process, which cancels machine speed. The
+batcher's float arithmetic gives bit-identical output to `Vector2`
+arithmetic, so only a timing can notice it being undone.
 
-The culling probe at the bottom asserts nothing on purpose. `RenderSystem`
-has no visibility rejection at all: every submitted command is sorted,
-transformed and packed whether or not it is on screen. That is a
-defensible trade for a game where everything is on screen anyway, and a
-bad one for a large scrolling world. Rather than argue about it, this
-records what the waste actually costs, so that whoever proposes culling
-has a number to beat.
+The culling probe at the bottom asserts nothing. It records what
+sorting and packing off-screen commands costs.
 """
 
 from __future__ import annotations
@@ -254,23 +242,15 @@ def test_sweep_render_submission(benchmark, count: int) -> None:
 def _batches_with_vector_arithmetic(
     sorted_commands: list[RenderCommand], camera: Camera2D, viewport: Viewport
 ) -> list[RenderBatch]:
-    """The batcher's inner loop, written the way it used to be written.
+    """The batcher's inner loop, written with `Vector2` arithmetic.
 
-    Here to be *beaten*, not maintained: it is the shape the shipped
-    batcher is 3-7x faster than, and the only way a test can notice that
-    optimisation still being in place. Two differences from
-    `Batcher.create_batches`, and both produce byte-identical batches --
+    The reference the shipped batcher must beat. It differs from
+    `Batcher.create_batches` in two ways, both giving identical batches:
+    the screen position is `(world * zoom) + offset`, and the optional
+    columns are collected for every command and discarded if unused.
 
-    - the screen position comes from `(world * zoom) + offset`, which
-      allocates a `Vector2` for the product and another for the sum;
-    - the optional columns are collected for every command and discarded
-      if the batch's flag stayed false, and the tint is tested by
-      comparing two `Color` dataclasses rather than four ints.
-
-    Deliberately simplified in one way: it does not break batches at all,
-    because this is timed against the single-texture case where the real
-    batcher does not either. Making it a faithful copy would mean a second
-    implementation to keep correct, which is the cost this avoids.
+    It does not break batches: it is timed against the single-texture
+    case, where the real batcher does not either.
     """
     offset = camera.screen_offset(viewport)
     zoom = camera.zoom
@@ -312,31 +292,13 @@ def test_the_screen_transform_is_not_done_with_vectors() -> None:
     """The batcher's largest win, which its output cannot show.
 
     `(world_position * zoom) + offset` allocates two `Vector2` objects per
-    command per frame -- `Vector2` subclasses `pymunk.Vec2d`, so each is a
-    real object -- for arithmetic that is four float operations. Doing it
-    on the components is the same two operations in the same order, so the
-    destinations are bit-identical and every correctness test passes
-    either way. Measured at 2.8x to 3.9x of the whole loop's cost on its
-    own, which is why it gets a test rather than a comment.
+    command for four float operations. Doing it on the components gives
+    bit-identical destinations, so every correctness test passes either
+    way.
 
-    Both run in this process against the same commands, so machine speed
-    cancels. Asserted at 2x against a measured 5x to 7x: this is here to
-    notice the optimisation being *removed*, not to pin its size.
-
-    **What this does not cover, stated so nobody assumes otherwise.** The
-    batcher has three smaller optimisations that are also invisible in its
-    output: the optional columns are filled lazily rather than collected
-    and discarded (~20%), the tint is tested on four ints rather than
-    through `Color.__eq__` (~25%), and the `material_id` property is
-    short-circuited away when neither command has a material (~5%).
-    Reverting any of them leaves this test green -- checked by doing it --
-    and none is worth a guard of its own, because a 20% margin on a shared
-    machine is noise, and a test that fails at random is worse than no
-    test. They are each argued in the class docstring instead, which is
-    where a reviewer will be.
-
-    The reason the transform gets a real one is that it is 3x on its own
-    and the reference is 5x away, so the margin is not in question.
+    Both loops run in this process on the same commands, so machine speed
+    cancels. The bound is loose: it is here to notice the optimisation
+    being removed, not to pin its size.
     """
     commands = _commands(4000)
     camera = Camera2D(800, 600)

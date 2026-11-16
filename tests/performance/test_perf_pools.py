@@ -1,34 +1,13 @@
 """What the self-contained object pools cost per frame.
 
-`ParticleSystem`, `Sparks` and `ProjectileSystem` each pre-allocate a pool
-and hand out slots from it, so they allocate nothing per frame -- the thing
-an audit usually flags about per-particle Python objects does not apply.
+`ParticleSystem`, `Sparks` and `ProjectileSystem` each pre-allocate a
+pool and iterate its whole capacity every frame. A dead slot costs one
+boolean test; the cost is integrating the live ones.
 
-They do iterate their **whole capacity** every frame, live slots and dead
-ones alike (`particles.py:263`/`:312`, `sparks.py:131`/`:154`,
-`projectiles/system.py:124`/`:192`), and that reads like the thing to fix.
-Measured, it is not: an idle 1000-slot pool costs **0.024 ms**, because a
-dead slot is one boolean test. A *full* one costs **2.2 ms**, and 4000 live
-particles cost **9.0 ms** -- over half a frame. Per slot that is 0.024 us
-dead against 2.2 us live, ninety times the difference.
-
-So the cost is the live integration, not the scan, and compacting the pool
-to skip dead slots would buy back 0.024 ms. Worth knowing before anyone
-spends a day on it.
-
-Nothing measured any of this before. These exist for RFC-0003: its Marco 3
-replaces all three pools with Rust SoA, and a milestone claiming 45x needs
-a baseline it can be held to. These numbers say where that 45x would have
-to come from -- the per-element arithmetic, which is exactly what SoA plus
-SIMD addresses, rather than the bookkeeping.
-
-Marco 3 has since landed for particles and sparks, so **every pool here is
-pinned to its Python store** with `accelerate=False`. That is deliberate
-rather than lazy: these figures describe the implementation a contributor
-without a Rust toolchain runs, and they are the baseline the native pool's
-numbers in `docs/guides/performance.md` are quoted against. The one test
-that does look at the native store asserts only that it is wired up and
-materially faster -- a budget on it would be a budget on the timer.
+Every pool here is pinned to its Python store with `accelerate=False`:
+these are the baseline the native figures in
+`docs/guides/performance.md` are quoted against. One test checks that
+the native store is wired up and materially faster.
 """
 
 from __future__ import annotations
@@ -167,16 +146,11 @@ def test_sweep_spark_update(benchmark, live: int) -> None:
 def test_the_native_store_is_wired_up_and_materially_faster(make, native) -> None:
     """That the accelerator is reached at all, which is easy to lose.
 
-    `_native.py` falls back silently when the extension is missing or stale
-    -- that is the point of it -- so a broken build, a renamed class or a
-    lookup that stopped finding `target/release/` all present as "the
-    Python pool, and nobody noticed". This is the test that notices.
+    The loader falls back silently when the extension is missing or stale,
+    so a broken build would show only as the Python pool.
 
-    A quarter of the Python cost, where the measured margin is over a
-    hundredfold. The assertion is loose because a shared runner is noisy
-    and because the exact figure belongs in
-    `docs/guides/performance.md`, not in a test that would then have to be
-    retuned per machine.
+    Asserted at a quarter of the Python cost, loosely, for a shared
+    runner; the exact figure is in `docs/guides/performance.md`.
     """
     accelerated = native(CAPACITY)
     if not accelerated.accelerated:

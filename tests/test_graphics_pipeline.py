@@ -250,17 +250,10 @@ class TestTheGraphDeclaresTheHdrChain:
 class TestNoPassIsRegisteredOnlyToBeSkipped:
     """A pass in the graph is a pass the frame loop runs.
 
-    `WorldPass` broke that. It was registered by `bootstrap`, then skipped
-    by name in `Application._render_with_graph` (`if render_pass.name ==
-    "world"`), so its `execute` never ran -- and with it, its `submit`,
-    `set_camera`, queue and batcher. All of it was unreachable, while
-    reading as the pass that draws the world. The audit that looked at this
-    reported its sorting as buggy, which was true and beside the point: the
-    code could not run.
-
-    The world FBO is bound and cleared by the frame loop before the scenes
-    draw into it, which no pass can do -- passes execute after the scenes.
-    So there is nothing for a world pass to be.
+    There is no world pass: the frame loop binds and clears the world
+    buffer and the scenes draw into it before any pass executes. A pass
+    registered and then skipped by name would read as live code and never
+    run.
     """
 
     def test_the_default_graph_has_no_pass_the_loop_skips(self) -> None:

@@ -1,26 +1,13 @@
 """Real-GPU pixel readback for the bloom composite's tonemap.
 
 The chain is 16-bit float end to end (`pipeline/buffers.py`), so an
-additive bloom genuinely leaves values above 1.0 at the composite -- a 2.0
-scene pixel comes out near 4.0. Until the tonemap was re-enabled nothing
-brought them back: `FinalPass` blits to an 8-bit target and hard-clips
-every one of them to flat white, so the brightest part of the frame lost
-all its detail at exactly the moment the bloom was meant to be doing
-something.
+additive bloom leaves values above 1.0 at the composite. Without a
+tonemap, the 8-bit final target clips them all to flat white. This
+renders the real composite pass into an `f2` framebuffer and reads
+floats back.
 
-That is invisible to a mock -- `test_bloom_effect.py` records the passes
-against a recording device and cannot see a single pixel -- and invisible to a
-test that reads back through an 8-bit buffer, because the clip has already
-happened by then. So this renders the real composite pass into a real `f2`
-framebuffer and reads floats out of it.
-
-Two properties, and the second is the load-bearing one:
-
-- below the knee, the curve is the identity, so anything lit against the
-  old clamped pipeline is untouched;
-- above it, two different over-bright inputs stay *distinguishable* and
-  both land under 1.0. A hard clip satisfies "under 1.0" and fails
-  "distinguishable", which is the whole defect.
+Below the knee the curve is the identity. Above it, two different
+over-bright inputs stay distinguishable and both land under 1.0.
 """
 
 from __future__ import annotations

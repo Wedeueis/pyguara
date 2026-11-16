@@ -3,10 +3,10 @@
 Two things get the most cover, because they are what makes the surface
 usable by a machine rather than merely callable:
 
-- **The surface stays small and self-describing.** A client has a limit on
+- The surface stays small and self-describing. A client has a limit on
   how many tools it will present, and an agent's accuracy falls as the
   list grows.
-- **Every error names the alternative.** "No entity 'playr'" is a dead
+- Every error names the alternative. "No entity 'playr'" is a dead
   end; "Did you mean 'player'?" is a correction. The error text *is* the
   recovery path, so it is asserted like any other output.
 """
@@ -860,19 +860,14 @@ class TestRegistryMechanics:
 class TestProjectOverviewReportsTheEngine:
     """Which native store is running, where an agent will actually see it.
 
-    ADR 0004's Decision 4 made the store one engine-wide choice and asked
-    for it to be **observable**, on the grounds that a choice which
-    changes behaviour and is not reported is the defect being fixed. The
-    engine half of that shipped -- `pyguara.native.describe()` goes into
-    the boot log -- and the Studio half did not, which #321 said out
-    loud. This is it.
+    ADR 0004, Decision 4, makes the store one engine-wide choice and asks
+    for it to be observable. `pyguara.native.describe()` goes into the
+    boot log; `project_overview` is where an agent attached to a running
+    session reads it.
 
-    It matters more now than when Decision 4 was written. With particles
-    and sparks native, the store was a frame-rate question. With the flow
-    field and flocking native, two machines running the same project with
-    the same seed simulate differently, and an author asking Studio "why
-    does the pack go left here and right there" has no other way to find
-    out.
+    With the flow field and flocking native, two machines running one
+    project with one seed can simulate differently, so the store has to
+    be visible.
     """
 
     @staticmethod
