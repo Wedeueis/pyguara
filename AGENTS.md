@@ -224,31 +224,30 @@ Working rules, which the operations themselves enforce:
 ## The native extension
 
 Rust implements the wgpu renderer, the window, input, images, text and
-the audio mixer, and `FlowFieldService`, `Sparks`, `ParticleSystem` and
-`FlockingSystem`, which have no Python implementation. It is also an
-accelerated **store** for `SpatialHash`, the last thing that still keeps
-one, and is to lose it too (ADR 0011, Decision 3).
+the audio mixer, and `FlowFieldService`, `Sparks`, `ParticleSystem`,
+`FlockingSystem` and `SpatialHash`. None of the five has a Python
+implementation any more (ADR 0011, Decision 3).
 
 - The module is **`pyguara.pyguara_core_rs`**. `pyproject.toml` and
   `pyguara/native.py` both spell that name and must agree.
-- **One engine-wide switch**: `PerformanceConfig.native_acceleration` is
-  `off`, `auto` or `required`. `PYGUARA_NO_NATIVE=1` forces the Python
-  stores. `pyguara.native.describe()` says which is in force.
-- **That switch governs stores, not backends.** It does not reach audio
-  (`PYGUARA_AUDIO_BACKEND=pygame`), networking or the flow field.
-- **The two `SpatialHash` stores must agree**: membership is bit-exact.
-  Read the parity suite's docstring before touching either.
-- **A Rust-only subsystem is held to recorded values** in
-  `tests/golden/` (the flow field and flocking bit for bit, the pools to
-  0.001) and to the Python reference in `tests/reference/`. Regenerating
-  a golden file changes what "correct" means; read the diff.
+- **`PerformanceConfig.native_acceleration` and `PYGUARA_NO_NATIVE`**
+  now reach only the physics engine's static-solid mirror, whose
+  fallback is Chipmunk. They do not reach audio, networking or the five
+  subsystems above.
+- **Each of the five is held to recorded values** in `tests/golden/`
+  (the flow field, flocking and `SpatialHash` membership exactly, the
+  pools to 0.001) and to the Python implementation it replaced, kept as
+  test code in `tests/reference/`. Regenerating a golden file changes
+  what "correct" means; read the diff.
+- **A test comparing against Python uses `tests/reference/`**, never the
+  Rust class, or it compares Rust with itself.
 - **`SpatialHash` results have no defined order.** Pick by distance or
-  id, never the first.
-- **A test's reference must pin the Python store explicitly**
-  (`accelerate=False`), or it compares native with itself.
+  id, never the first. To prove a caller does not depend on the order,
+  test it against `ReferenceSpatialHash`, whose order changes per
+  process.
 
-Before editing anything under `rust/src/` or a two-store class, read
-`docs/agents/native-extension.md` and ADR 0004.
+Before editing anything under `rust/src/`, read
+`docs/agents/native-extension.md` and ADR 0011.
 
 ## Networking
 

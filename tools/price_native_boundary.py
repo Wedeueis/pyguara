@@ -57,6 +57,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -92,6 +93,7 @@ from pyguara.kits.projectiles.system import ProjectileSystem  # noqa: E402
 from pyguara.native import native_module  # noqa: E402
 from tests.reference.particles import ReferenceParticles  # noqa: E402
 from tests.reference.sparks import ReferenceSparks  # noqa: E402
+from tests.reference.spatial import ReferenceSpatialHash  # noqa: E402
 
 DT = 1.0 / 60.0
 LIFE = 1e6  # outlive the measurement
@@ -276,13 +278,13 @@ def price_projectiles(live: int) -> Row:
     are, and they are the bulk. Measured end to end, an accelerated index
     moves `ProjectileSystem.update` 2.82 ms -> 2.12 ms at 1000 live, or
     1.33x, which does not come close to rescuing the decline. Pinned here
-    with `accelerate=False` so the row prices the same thing it always
-    did, and the figure above is reported in `docs/guides/performance.md`
-    instead.
+    to the Python index in `tests.reference.spatial` so the row prices the
+    same thing it always did, and the figure above is reported in
+    `docs/guides/performance.md` instead.
     """
     manager = EntityManager()
     dispatcher = EventDispatcher()
-    index: SpatialHash[str] = SpatialHash(accelerate=False)
+    index: Any = ReferenceSpatialHash[str]()
     for i in range(200):
         entity = manager.create_entity(f"target_{i}")
         entity.add_component(Hurtbox(team="enemy"))
@@ -503,7 +505,8 @@ def price_spatial_index(count: int) -> Row | None:
     ]
 
     def tick(accelerate: bool) -> None:
-        index: SpatialHash[str] = SpatialHash(accelerate=accelerate)
+        # `SpatialHash` is Rust only; its Python side is the test reference.
+        index: Any = (SpatialHash if accelerate else ReferenceSpatialHash)[str]()
         for key, point in zip(keys, points, strict=True):
             index.insert(key, point)
         for point in points:

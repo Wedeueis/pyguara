@@ -12,6 +12,7 @@ from __future__ import annotations
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 import pytest
 
@@ -47,6 +48,7 @@ from pyguara.net import (
     SimulatedNetwork,
     Versions,
 )
+from tests.reference.spatial import ReferenceSpatialHash
 
 DT = 1 / 60
 VERSIONS = Versions("test", "test")
@@ -115,7 +117,7 @@ class Game:
         self.session = HostSession(transport, VERSIONS)
         self.world = EntityManager()
         self.dispatcher = EventDispatcher()
-        self.index: SpatialHash[str] = SpatialHash(accelerate=False)
+        self.index: Any = ReferenceSpatialHash()
         self.fixed_tick = 0
         self.replication = ReplicationHost(self.world, make_schema(), self.session.send)
         self.driver = HostDriver(self, self.session, self.replication)
@@ -142,7 +144,7 @@ class Game:
         )
         driver = ClientDriver(session, replication)
         projectiles = ProjectileSystem(
-            world, dispatcher, SpatialHash(accelerate=False), capacity=1024
+            world, dispatcher, ReferenceSpatialHash(), capacity=1024
         )
         shots = ProjectileClient(projectiles, dispatcher, replication, DT)
         player = Player(session, replication, driver, dispatcher, projectiles, shots)
@@ -406,7 +408,7 @@ def test_an_own_shot_stops_at_a_target_the_client_sees() -> None:
     game.connect()
     (player,) = game.players
     world = EntityManager()
-    index: SpatialHash[str] = SpatialHash(accelerate=False)
+    index: Any = ReferenceSpatialHash()
     target = world.create_entity()
     target.add_component(Transform(position=Vector2(60, 0)))
     target.add_component(Health(current=100.0, max_health=100.0))
@@ -426,7 +428,7 @@ def test_an_own_shot_stops_at_a_target_the_client_sees() -> None:
 
 def test_another_players_shot_passes_what_it_meets_until_the_host_says() -> None:
     world = EntityManager()
-    index: SpatialHash[str] = SpatialHash(accelerate=False)
+    index: Any = ReferenceSpatialHash()
     target = world.create_entity()
     target.add_component(Transform(position=Vector2(60, 0)))
     target.add_component(Health(current=100.0, max_health=100.0))
@@ -452,7 +454,7 @@ def test_an_end_naming_no_shot_is_ignored() -> None:
     dispatcher = EventDispatcher()
     game = Game(seed=13)
     projectiles = ProjectileSystem(
-        EntityManager(), EventDispatcher(), SpatialHash(accelerate=False)
+        EntityManager(), EventDispatcher(), ReferenceSpatialHash()
     )
     shots = ProjectileClient(projectiles, dispatcher, game.players[0].replication, DT)
 

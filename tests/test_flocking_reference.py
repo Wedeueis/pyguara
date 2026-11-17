@@ -19,11 +19,11 @@ import tests.reference.flocking as reference_module
 from pyguara.ai.flocking_system import FlockingAgent, FlockingSystem
 from pyguara.common.components import Transform
 from pyguara.common.random import RandomStream
-from pyguara.common.spatial import SpatialHash
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.native import require_extension
 from tests.reference.flocking import ReferenceFlockingSystem
+from tests.reference.spatial import ReferenceSpatialHash
 
 DT = 1.0 / 60.0
 CELL = 64.0
@@ -179,57 +179,17 @@ def _assert_close(
             )
 
 
-class TestThePythonPathIsPythonAllTheWayDown:
-    """The reference must not have a native index inside it.
+class TestTheReferenceIsPythonAllTheWayDown:
+    """The reference must not have the Rust index inside it.
 
-    The reference builds its own `SpatialHash` every tick. Unless it asks
-    for the Python store by name it would index natively, and this file
-    would be comparing the Rust grid with itself.
+    If it did, this file would be comparing the Rust grid with itself.
     """
 
-    def test_the_index_the_python_path_builds_is_python(self) -> None:
-        """Spy on the construction, because the hash is a local."""
-        constructed: list[SpatialHash[int]] = []
-        original = reference_module.SpatialHash
-
-        def recording(*args: object, **kwargs: object) -> SpatialHash[int]:
-            index = original(*args, **kwargs)  # type: ignore[arg-type]
-            constructed.append(index)
-            return index
-
-        manager, agents, transforms = _world(
-            [
-                (Vector2(0.0, 0.0), Vector2(1.0, 0.0)),
-                (Vector2(10.0, 0.0), Vector2(0.0, 0.0)),
-            ]
+    def test_it_indexes_with_the_python_reference(self) -> None:
+        assert reference_module.ReferenceSpatialHash.__module__ == (
+            "tests.reference.spatial"
         )
-        system = ReferenceFlockingSystem(manager)
-        reference_module.SpatialHash = recording  # type: ignore[assignment]
-        try:
-            system.update(DT)
-        finally:
-            reference_module.SpatialHash = original  # type: ignore[assignment]
-
-        assert constructed, "the Python path built no index at all"
-        assert all(not index.accelerated for index in constructed), (
-            "The reference built a native index. It has to be Python all "
-            "the way down -- see this class's docstring."
-        )
-
-    def test_the_spy_would_notice_a_native_index(self) -> None:
-        """Guards the guard: the assertion above can actually fail.
-
-        If `accelerated` ever stopped reporting the truth, the test above
-        would pass against a native index and prove nothing. Skipped when
-        the native `SpatialHash` store is switched off, since there is
-        then no native index to notice.
-        """
-        from pyguara.native import native_module
-
-        if native_module() is None:
-            pytest.skip("the native SpatialHash store is switched off")
-        assert SpatialHash[int](accelerate=True).accelerated is True
-        assert SpatialHash[int](accelerate=False).accelerated is False
+        assert not hasattr(reference_module, "SpatialHash")
 
 
 class TestTheNeighbourhoodsAgreeExactly:
@@ -246,20 +206,13 @@ class TestTheNeighbourhoodsAgreeExactly:
     def _python_counts(
         agents: list[FlockingAgent], transforms: list[Transform], cell_size: float
     ) -> list[int]:
-        """What `FlockingSystem._neighbors_of` would yield per agent.
+        """What the reference's neighbour query yields per agent.
 
-        Rebuilt here from `SpatialHash` directly rather than instrumented
-        out of the system, so the comparison is against the Python
-        implementation's own definition of a neighbourhood.
-
-        `accelerate=False` is what makes that true, and it is load-bearing
-        rather than tidy: `SpatialHash` grew a native store of its own, so
-        an unpinned one here would compare the native grid against itself
-        and this file's first tier would assert nothing.
+        Built on `ReferenceSpatialHash`, the Python index. The Rust index
+        here would compare the Rust grid with itself, and this file's
+        first tier would assert nothing.
         """
-        spatial_hash: SpatialHash[int] = SpatialHash(
-            cell_size=cell_size, accelerate=False
-        )
+        spatial_hash: ReferenceSpatialHash[int] = ReferenceSpatialHash(cell_size)
         for slot, transform in enumerate(transforms):
             spatial_hash.insert(slot, transform.position)
         return [

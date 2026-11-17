@@ -15,9 +15,9 @@ from typing import cast
 from pyguara.ai.flocking_system import FlockingAgent, flock_force
 from pyguara.ai.steering import SteeringBehavior
 from pyguara.common.components import Transform
-from pyguara.common.spatial import SpatialHash
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
+from tests.reference.spatial import ReferenceSpatialHash
 
 
 class ReferenceFlockingSystem:
@@ -44,7 +44,7 @@ class ReferenceFlockingSystem:
         index: int,
         position: Vector2,
         agent: FlockingAgent,
-        spatial_hash: SpatialHash[int],
+        spatial_hash: ReferenceSpatialHash[int],
         transforms: list[Transform],
         agents: list[FlockingAgent],
     ) -> Iterable[tuple[Vector2, Vector2]]:
@@ -91,11 +91,9 @@ class ReferenceFlockingSystem:
         steering_group = self._tick % groups
         self._tick += 1
 
-        # The Python index, named: a reference with a native index inside
-        # it would be comparing the Rust grid with itself.
-        spatial_hash: SpatialHash[int] = SpatialHash(
-            cell_size=self._cell_size, accelerate=False
-        )
+        # The Python index: a reference with the Rust index inside it would
+        # be comparing the Rust grid with itself.
+        spatial_hash: ReferenceSpatialHash[int] = ReferenceSpatialHash(self._cell_size)
         for slot, transform in enumerate(transforms):
             spatial_hash.insert(slot, transform.position)
 

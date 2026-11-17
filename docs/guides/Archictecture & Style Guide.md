@@ -360,9 +360,8 @@ Issues live on GitHub, in `Wedeueis/pyguara`. The triage labels are
 - Select by marker: `pytest -m unit`, `-m integration`, `-m performance`,
   `-m slow`, `-m cli`. `make help` lists the wrapped runs.
 - Coverage is gated at **60%** overall (`make coverage-check`).
-- **A test's reference must pin the Python store explicitly**
-  (`accelerate=False`) when it compares against a natively accelerated
-  class, or it compares native with itself.
+- **A test that compares against Python uses `tests/reference/`**, never
+  the Rust-only class itself, or it compares Rust with itself.
 - Do not test a stall with `time.sleep` or a Python busy loop.
 
 CI (`.github/workflows/ci.yml`) runs formatting, lint and mypy; the unit

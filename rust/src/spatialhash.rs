@@ -46,13 +46,13 @@
 //! Returning a lazy view instead would break that, which is what
 //! `test_the_index_can_be_mutated_from_inside_a_loop_over_a_query` is for.
 //!
-//! **Parity is bit-exact and the suite asserts it on every operation.**
+//! **Membership is exact and the tests assert it on every operation.**
 //! An index decides which enemy a magnet pulls and which target a bullet
 //! hits, so this is the flow field's regime rather than the particle
-//! pool's: `tests/test_native_spatial_hash_parity.py` compares results
-//! against the Python index with `==` on sorted keys. One thing is
-//! deliberately *not* pinned, because Python does not pin it either --
-//! see `query_radius`.
+//! pool's: `tests/test_spatial_hash_reference.py` compares results with
+//! the Python reference index, and `tests/test_spatial_hash_golden.py`
+//! with recorded answers, both with `==` on sorted keys. The order is
+//! deliberately *not* pinned -- see `query_radius`.
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -65,12 +65,9 @@ const FULL_MASK: u32 = 0xFFFF_FFFF;
 
 /// A uniform-grid spatial index over caller-chosen Python keys.
 ///
-/// Mirrors `pyguara.common.spatial.SpatialHash` method for method, and
-/// is reached only through it -- a caller writes `SpatialHash(...)` and
-/// `accelerate=`/`PerformanceConfig.native_acceleration` decides which
-/// store answers, like every other native store. Under the default
-/// `auto` that is *this* one whenever the extension is built; the Python
-/// implementation is the fallback rather than the default.
+/// Reached only through `pyguara.common.spatial.SpatialHash`, which is a
+/// thin wrapper over it; there is no Python implementation to fall back
+/// to.
 #[pyclass]
 pub struct NativeSpatialHash {
     cell_size: f64,
