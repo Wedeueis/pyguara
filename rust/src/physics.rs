@@ -707,6 +707,99 @@ impl NativePhysicsWorld {
         Self::distinct(found.into_iter())
     }
 
+    /// Join two bodies, as the pymunk backend's `create_joint` does.
+    ///
+    /// Args:
+    ///     kind: 0 pin (a rod at the anchors' current distance), 1 distance
+    ///         (a stiff spring at `min` when `min == max`, else limits),
+    ///         2 spring (rest length `min`), 3 slider (distance limits),
+    ///         4 gear (relative rotation held), 5 motor (relative spin held
+    ///         at zero).
+    ///     body_a: First body.
+    ///     body_b: Second body.
+    ///     anchor_ax: Anchor on the first body, in its own frame.
+    ///     anchor_ay: Likewise.
+    ///     anchor_bx: Anchor on the second body, in its own frame.
+    ///     anchor_by: Likewise.
+    ///     min: Minimum distance, or a spring's rest length.
+    ///     max: Maximum distance.
+    ///     stiffness: A spring's stiffness.
+    ///     damping: A spring's damping.
+    ///     max_force: A motor's force limit; 0 is unlimited.
+    ///     collide: Whether the two bodies still collide with each other.
+    ///
+    /// Returns:
+    ///     The joint's handle.
+    #[allow(clippy::too_many_arguments)]
+    fn create_joint(
+        &mut self,
+        kind: u8,
+        body_a: u64,
+        body_b: u64,
+        anchor_ax: f64,
+        anchor_ay: f64,
+        anchor_bx: f64,
+        anchor_by: f64,
+        min: f64,
+        max: f64,
+        stiffness: f64,
+        damping: f64,
+        max_force: f64,
+        collide: bool,
+    ) -> PyResult<u64> {
+        let first = Self::body_handle(body_a);
+        let second = Self::body_handle(body_b);
+        let anchor_a = Vector::new(anchor_ax, anchor_ay);
+        let anchor_b = Vector::new(anchor_bx, anchor_by);
+        let world_a = self.body(body_a)?.position().transform_point(anchor_a);
+        let world_b = self.body(body_b)?.position().transform_point(anchor_b);
+        let builder = GenericJointBuilder::new(JointAxesMask::empty())
+            .local_anchor1(anchor_a)
+            .local_anchor2(anchor_b)
+            .contacts_enabled(collide);
+        let distance = |builder: GenericJointBuilder, low: f64, high: f64| {
+            builder
+                .coupled_axes(JointAxesMask::LIN_AXES)
+                .limits(JointAxis::LinX, [low, high])
+        };
+        let spring = |builder: GenericJointBuilder, rest: f64, stiffness: f64, damping: f64| {
+            builder
+                .coupled_axes(JointAxesMask::LIN_AXES)
+                .motor_position(JointAxis::LinX, rest, stiffness, damping)
+                .motor_model(JointAxis::LinX, MotorModel::ForceBased)
+        };
+        let joint = match kind {
+            0 => {
+                let length = world_a.distance(world_b);
+                distance(builder, length, length)
+            }
+            1 if min == max => spring(builder, min, 10_000.0, 100.0),
+            1 | 3 => distance(builder, min, max),
+            2 => spring(builder, min, stiffness, damping),
+            4 => builder.locked_axes(JointAxesMask::ANG_X),
+            5 => {
+                let motor = builder.motor_velocity(JointAxis::AngX, 0.0, 1.0e6);
+                if max_force > 0.0 {
+                    motor.motor_max_force(JointAxis::AngX, max_force)
+                } else {
+                    motor
+                }
+            }
+            other => return Err(PyValueError::new_err(format!("no joint kind {other}"))),
+        };
+        let handle = self.world.insert_impulse_joint(first, second, joint.build());
+        self.stale = true;
+        let (id, generation) = handle.into_raw_parts();
+        Ok(pack(id, generation))
+    }
+
+    /// Remove a joint. A no-op for an unknown handle.
+    fn remove_joint(&mut self, handle: u64) {
+        let (id, generation) = unpack(handle);
+        self.world
+            .remove_impulse_joint(ImpulseJointHandle::from_raw_parts(id, generation));
+    }
+
     /// Start or stop recording collision events. Off, nothing is recorded
     /// and pairs already touching are forgotten.
     fn set_reporting(&mut self, reporting: bool) {
@@ -736,6 +829,11 @@ impl NativePhysicsWorld {
             ColliderHandle::from_raw_parts(a_id, a_gen),
             ColliderHandle::from_raw_parts(b_id, b_gen),
         ));
+    }
+
+    /// How many joints the world holds. For tests.
+    fn joint_count(&self) -> usize {
+        self.world.impulse_joints.len()
     }
 
     /// How many bodies the world holds. For tests.
