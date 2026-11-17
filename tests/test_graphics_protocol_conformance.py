@@ -44,6 +44,7 @@ class TestEveryProtocolIsRuntimeCheckable:
             "IRenderer",
             "IWindowBackend",
             "IWindowChrome",
+            "PrimitiveArrayRenderer",
             "Renderable",
             "ShapeBatchRenderer",
             "ShapeRenderer",
@@ -106,6 +107,28 @@ class TestShapeBatchRendererIsACapability:
         from pyguara.graphics.backends.headless_renderer import HeadlessBackend
 
         assert not hasattr(HeadlessBackend, "render_shapes")
+
+
+class TestPrimitiveArrayRendererIsACapability:
+    """The same contract as `ShapeBatchRenderer`: who has it is the point.
+
+    `pyguara.graphics.primitives` falls back to one call per row on a
+    renderer without it, so a backend growing a looping `draw_rects` would
+    change nothing visible and is not wanted.
+    """
+
+    def test_the_wgpu_renderer_satisfies_it(self) -> None:
+        from pyguara.graphics.backends.wgpu.renderer import WgpuRenderer
+
+        for name in ("draw_rects", "draw_circles", "draw_lines"):
+            assert hasattr(WgpuRenderer, name), name
+
+    def test_the_pygame_and_headless_backends_do_not(self) -> None:
+        from pyguara.graphics.backends.headless_renderer import HeadlessBackend
+        from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
+
+        for backend in (PygameBackend, HeadlessBackend):
+            assert not hasattr(backend, "draw_rects"), backend.__name__
 
 
 def _parameters(function: object) -> list[tuple[str, object]]:
