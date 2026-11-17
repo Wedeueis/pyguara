@@ -45,6 +45,10 @@ wgpu = "30"
 pollster = "1"
 # Casts the instance array to bytes for upload.
 bytemuck = { version = "1", features = ["derive"] }
+# The second physics backend (ADR 0011, roadmap 6e), beside pymunk until it
+# reproduces what the engine relies on. Pure Rust, Apache-2.0. The f64 build,
+# because Python's floats are f64 and the engine's worlds are in pixels.
+rapier2d-f64 = "0.36"
 renet = "=2.0.1"
 renetcode = "=2.0.0"
 # The wgpu backend's window and its keyboard and mouse input, in place of SDL
