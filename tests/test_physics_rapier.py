@@ -18,7 +18,6 @@ from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.types import (
     BodyType,
     CollisionLayer,
-    JointType,
     PhysicsMaterial,
     ShapeType,
 )
@@ -351,14 +350,6 @@ class TestWhatRapierDoesNotDoYet:
         engine = RapierEngine()
         engine.initialize(Vector2(0, 0))
         return engine
-
-    def test_joints_are_refused(self, rapier: Any) -> None:
-        a = _box(rapier, "a", Vector2(0, 0))
-        b = _box(rapier, "b", Vector2(50, 0))
-        with pytest.raises(NotImplementedError, match="PIN joints"):
-            rapier.create_joint(
-                a, b, JointType.PIN, Vector2(0, 0), Vector2(0, 0), 0, 0, 0, 0, 0, False
-            )
 
     def test_one_way_platforms_are_refused(self, rapier: Any) -> None:
         body = rapier.create_body("p", BodyType.STATIC, Vector2(0, 0))

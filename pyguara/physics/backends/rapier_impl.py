@@ -4,10 +4,10 @@
 in the native extension (`rust/src/physics.rs`). It is chosen with
 `physics.backend = "rapier"`; pymunk stays the default (roadmap 6e).
 
-Joints, one-way platforms, segment and polygon shapes, sleeping and the
-optional `sweep_box`/`step_bodies` capabilities are not implemented yet:
-the first three raise, and a caller of the last two falls back as it does
-for any engine without them. Known differences from pymunk are in
+One-way platforms, segment and polygon shapes, a `max_force` on a joint
+other than a motor, and the optional `sweep_box`/`step_bodies`
+capabilities are not implemented yet: the first three raise, and a caller
+of the last two falls back as it does for any engine without them. Known differences from pymunk are in
 `docs/physics/simulation.md`.
 """
 
@@ -36,6 +36,15 @@ DEFAULT_SUBSTEPS = 4
 _FULL_MASK = 0xFFFFFFFF
 
 _KINDS = {BodyType.STATIC: 0, BodyType.KINEMATIC: 1, BodyType.DYNAMIC: 2}
+
+_JOINT_KINDS = {
+    JointType.PIN: 0,
+    JointType.DISTANCE: 1,
+    JointType.SPRING: 2,
+    JointType.SLIDER: 3,
+    JointType.GEAR: 4,
+    JointType.MOTOR: 5,
+}
 
 # Collision event kinds, as `NativePhysicsWorld.take_events` reports them.
 _BEGIN, _PERSIST, _END = 0, 1, 2
@@ -97,6 +106,20 @@ class RapierBody:
         """Apply an instant impulse at a point in the body's frame."""
         px, py = (point.x, point.y) if point else (0.0, 0.0)
         self._engine._world().apply_impulse(self._handle, impulse.x, impulse.y, px, py)
+
+
+class RapierJoint:
+    """A joint in a `RapierEngine`."""
+
+    def __init__(self, handle: int, joint_type: JointType) -> None:
+        """Wrap a native joint handle.
+
+        Args:
+            handle: The native joint handle.
+            joint_type: What kind of joint it is.
+        """
+        self.handle = handle
+        self.joint_type = joint_type
 
 
 class RapierEngine:
@@ -494,20 +517,57 @@ class RapierEngine:
         max_force: float,
         collide_connected: bool,
     ) -> Any:
-        """Refuse: joints are not implemented by the Rapier backend yet.
+        """Join two bodies, as the pymunk backend maps each joint type.
+
+        `PIN` is a rod at the anchors' current distance; `DISTANCE` is a
+        stiff spring when its limits are equal and distance limits when
+        not; `SPRING` rests at `min_distance`; `SLIDER` is distance limits;
+        `GEAR` holds the relative rotation; `MOTOR` holds the relative
+        spin at zero.
 
         Raises:
-            NotImplementedError: Always.
+            TypeError: If either handle is not one of this backend's bodies.
+            NotImplementedError: For a `max_force` on anything but a motor,
+                which Rapier can limit only on a motor.
         """
-        raise NotImplementedError(
-            f"{joint_type.name} joints are not implemented by the Rapier backend "
-            f'yet; use physics.backend = "pymunk".'
+        if not isinstance(body_a, RapierBody) or not isinstance(body_b, RapierBody):
+            raise TypeError(
+                f"Invalid body handles for Rapier backend: expected RapierBody, "
+                f"got {type(body_a).__name__} and {type(body_b).__name__}"
+            )
+        if max_force > 0 and joint_type is not JointType.MOTOR:
+            raise NotImplementedError(
+                f"The Rapier backend can limit the force of a MOTOR joint only, "
+                f"not a {joint_type.name} joint; leave max_force at 0 or use "
+                f'physics.backend = "pymunk".'
+            )
+        handle = self._world().create_joint(
+            _JOINT_KINDS[joint_type],
+            body_a._handle,
+            body_b._handle,
+            anchor_a.x,
+            anchor_a.y,
+            anchor_b.x,
+            anchor_b.y,
+            min_distance,
+            max_distance,
+            stiffness,
+            damping,
+            max_force,
+            collide_connected,
         )
+        return RapierJoint(handle, joint_type)
 
     def destroy_joint(self, joint_handle: Any) -> None:
-        """Refuse: no joint can exist to destroy.
+        """Remove a joint.
 
         Raises:
-            NotImplementedError: Always.
+            TypeError: If the handle is not one of this backend's joints.
         """
-        raise NotImplementedError("The Rapier backend has no joints yet.")
+        if not isinstance(joint_handle, RapierJoint):
+            raise TypeError(
+                f"Invalid joint handle for Rapier backend: expected RapierJoint, "
+                f"got {type(joint_handle).__name__}"
+            )
+        if self._native is not None:
+            self._native.remove_joint(joint_handle.handle)
