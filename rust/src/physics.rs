@@ -67,10 +67,13 @@ fn collider_key(handle: ColliderHandle) -> u64 {
     pack(id, generation)
 }
 
-/// Drops contacts between shapes in the same non-zero group, and pairs the
-/// collision system asked not to resolve.
+/// Drops contacts between shapes in the same non-zero group, pairs the
+/// collision system asked not to resolve, and a one-way surface's contacts
+/// from its pass-through side.
 struct Filter<'a> {
     suppressed: &'a HashSet<Pair>,
+    /// One-way colliders, by the world-space normal of their solid face.
+    one_way: &'a HashMap<ColliderHandle, Vector>,
 }
 
 impl Filter<'_> {
@@ -87,6 +90,28 @@ impl Filter<'_> {
 impl PhysicsHooks for Filter<'_> {
     fn filter_contact_pair(&self, context: &PairFilterContext) -> Option<SolverFlags> {
         self.allows(context).then_some(SolverFlags::COMPUTE_RIGID_IMPULSES)
+    }
+
+    /// The pymunk backend's one-way rule, every solver step: a contact
+    /// whose normal does not point from the platform out of its solid face
+    /// is dropped for that step. The normal, not a velocity, because a
+    /// body at the top of a jump has none while it still overlaps.
+    fn modify_solver_contacts(&self, context: &mut ContactModificationContext) {
+        let ModifiableContacts::Rigid(manifold) = &mut context.contacts else {
+            return;
+        };
+        for (handle, sign) in [(context.collider1, 1.0), (context.collider2, -1.0)] {
+            let Some(solid) = self.one_way.get(&handle) else {
+                continue;
+            };
+            // The normal runs from collider1 to collider2: platform to the
+            // other body when the platform is first, flipped when second.
+            let towards_other = *manifold.normal * sign;
+            if towards_other.dot(*solid) <= 0.0 {
+                manifold.solver_contacts.clear();
+                return;
+            }
+        }
     }
 
     fn filter_intersection_pair(&self, context: &PairFilterContext) -> bool {
@@ -136,6 +161,8 @@ pub struct NativePhysicsWorld {
     pending_mass: HashMap<RigidBodyHandle, f64>,
     /// Pairs the collision system asked not to resolve, while they overlap.
     suppressed: HashSet<Pair>,
+    /// One-way colliders and the normal of their solid face.
+    one_way: HashMap<ColliderHandle, Vector>,
     /// What touched after the last substep.
     touching: HashMap<Pair, Touch>,
     /// Events since Python last took them.
@@ -168,7 +195,7 @@ impl NativePhysicsWorld {
     /// Bring the broad phase up to date if anything moved since it was.
     fn fresh(&mut self) {
         if self.stale {
-            let filter = Filter { suppressed: &self.suppressed };
+            let filter = Filter { suppressed: &self.suppressed, one_way: &self.one_way };
             self.world.detect_collisions(&filter, &());
             self.stale = false;
         }
@@ -372,6 +399,7 @@ impl NativePhysicsWorld {
             forced: Vec::new(),
             pending_mass: HashMap::new(),
             suppressed: HashSet::new(),
+            one_way: HashMap::new(),
             touching: HashMap::new(),
             events: Vec::new(),
             reporting: false,
@@ -435,6 +463,11 @@ impl NativePhysicsWorld {
     /// Remove a body and its colliders. A no-op for an unknown handle.
     fn remove_body(&mut self, handle: u64) {
         let body = Self::body_handle(handle);
+        if let Some(rigid) = self.world.bodies.get(body) {
+            for collider in rigid.colliders() {
+                self.one_way.remove(collider);
+            }
+        }
         self.world.remove_body(body);
         self.pending_mass.remove(&body);
         self.forced.retain(|forced| *forced != body);
@@ -457,6 +490,8 @@ impl NativePhysicsWorld {
     ///     mask: What it collides with.
     ///     group: Shapes in the same non-zero group never collide.
     ///     sensor: Detect overlaps without blocking.
+    ///     one_way: The world-space normal of the solid face of a one-way
+    ///         surface, or None for a shape solid from every side.
     ///
     /// Returns:
     ///     The collider's handle.
@@ -476,6 +511,7 @@ impl NativePhysicsWorld {
         mask: u32,
         group: u32,
         sensor: bool,
+        one_way: Option<(f64, f64)>,
     ) -> PyResult<u64> {
         let owner = owner_of(self.body(body)?.user_data);
         let builder = match kind {
@@ -499,10 +535,16 @@ impl NativePhysicsWorld {
             .user_data(u128::from(owner) | (u128::from(group) << 64));
         // On every collider, not only grouped ones: a pair the collision
         // system declines can be any pair.
-        builder = builder
-            .active_hooks(ActiveHooks::FILTER_CONTACT_PAIRS | ActiveHooks::FILTER_INTERSECTION_PAIR);
+        let mut hooks = ActiveHooks::FILTER_CONTACT_PAIRS | ActiveHooks::FILTER_INTERSECTION_PAIR;
+        if one_way.is_some() {
+            hooks |= ActiveHooks::MODIFY_SOLVER_CONTACTS;
+        }
+        builder = builder.active_hooks(hooks);
         let parent = Self::body_handle(body);
         let collider = self.world.insert_collider(builder, Some(parent));
+        if let Some((x, y)) = one_way {
+            self.one_way.insert(collider, Vector::new(x, y));
+        }
         if density > 0.0 && self.pending_mass.remove(&parent).is_some() {
             // As Chipmunk: a shape with density replaces the body's own mass.
             if let Some(rigid) = self.world.bodies.get_mut(parent) {
@@ -569,7 +611,7 @@ impl NativePhysicsWorld {
         }
         self.world.integration_parameters.dt = dt / self.substeps as f64;
         for substep in 0..self.substeps {
-            let filter = Filter { suppressed: &self.suppressed };
+            let filter = Filter { suppressed: &self.suppressed, one_way: &self.one_way };
             self.world.step_with_events(&filter, &());
             if self.reporting {
                 self.record_events();

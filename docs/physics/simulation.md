@@ -63,14 +63,15 @@ a Rapier world in the native extension. Rapier is the engine's future
 (roadmap 6e) and becomes the default once it does everything pymunk does.
 Today it covers bodies, circle and box colliders, materials, collision
 layers and groups, sensors, collision events, forces and impulses, every
-query and every joint type, all held to the same tests as pymunk
+query, every joint type and one-way platforms, all held to the same
+tests as pymunk
 (`tests/test_physics_rapier.py`, `tests/test_physics_rapier_joints.py`,
 and `tests/test_joint_system.py`, which runs on both).
 
 Not yet, and refused rather than ignored:
 
-- one-way platforms, segment and polygon colliders, and a `max_force` on
-  any joint but a motor raise `NotImplementedError`;
+- segment and polygon colliders, and a `max_force` on any joint but a
+  motor, raise `NotImplementedError`;
 - `sweep_box` and `step_bodies` are absent, so `CharacterMover` and
   `TopDownSystem` take the slower path they take on any engine without
   them.

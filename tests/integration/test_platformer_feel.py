@@ -25,12 +25,25 @@ from pyguara.kits.platformer_movement.controller import (
 )
 from pyguara.kits.platformer_movement.system import PlatformerSystem
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.components import CharacterBody, Collider, RigidBody
 from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.types import BodyType, ShapeType
 
 pytestmark = pytest.mark.integration
+
+# Which engine `Platformer` builds; set per test by `_backend`.
+_ENGINE: type = PymunkEngine
+
+
+@pytest.fixture(
+    autouse=True, params=[PymunkEngine, RapierEngine], ids=["pymunk", "rapier"]
+)
+def _backend(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run every scenario on both engines: the feel rests on the probe."""
+    monkeypatch.setitem(globals(), "_ENGINE", request.param)
+
 
 DT = 1.0 / 60.0
 PLAYER_HEIGHT = 40.0
@@ -45,7 +58,7 @@ class Platformer:
         """Build the world and drop a character into it."""
         self.entities = EntityManager()
         self.dispatcher = EventDispatcher()
-        engine = PymunkEngine()
+        engine = _ENGINE()
         engine.set_collision_system(CollisionSystem(self.dispatcher))
         self.physics = PhysicsSystem(
             engine, self.entities, self.dispatcher, gravity=gravity
@@ -262,8 +275,8 @@ class TestCharacterBodyOptions:
         world, entity = self._body(Vector2(0, 0), fixed_rotation=True)
         world.physics.update(DT)
 
-        body = entity.get_component(RigidBody)._body_handle._body
-        body.apply_impulse_at_local_point((200, 0), (0, -20))
+        body = entity.get_component(RigidBody)._body_handle
+        body.apply_impulse(Vector2(200, 0), Vector2(0, -20))
         for _ in range(120):
             world.physics.update(DT)
 
@@ -278,8 +291,8 @@ class TestCharacterBodyOptions:
         world, entity = self._body(Vector2(0, 0))
         world.physics.update(DT)
 
-        body = entity.get_component(RigidBody)._body_handle._body
-        body.apply_impulse_at_local_point((200, 0), (0, -20))
+        body = entity.get_component(RigidBody)._body_handle
+        body.apply_impulse(Vector2(200, 0), Vector2(0, -20))
         for _ in range(120):
             world.physics.update(DT)
 
