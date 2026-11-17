@@ -628,6 +628,66 @@ class TestRealFlocksAgreeWithinSummationNoise:
         assert list(solver.neighbour_counts()) == []
 
 
+class TestSteeringWithoutIntegratingAgrees:
+    """`integrate=False`: velocities change and nobody moves.
+
+    The sweep is Gauss-Seidel, so an agent steers by what the agents
+    ahead of it already did. With integration off they did nothing to
+    their positions, and a solver that advanced them anyway would steer
+    every later agent by positions nothing ever applied.
+    """
+
+    @pytest.mark.parametrize("groups", [1, 3])
+    def test_velocities_agree_and_positions_do_not_move(self, groups: int) -> None:
+        layout = _scattered(120, 400.0, seed=21)
+        results = []
+        for accelerate in (False, True):
+            manager, agents, transforms = _world(layout)
+            system = FlockingSystem(
+                manager,
+                cell_size=CELL,
+                groups=groups,
+                accelerate=accelerate,
+                integrate=False,
+            )
+            for _ in range(5):
+                system.update(DT)
+            results.append((agents, transforms))
+
+        (python_agents, python_transforms), (native_agents, native_transforms) = results
+        for (position, _), python_transform, native_transform in zip(
+            layout, python_transforms, native_transforms, strict=True
+        ):
+            assert python_transform.position == position
+            assert native_transform.position == position
+        for python_agent, native_agent in zip(
+            python_agents, native_agents, strict=True
+        ):
+            assert native_agent.velocity.x == pytest.approx(
+                python_agent.velocity.x, abs=TOLERANCE
+            )
+            assert native_agent.velocity.y == pytest.approx(
+                python_agent.velocity.y, abs=TOLERANCE
+            )
+
+    def test_the_steering_is_not_what_integrating_would_give(self) -> None:
+        """The control: the two modes must differ, or the test above is idle."""
+        layout = _scattered(120, 400.0, seed=21)
+        velocities = []
+        for integrate in (False, True):
+            manager, agents, _ = _world(layout)
+            system = FlockingSystem(
+                manager, cell_size=CELL, accelerate=True, integrate=integrate
+            )
+            for _ in range(5):
+                system.update(DT)
+            velocities.append(
+                [(agent.velocity.x, agent.velocity.y) for agent in agents]
+            )
+
+        assert velocities[0] != velocities[1]
+
+
 class TestTheFlockBehavesTheSameOverManyTicks:
     """Output parity: does the divergence stay noise, or become a flock?
 

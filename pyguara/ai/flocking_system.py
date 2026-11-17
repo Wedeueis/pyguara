@@ -391,6 +391,7 @@ class FlockingSystem:
             steering_group,
             self._pack(agents, transforms),
             enabled,
+            self._integrate,
         )
         for (position, velocity), agent, transform, is_enabled in zip(
             rows, agents, transforms, enabled, strict=True
