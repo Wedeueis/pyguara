@@ -177,11 +177,11 @@ class TestSaving:
         assert manager.file_path.exists()
         assert panel.toasts.messages[-1] == ("info", f"Saved {manager.file_path}")
 
-    def test_a_refused_save_is_reported(
-        self, panel: ConfigPanel, manager: ConfigManager
+    def test_a_failed_save_is_reported(
+        self, panel: ConfigPanel, manager: ConfigManager, tmp_path: Path
     ) -> None:
-        manager.define_profile("hard", {"physics": {"substeps": 9}})
-        manager.push_profile("hard")
+        blocker = tmp_path / "blocker"
+        blocker.write_text("x", encoding="utf-8")
+        manager._file_path = blocker / "game_config.json"
         panel.save()
-        assert not manager.file_path.exists()
         assert panel.toasts.messages[-1][0] == "error"

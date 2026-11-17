@@ -381,16 +381,26 @@ class TestSave:
         call(ops, session, operation="save")
         assert session.stack.can_undo
 
-    def test_save_is_refused_while_a_profile_is_active(
+    def test_save_under_a_profile_writes_the_values_underneath(
         self, ops, session, manager
     ) -> None:
-        """The file would be written with the profile's values."""
+        """A profile is for a while; the file is the next launch."""
         manager.define_profile("hard", {"physics": {"substeps": 9}})
         manager.push_profile("hard")
         result = call(ops, session, operation="save")
+        assert result.ok, result.error
+        written = json.loads(manager.file_path.read_text(encoding="utf-8"))
+        assert written["physics"]["substeps"] == 4
+        assert manager.config.physics.substeps == 9
+
+    def test_a_failed_write_is_an_error(self, ops, session, manager, tmp_path) -> None:
+        """A path under a regular file cannot be created."""
+        blocker = tmp_path / "blocker"
+        blocker.write_text("x", encoding="utf-8")
+        manager._file_path = blocker / "game_config.json"
+        result = call(ops, session, operation="save")
         assert not result.ok
-        assert "hard" in result.error
-        assert not manager.file_path.exists()
+        assert "failed" in result.error
 
 
 class TestTheOperationItself:
