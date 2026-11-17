@@ -36,11 +36,8 @@ would give the same game different capabilities on different machines, and
 a checkout with no Rust toolchain, or nothing built yet, will see, and why
 `pygame` is kept.
 
-**It is not governed by `native_acceleration` or `PYGUARA_NO_NATIVE`.** Those
-switch between two implementations of the same thing, and nothing in Python can
-stand in for this one. So `PYGUARA_NO_NATIVE=1` does not mean "no native code
-runs" any more: to rule out the audio, set `PYGUARA_AUDIO_BACKEND=pygame`. See
-ADR 0004, Decision 4.
+To rule the native mixer out while debugging, set
+`PYGUARA_AUDIO_BACKEND=pygame`, which needs the `pygame` extra.
 
 `NativeAudioSystem` decodes with `symphonia` and mixes in Rust
 (`rust/src/mixer.rs`), writing to the sound card through `cpal` -- no

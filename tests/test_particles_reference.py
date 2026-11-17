@@ -238,20 +238,3 @@ class TestThereIsOneImplementation:
     def test_the_store_cannot_be_chosen(self) -> None:
         with pytest.raises(TypeError):
             ParticleSystem(capacity=4, accelerate=False)  # type: ignore[call-arg]
-
-    def test_the_engine_wide_switch_does_not_reach_it(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """`PYGUARA_NO_NATIVE` picks between two stores; here there is one."""
-        from pyguara import native
-
-        monkeypatch.setenv("PYGUARA_NO_NATIVE", "1")
-        native.reset_for_tests()
-        try:
-            assert native.native_module() is None
-            pool = ParticleSystem(capacity=4)
-            pool.emit(MagicMock(), Vector2.zero(), count=3, life=1.0)
-            assert pool.live_count == 3
-        finally:
-            monkeypatch.delenv("PYGUARA_NO_NATIVE")
-            native.reset_for_tests()

@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints
 from pyguara.common.types import Color
 from pyguara.log import get_logger
 from pyguara.log.types import LogLevel
-from pyguara.native import NativeAcceleration
 
 if TYPE_CHECKING:
     from pyguara.config.sections import SectionRegistry
@@ -197,18 +196,7 @@ class PhysicsConfig:
 
 @dataclass
 class PerformanceConfig:
-    """How the engine trades portability for speed.
-
-    One setting today, and it is deliberately engine-wide rather than per
-    subsystem: see `NativeAcceleration` and
-    `docs/adr/0004-the-native-boundary.md`, Decision 4.
-    """
-
-    native_acceleration: NativeAcceleration = NativeAcceleration.AUTO
-    """Whether the compiled extension backs the engine. `auto` (the
-    default) uses it where available and Python otherwise; `off` never
-    uses it; `required` fails at startup without it, which is what a game
-    depending on native performance should ship."""
+    """Settings that trade memory for steadier frame times."""
 
     freeze_on_scene_change: bool = True
     """Whether the application settles memory each time the scenes it runs

@@ -256,11 +256,11 @@ class PymunkEngine:
         Args:
             accelerate: Whether box and ray queries may be answered from a
                 native mirror of the static geometry (see
-                `_static_solids`). None follows the engine-wide
-                `native_acceleration` switch; False never does; True does
-                whenever the extension can be loaded. The answers are the
-                same either way -- this exists so a test can hold the two
-                paths side by side.
+                `_static_solids`). None and True do whenever the extension
+                can be loaded, and True raises when it cannot; False never
+                does, and Chipmunk answers. The answers are the same either
+                way -- this exists so a test can hold the two paths side by
+                side.
             penetration_recovery: Fraction of remaining overlap removed per
                 1/60s, between 0 and 1. Chipmunk's own 10% is too weak to
                 beat continuous gravity, leaving a landed character visibly

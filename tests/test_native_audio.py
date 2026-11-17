@@ -513,27 +513,18 @@ class TestTheSwitch:
         """An `auto` would vary a game's capabilities by machine."""
         assert {b.value for b in AudioBackend} == {"pygame", "native"}
 
-    def test_the_debug_switch_does_not_govern_it(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """`PYGUARA_NO_NATIVE=1` must not change what a game can ask for."""
-        monkeypatch.setenv("PYGUARA_NO_NATIVE", "1")
-        native.reset_for_tests()
-        try:
-            assert native.native_module() is None
-            assert native.require_extension("a test") is not None
-        finally:
-            monkeypatch.delenv("PYGUARA_NO_NATIVE")
-            native.reset_for_tests()
-
     def test_a_missing_extension_fails_at_startup(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setitem(__import__("sys").modules, native._MODULE_NAME, None)
         monkeypatch.setattr(native, "_candidate_paths", list)
-
-        with pytest.raises(RuntimeError, match="native extension"):
-            NativeAudioSystem()
+        native.reset_lookup()
+        try:
+            with pytest.raises(RuntimeError, match="native extension"):
+                NativeAudioSystem()
+        finally:
+            monkeypatch.undo()
+            native.reset_lookup()
 
     def test_an_unknown_output_is_refused(self) -> None:
         with pytest.raises(ValueError, match="offline"):

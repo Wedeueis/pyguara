@@ -36,8 +36,7 @@ class FlowFieldService:
     """Caches one flow field over a `GridGraph` and answers world-space queries.
 
     The field lives in the native extension, which this class needs: it
-    has no Python fallback, and `native_acceleration` and
-    `PYGUARA_NO_NATIVE` do not apply to it.
+    has no Python fallback.
 
     Example:
         >>> service = FlowFieldService(graph)

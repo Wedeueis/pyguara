@@ -786,21 +786,3 @@ class TestThereIsOneImplementation:
     def test_the_store_cannot_be_chosen(self) -> None:
         with pytest.raises(TypeError):
             SpatialHash[str](accelerate=False)  # type: ignore[call-arg]
-
-    def test_the_engine_wide_switch_does_not_reach_it(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """`PYGUARA_NO_NATIVE` picks between two stores; here there is one."""
-        from pyguara import native
-
-        monkeypatch.setenv("PYGUARA_NO_NATIVE", "1")
-        native.reset_for_tests()
-        try:
-            assert native.native_module() is None
-            index = SpatialHash[str]()
-            index.insert("key", Vector2(0.0, 0.0))
-            assert index.query_radius(Vector2(0.0, 0.0), 1.0) == ["key"]
-            assert len(index) == 1
-        finally:
-            monkeypatch.delenv("PYGUARA_NO_NATIVE")
-            native.reset_for_tests()

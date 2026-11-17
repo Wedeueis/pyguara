@@ -58,7 +58,7 @@ def test_a_crash_writes_a_report_with_what_is_needed_to_diagnose_it(
     assert "Traceback" in text
     assert f"pyguara: {pyguara.__version__}" in text
     assert f"python: {sys.version.split()[0]}" in text
-    assert "native store:" in text
+    assert "native extension:" in text
     assert "renderer: wgpu" in text
     assert "game: Test Game" in text
     assert reporter.last_report == reports[0]

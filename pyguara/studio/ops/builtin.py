@@ -257,14 +257,12 @@ def _fields_without_defaults(session: StudioSession, name: str) -> set[str]:
 
 
 def _engine_section(status: dict[str, Any]) -> str:
-    """Render the resolved native store as a Markdown section."""
+    """Render where the native extension came from as a Markdown section."""
     lines = [
         "## Engine",
         "",
-        f"- Native acceleration: **{status['store']}** (mode: {status['mode']})",
+        f"- Native extension: **{'loaded' if status['loaded'] else 'not found'}**",
     ]
-    if status["env_override"]:
-        lines.append("- `PYGUARA_NO_NATIVE` is set, overriding the mode")
     if status["source"]:
         lines.append(f"- Extension: `{status['source']}`")
     return "\n".join(lines)
@@ -273,14 +271,11 @@ def _engine_section(status: dict[str, Any]) -> str:
 def _project_overview(session: StudioSession, arguments: dict[str, Any]) -> Any:
     """Return the budgeted project inventory, and which engine is running it.
 
-    The store is reported here, in the handler, rather than on
-    `ProjectMap`. ADR 0004's Decision 4 wants it observable and this is
-    the call an agent is told to make first, so this is where it is
-    seen -- but it is a fact about *this process on this machine*, not
-    about the project, and `ProjectMap` is also what
-    `pyguara studio instructions` renders into a committed `AGENTS.md`.
-    Carried there, a local `target/release/*.so` path would land in
-    version control and churn between contributors.
+    The extension is reported here, in the handler, rather than on
+    `ProjectMap`: it is a fact about *this process on this machine*, and
+    `ProjectMap` is also what `pyguara studio instructions` renders into a
+    committed `AGENTS.md`, where a local `target/release/*.so` path would
+    churn between contributors.
     """
     if session.project_root is None:
         raise OperationError(

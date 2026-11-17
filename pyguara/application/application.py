@@ -712,18 +712,15 @@ class Application:
             and recorded_store != current_store
             and not allow_store_mismatch
         ):
-            # The two stores are each deterministic and are not identical
-            # to each other, so this replay will drift rather than
-            # reproduce. Refusing is the point of recording the store at
-            # all: the alternative is a playback that looks fine for a
-            # few seconds and then quietly stops matching, which is far
-            # harder to diagnose than an error at load.
+            # A replay recorded with a Python store, before those were
+            # retired. The stores were not identical, so it will drift
+            # rather than reproduce; refusing at load beats a playback that
+            # quietly stops matching a few seconds in.
             raise RuntimeError(
                 f"This replay was recorded with the '{recorded_store}' "
-                f"store and this process is running '{current_store}', so "
-                f"it will diverge rather than reproduce. Set "
-                f"`native_acceleration` to match, or pass "
-                f"`allow_store_mismatch=True` to watch it anyway."
+                f"store, which this engine no longer has; it runs "
+                f"'{current_store}'. It will diverge rather than reproduce. "
+                f"Pass `allow_store_mismatch=True` to watch it anyway."
             )
 
         # Before the first frame, so the recorded inputs drive a world
