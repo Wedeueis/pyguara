@@ -451,6 +451,28 @@ sleep after five seconds; Rapier's had. Rapier reports no persist for a
 pair whose bodies are all asleep, as Chipmunk does; before that it spent
 0.92 ms on the settled 200.
 
+### The swept mover on Rapier -- milliseconds per tick
+
+200 16x16 movers bouncing round an 800x600 room with fourteen static
+walls, about 3 px per tick on each axis, median of 100 ticks, one
+machine. "Mover" calls `CharacterMover.move` per body; "top-down" is
+`TopDownSystem.update`. "Python loop" is Rapier with `sweep_box` and
+`step_bodies` hidden, so each pixel is one `overlap_box`.
+
+| World | Engine | mover | top-down |
+| --- | --- | ---: | ---: |
+| static walls only | pymunk, static mirror | 0.79 | 0.39 |
+| | Rapier, Python loop | 2.48 | 2.56 |
+| | Rapier, native sweep | 0.78 | 0.44 |
+| plus one moving crate | pymunk | 17.26 | 16.08 |
+| | Rapier, Python loop | 2.47 | 2.59 |
+| | Rapier, native sweep | 0.80 | 0.47 |
+
+The native sweep is 3.2x the loop for the mover and 5.6x for the
+top-down step, and level with pymunk's mirror. Pymunk's mirror holds
+static boxes only, so one dynamic body anywhere sends every probe to
+Chipmunk; Rapier's sweep queries the whole world and has no such case.
+
 ## Object pools
 
 ### The native particle pool -- milliseconds per frame

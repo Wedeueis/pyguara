@@ -63,18 +63,15 @@ a Rapier world in the native extension. Rapier is the engine's future
 (roadmap 6e) and becomes the default once it does everything pymunk does.
 Today it covers bodies, circle and box colliders, materials, collision
 layers and groups, sensors, collision events, forces and impulses, every
-query, every joint type and one-way platforms, all held to the same
-tests as pymunk
+query, every joint type, one-way platforms and the native swept mover
+(`sweep_box`, `step_bodies`), all held to the same tests as pymunk
 (`tests/test_physics_rapier.py`, `tests/test_physics_rapier_joints.py`,
-and `tests/test_joint_system.py`, which runs on both).
+`tests/test_physics_rapier_sweep.py`, and `tests/test_joint_system.py`
+and the platformer feel suite, which run on both).
 
-Not yet, and refused rather than ignored:
-
-- segment and polygon colliders, and a `max_force` on any joint but a
-  motor, raise `NotImplementedError`;
-- `sweep_box` and `step_bodies` are absent, so `CharacterMover` and
-  `TopDownSystem` take the slower path they take on any engine without
-  them.
+Refused rather than ignored: segment and polygon colliders, which pymunk
+refuses too, and a `max_force` on any joint but a motor, which Rapier can
+cap only on a motor. Both raise `NotImplementedError`.
 
 Where the two differ on purpose or for now:
 
@@ -89,7 +86,9 @@ Where the two differ on purpose or for now:
 
 With a collision system attached, which every game started through
 `create_application` has, Rapier steps a pile of falling boxes in about a
-fifth of pymunk's time; see [performance](../guides/performance.md).
+fifth of pymunk's time. Its swept mover keeps its speed with moving
+bodies in the world, where pymunk's static mirror gives way to Chipmunk;
+see [performance](../guides/performance.md).
 
 ## Collision Handling
 

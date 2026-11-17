@@ -4,11 +4,9 @@
 in the native extension (`rust/src/physics.rs`). It is chosen with
 `physics.backend = "rapier"`; pymunk stays the default (roadmap 6e).
 
-Segment and polygon shapes, a `max_force` on a joint other than a motor,
-and the optional `sweep_box`/`step_bodies` capabilities are not
-implemented yet: the first two raise, and a caller of the last two falls
-back as it does for any engine without them. Known differences from pymunk are in
-`docs/physics/simulation.md`.
+Segment and polygon shapes, which the pymunk backend refuses too, and a
+`max_force` on a joint other than a motor raise `NotImplementedError`.
+Known differences from pymunk are in `docs/physics/simulation.md`.
 """
 
 from __future__ import annotations
@@ -334,8 +332,8 @@ class RapierEngine:
 
         Raises:
             TypeError: If the handle is not one of this backend's bodies.
-            NotImplementedError: For a segment or polygon shape, which this
-                backend does not do yet.
+            NotImplementedError: For a segment or polygon shape, as the
+                pymunk backend refuses them too.
         """
         if not isinstance(body, RapierBody):
             raise TypeError(
@@ -429,6 +427,120 @@ class RapierEngine:
         """Return the first entity whose solid shape overlaps a box, or None."""
         found = self.overlap_box_all(centre, half_extents, mask, ignore_entity_id)
         return found[0] if found else None
+
+    def sweep_box(
+        self,
+        position: Vector2,
+        half_extents: Vector2,
+        delta: Vector2,
+        remainder: Vector2,
+        ignore_entity_id: int | str | None = None,
+    ) -> tuple[float, float, float, float, int | str | None, int | str | None] | None:
+        """Run a whole `CharacterMover.move` natively.
+
+        Each probe is answered as `overlap_box` answers it, so the move
+        ends where the mover's own loop would.
+
+        Args:
+            position: Current centre of the box.
+            half_extents: The probe's half extents, skin already removed.
+            delta: Desired movement.
+            remainder: Sub-pixel motion carried in.
+            ignore_entity_id: Body to disregard.
+
+        Returns:
+            `(x, y, remainder_x, remainder_y, blocking_x, blocking_y)`, or
+            None to leave the move to the caller's loop: for values that
+            are not plain floats or ints, or a blocker no entity owns.
+        """
+        if self._native is None:
+            return None
+        kinds = (
+            type(position.x),
+            type(position.y),
+            type(delta.x),
+            type(delta.y),
+            type(remainder.x),
+            type(remainder.y),
+        )
+        for kind in kinds:
+            if kind is not float and kind is not int:
+                return None
+        swept = self._native.sweep(
+            position.x,
+            position.y,
+            half_extents.x,
+            half_extents.y,
+            delta.x,
+            delta.y,
+            remainder.x,
+            remainder.y,
+            self._slot_of(ignore_entity_id),
+        )
+        if swept is None:
+            return None
+        x, y, remainder_x, remainder_y, slot_x, slot_y = swept
+        blocking_x = None if slot_x is None else self._entity_of(slot_x)
+        blocking_y = None if slot_y is None else self._entity_of(slot_y)
+        if (slot_x is not None and blocking_x is None) or (
+            slot_y is not None and blocking_y is None
+        ):
+            return None
+        # The types the loop would have given: an int coordinate plus whole
+        # steps is an int, and an int remainder plus an int distance stays
+        # one unless a block reset it to 0.0.
+        if kinds[0] is int:
+            x = int(x)
+        if kinds[1] is int:
+            y = int(y)
+        if kinds[2] is int and kinds[4] is int and blocking_x is None:
+            remainder_x = int(remainder_x)
+        if kinds[3] is int and kinds[5] is int and blocking_y is None:
+            remainder_y = int(remainder_y)
+        return x, y, remainder_x, remainder_y, blocking_x, blocking_y
+
+    def step_bodies(
+        self,
+        rows: list[
+            tuple[
+                float,
+                float,
+                float,
+                float,
+                float,
+                float,
+                float,
+                float,
+                float,
+                float,
+                int | str,
+            ]
+        ],
+        delta_time: float,
+        skin: float,
+    ) -> list[tuple[float, float, float, float] | None] | None:
+        """Run `step_body` for many bodies in one native call.
+
+        Args:
+            rows: Per body, `(centre_x, centre_y, offset_x, offset_y, half_x,
+                half_y, velocity_x, velocity_y, remainder_x, remainder_y,
+                entity_id)`, as `TopDownSystem` builds them.
+            delta_time: Length of the step in seconds.
+            skin: What the mover shrinks its probe by on each side.
+
+        Returns:
+            Per row, the body's new `(x, y, remainder_x, remainder_y)`, or
+            None for a body to step the ordinary way. None for the whole
+            call before `initialize`.
+        """
+        if self._native is None:
+            return None
+        slots = self._slots
+        native_rows = [(*row[:10], slots.get(row[10])) for row in rows]
+        steps: list[tuple[float, float, float, float] | None] = (
+            self._native.step_bodies(native_rows, delta_time, skin)
+        )
+        return steps
 
     def overlap_box_all(
         self,

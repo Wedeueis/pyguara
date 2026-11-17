@@ -67,6 +67,14 @@ fn collider_key(handle: ColliderHandle) -> u64 {
     pack(id, generation)
 }
 
+/// A swept move: `(x, y, remainder_x, remainder_y, blocker_x, blocker_y)`,
+/// blockers as owner slots.
+type Swept = (f64, f64, f64, f64, Option<u64>, Option<u64>);
+
+/// One body for `step_bodies`: box centre, collider offset, half extents
+/// before the skin, velocity, remainder, and the body's own owner slot.
+type StepRow = (f64, f64, f64, f64, f64, f64, f64, f64, f64, f64, Option<u64>);
+
 /// Drops contacts between shapes in the same non-zero group, pairs the
 /// collision system asked not to resolve, and a one-way surface's contacts
 /// from its pass-through side.
@@ -363,6 +371,80 @@ impl NativePhysicsWorld {
             }
         }
         seen
+    }
+
+/// The first owner of a solid shape overlapping a box: what `overlap_box`
+    /// answers, so a native sweep stops where the Python loop would.
+    fn first_overlap(&mut self, x: f64, y: f64, half_x: f64, half_y: f64, ignore: Option<u64>) -> Option<u64> {
+        let shape = Cuboid::new(Vector::new(half_x, half_y));
+        self.overlapping(&shape, Pose::from_translation(Vector::new(x, y)), FULL_MASK, ignore)
+            .first()
+            .copied()
+    }
+
+    /// One axis of `CharacterMover._move_axis`, on the same doubles in the
+    /// same order: whole pixels, ties to even, the remainder dropped on a
+    /// block. None for a move no loop should run: non-finite, or past ten
+    /// million pixels.
+    #[allow(clippy::too_many_arguments)]
+    fn sweep_axis(
+        &mut self,
+        mut current: f64,
+        fixed: f64,
+        half_x: f64,
+        half_y: f64,
+        distance: f64,
+        mut remainder: f64,
+        horizontal: bool,
+        ignore: Option<u64>,
+    ) -> Option<(f64, f64, Option<u64>)> {
+        remainder += distance;
+        let amount = remainder.round_ties_even();
+        if !amount.is_finite() || amount.abs() > 1e7 {
+            return None;
+        }
+        remainder -= amount;
+        let mut amount = amount as i64;
+        if amount == 0 {
+            return Some((current, remainder, None));
+        }
+        let step: i64 = if amount > 0 { 1 } else { -1 };
+        let stride = step as f64;
+        while amount != 0 {
+            let candidate = current + stride;
+            let found = if horizontal {
+                self.first_overlap(candidate, fixed, half_x, half_y, ignore)
+            } else {
+                self.first_overlap(fixed, candidate, half_x, half_y, ignore)
+            };
+            if found.is_some() {
+                return Some((current, 0.0, found));
+            }
+            current = candidate;
+            amount -= step;
+        }
+        Some((current, remainder, None))
+    }
+
+    /// `CharacterMover.move`: x, then y from where x ended.
+    #[allow(clippy::too_many_arguments)]
+    fn sweep_box(
+        &mut self,
+        x: f64,
+        y: f64,
+        half_x: f64,
+        half_y: f64,
+        delta_x: f64,
+        delta_y: f64,
+        remainder_x: f64,
+        remainder_y: f64,
+        ignore: Option<u64>,
+    ) -> Option<Swept> {
+        let (new_x, rem_x, block_x) =
+            self.sweep_axis(x, y, half_x, half_y, delta_x, remainder_x, true, ignore)?;
+        let (new_y, rem_y, block_y) =
+            self.sweep_axis(y, new_x, half_x, half_y, delta_y, remainder_y, false, ignore)?;
+        Some((new_x, new_y, rem_x, rem_y, block_x, block_y))
     }
 
     fn overlapping(&mut self, shape: &dyn Shape, pose: Pose, mask: u32, ignore: Option<u64>) -> Vec<u64> {
@@ -871,6 +953,68 @@ impl NativePhysicsWorld {
             ColliderHandle::from_raw_parts(a_id, a_gen),
             ColliderHandle::from_raw_parts(b_id, b_gen),
         ));
+    }
+
+    /// The whole of `CharacterMover.move`, every probe answered as
+    /// `overlap_box` answers it.
+    ///
+    /// `half_x` and `half_y` are the probe's, already shrunk by the
+    /// mover's skin. Returns `(x, y, remainder_x, remainder_y, blocker_x,
+    /// blocker_y)`, blockers as owner slots, or None for a move too far or
+    /// not finite, which the caller's own loop should see.
+    #[pyo3(signature = (x, y, half_x, half_y, delta_x, delta_y, remainder_x, remainder_y, ignore = None))]
+    #[allow(clippy::too_many_arguments)]
+    fn sweep(
+        &mut self,
+        x: f64,
+        y: f64,
+        half_x: f64,
+        half_y: f64,
+        delta_x: f64,
+        delta_y: f64,
+        remainder_x: f64,
+        remainder_y: f64,
+        ignore: Option<u64>,
+    ) -> Option<Swept> {
+        self.sweep_box(x, y, half_x, half_y, delta_x, delta_y, remainder_x, remainder_y, ignore)
+    }
+
+    /// `TopDownSystem`'s movement step for many bodies at once.
+    ///
+    /// Each row is `(centre_x, centre_y, offset_x, offset_y, half_x,
+    /// half_y, velocity_x, velocity_y, remainder_x, remainder_y, owner)`.
+    /// The arithmetic is `step_body`'s, in its order: the probe is the half
+    /// extent less `skin` but never under 0.01, the move is `velocity *
+    /// delta_time`, and the position returned is the swept centre less the
+    /// offset. Nothing here moves a body, so the rows are independent.
+    ///
+    /// Returns, per row, `(x, y, remainder_x, remainder_y)`, or None for a
+    /// body the caller must step itself.
+    fn step_bodies(&mut self, rows: Vec<StepRow>, delta_time: f64, skin: f64) -> Vec<Option<(f64, f64, f64, f64)>> {
+        rows.into_iter()
+            .map(|(x, y, offset_x, offset_y, half_x, half_y, velocity_x, velocity_y, rem_x, rem_y, owner)| {
+                // Python's `max(h - SKIN, 0.01)`, which differs from
+                // `f64::max` on NaN.
+                let probe_x = half_x - skin;
+                let probe_x = if 0.01 > probe_x { 0.01 } else { probe_x };
+                let probe_y = half_y - skin;
+                let probe_y = if 0.01 > probe_y { 0.01 } else { probe_y };
+                self.sweep_box(
+                    x,
+                    y,
+                    probe_x,
+                    probe_y,
+                    velocity_x * delta_time,
+                    velocity_y * delta_time,
+                    rem_x,
+                    rem_y,
+                    owner,
+                )
+                .map(|(new_x, new_y, new_rem_x, new_rem_y, _, _)| {
+                    (new_x - offset_x, new_y - offset_y, new_rem_x, new_rem_y)
+                })
+            })
+            .collect()
     }
 
     /// How many joints the world holds. For tests.
