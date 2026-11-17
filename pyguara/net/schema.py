@@ -17,6 +17,7 @@ from __future__ import annotations
 import dataclasses
 import difflib
 import enum
+import keyword
 import math
 import struct
 import zlib
@@ -33,6 +34,10 @@ _MAX_EVENTS = 256
 _MAX_RECORD_BYTES = 512
 _MAX_NET_ID = 65535
 _INT16 = (-32768, 32767)
+
+# `tuple.__new__`, bound once: a `Vector2` built from a pair without the
+# `NamedTuple` constructor's argument handling.
+_new_tuple = tuple.__new__
 _INT32 = (-(2**31), 2**31 - 1)
 
 
@@ -125,6 +130,10 @@ class Quantised(_Codec):
         """See `FieldCodec.blend`."""
         return older + (newer - older) * amount
 
+    def native_field(self) -> tuple[str, str, float, float | None]:
+        """Describe this field to the native interpolator."""
+        return ("scalar", self.format, self._step, None)
+
 
 class QuantisedVector(_Codec):
     """A `Vector2`, sent to the nearest `step` on each axis, and interpolated.
@@ -186,6 +195,15 @@ class QuantisedVector(_Codec):
             return newer
         return Vector2(old_x + delta_x * amount, old_y + delta_y * amount)
 
+    def native_field(self) -> tuple[str, str, float, float | None]:
+        """Describe this field to the native interpolator."""
+        return ("vector", self.format[0], self._step, self._snap_squared)
+
+    @staticmethod
+    def from_native(value: tuple[float, float]) -> Any:
+        """Build the `Vector2` the native interpolator returned as `(x, y)`."""
+        return _new_tuple(Vector2, value)
+
 
 class Angle(_Codec):
     """An angle in radians, wrapping, and interpolated the short way round."""
@@ -222,6 +240,10 @@ class Angle(_Codec):
         """See `FieldCodec.blend`."""
         difference = (newer - older + math.pi) % math.tau - math.pi
         return older + difference * amount
+
+    def native_field(self) -> tuple[str, str, float, float | None]:
+        """Describe this field to the native interpolator."""
+        return ("angle", self.format, float(self._steps), None)
 
 
 class _Integer(_Codec):
@@ -573,6 +595,59 @@ class ComponentSchema:
         """
         for (name, blend), old, new in zip(self._blenders, older, newer, strict=True):
             setattr(component, name, old if old == new else blend(old, new, amount))
+
+    def native_spec(
+        self,
+    ) -> tuple[int, list[tuple[str, str, float, float | None]] | None]:
+        """Describe this component to `NativeInterpolator`.
+
+        Returns:
+            Its size in bytes, and its fields if every one of them can be
+            interpolated natively, or None when any cannot.
+        """
+        fields = []
+        for _, codec in self._fields:
+            describe = getattr(codec, "native_field", None)
+            if describe is None:
+                return self.size, None
+            fields.append(describe())
+        return self.size, fields
+
+    def native_writer(self) -> Callable[..., None]:
+        """Return `write(component, *values)` for the native interpolator.
+
+        Built once per component type, as straight-line attribute writes,
+        because it runs for every entity on every frame. A field whose name
+        is not a plain identifier is written with `setattr` instead.
+        """
+        arguments = ", ".join(f"v{i}" for i in range(len(self._fields)))
+        lines = [f"def write(component, {arguments}):"]
+        scope: dict[str, Any] = {}
+        if not all(
+            name.isidentifier() and not keyword.iskeyword(name)
+            for name, _ in self._fields
+        ):
+            fields = [
+                (name, getattr(codec, "from_native", None))
+                for name, codec in self._fields
+            ]
+
+            def write(component: Any, *values: Any) -> None:
+                for (name, convert), value in zip(fields, values, strict=True):
+                    setattr(
+                        component, name, value if convert is None else convert(value)
+                    )
+
+            return write
+        for i, (name, codec) in enumerate(self._fields):
+            convert = getattr(codec, "from_native", None)
+            if convert is None:
+                lines.append(f"    component.{name} = v{i}")
+            else:
+                scope[f"convert{i}"] = convert
+                lines.append(f"    component.{name} = convert{i}(v{i})")
+        exec("\n".join(lines), scope)  # noqa: S102 - identifiers only, see above
+        return scope["write"]  # type: ignore[no-any-return]
 
     def saturated(self) -> int:
         """Return how many values have not fit their field so far."""

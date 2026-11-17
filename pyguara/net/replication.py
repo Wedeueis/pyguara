@@ -14,6 +14,7 @@ game's; their first byte is at or above `FIRST_RESERVED_KIND`.
 from __future__ import annotations
 
 import bisect
+import itertools
 import struct
 import zlib
 from collections import deque
@@ -25,6 +26,7 @@ from pyguara.ecs.component import StrictComponent
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.log import get_logger
+from pyguara.native import require_extension
 from pyguara.net.schema import ComponentSchema, EventLayout, ReplicationSchema
 from pyguara.net.transport import Channel
 
@@ -445,6 +447,9 @@ def _state_crc(records: Any) -> int:
 class _Sample:
     tick: int
     record: bytes
+    mask: int
+    # Only the components Python writes: the ones the native interpolator
+    # blends are decoded there. See `ReplicationClient._full_values`.
     values: dict[int, tuple[Any, ...]]
 
 
@@ -454,8 +459,10 @@ class _Remote:
     prefab: str
     spawn_tick: int
     history: list[_Sample]
+    handle: int
     entity: Entity | None = None
     parts: dict[int, tuple[ComponentSchema, Any]] | None = None
+    native: dict[int, Any] | None = None
     applied: bytes | None = None
     gone: bool = False
     controlled: bool = False
@@ -529,6 +536,23 @@ class ReplicationClient:
         self._render_tick: float | None = None
         self._events_received = 0
         self._by_index = {c.index: c for c in schema.components}
+        # Components whose every field interpolates are decoded, kept and
+        # blended natively; Python writes only the rows that come back.
+        specs = [component.native_spec() for component in schema.components]
+        self._native_indices = frozenset(
+            index for index, (_, fields) in enumerate(specs) if fields is not None
+        )
+        writers = [
+            component.native_writer()
+            if component.index in self._native_indices
+            else None
+            for component in schema.components
+        ]
+        self._native = require_extension("ReplicationClient").NativeInterpolator(
+            specs, writers, _HISTORY
+        )
+        self._handles = itertools.count(1)
+        self._by_handle: dict[int, _Remote] = {}
         self.malformed = 0
         self.stale_records = 0
         self.unknown_records = 0
@@ -615,9 +639,12 @@ class ReplicationClient:
             self._render_tick = tick - self._delay
 
     def _decode_record(
-        self, data: bytes, offset: int, mask: int
+        self, data: bytes, offset: int, mask: int, *, every: bool = False
     ) -> tuple[dict[int, tuple[Any, ...]], int]:
         """Read one record's payload.
+
+        The natively interpolated components are skipped unless `every`: they
+        decode there, and holding only integers they cannot be invalid.
 
         Raises:
             ValueError: If the mask is invalid, it does not fit, or a value is bad.
@@ -627,11 +654,18 @@ class ReplicationClient:
             raise ValueError("A record does not fit its message")
         values: dict[int, tuple[Any, ...]] = {}
         position = offset
+        native = self._native_indices
         for component in self._schema.components:
             if mask >> component.index & 1:
-                values[component.index] = component.decode(data, position)
+                if every or component.index not in native:
+                    values[component.index] = component.decode(data, position)
                 position += component.size
         return values, position
+
+    def _full_values(self, sample: _Sample) -> dict[int, tuple[Any, ...]]:
+        """Decode every component of a sample, the native ones included."""
+        values, _ = self._decode_record(sample.record, 0, sample.mask, every=True)
+        return values
 
     def _on_snapshot(self, data: bytes) -> None:
         _, tick = _TICK_HEADER.unpack_from(data, 0)
@@ -647,20 +681,22 @@ class ReplicationClient:
             if remote is None:
                 self.unknown_records += 1
                 continue
-            self._add_sample(remote, tick, data[start:offset], values)
+            self._add_sample(remote, tick, data[start:offset], mask, values)
 
     def _add_sample(
         self,
         remote: _Remote,
         tick: int,
         record: bytes,
+        mask: int,
         values: dict[int, tuple[Any, ...]],
     ) -> None:
         history = remote.history
         if tick < remote.spawn_tick or (history and tick <= history[-1].tick):
             self.stale_records += 1
             return
-        history.append(_Sample(tick, record, values))
+        self._native.push(remote.handle, tick, record, mask)
+        history.append(_Sample(tick, record, mask, values))
         if len(history) > _HISTORY:
             del history[0]
 
@@ -681,13 +717,18 @@ class ReplicationClient:
             raise ValueError("A spawn has trailing bytes")
         self._events_received += 1
         self._see_tick(tick)
+        record = data[offset:end]
+        handle = next(self._handles)
+        self._native.push(handle, tick, record, mask)
         remote = _Remote(
             net_id,
             prefab,
             tick,
-            [_Sample(tick, data[offset:end], values)],
+            [_Sample(tick, record, mask, values)],
+            handle,
             controlled=bool(flags & _SPAWN_FLAG_CONTROLLED),
         )
+        self._by_handle[handle] = remote
         self._remotes[net_id] = remote
         self._timeline.append((tick, remote, True))
 
@@ -742,7 +783,9 @@ class ReplicationClient:
         self._run_timeline()
         render = self._render_tick
         for remote in self._active.values():
-            self._apply_interpolated(remote, render)
+            if remote.parts:
+                self._apply_interpolated(remote, render)
+        self._native.interpolate(render)
 
     def _advance_clock(self, dt: float) -> None:
         assert self._render_tick is not None and self._newest_tick is not None
@@ -797,34 +840,52 @@ class ReplicationClient:
         if spawner is None:
             self.malformed += 1
             logger.error("No spawner named %r", remote.prefab[:64])
-            self._remotes.pop(remote.net_id, None)
+            self._drop(remote)
             return
         try:
             entity = spawner()
         except Exception:  # noqa: BLE001 - a spawner failing must not end the frame
             self.malformed += 1
             logger.error("Spawner %r failed", remote.prefab, exc_info=True)
-            self._remotes.pop(remote.net_id, None)
+            self._drop(remote)
             return
         remote.entity = entity
-        remote.parts = {}
+        parts: dict[int, tuple[ComponentSchema, Any]] = {}
         for schema in self._schema.components:
             if entity.has_component(schema.component_type):
-                remote.parts[schema.index] = (
+                parts[schema.index] = (
                     schema,
                     entity.get_component(schema.component_type),
                 )
         self._active[remote.net_id] = remote
         if remote.controlled and self._on_controlled is not None:
             # Where it starts comes from the spawn. After that, prediction decides.
-            self._write(remote.parts, remote.history[0].values)
-            for index, (schema, _) in list(remote.parts.items()):
+            self._write(parts, self._full_values(remote.history[0]))
+            for index, (schema, _) in list(parts.items()):
                 if schema.component_type in self._predicted:
-                    del remote.parts[index]
+                    del parts[index]
+        remote.native = {
+            index: component
+            for index, (_, component) in parts.items()
+            if index in self._native_indices
+        }
+        remote.parts = {
+            index: part for index, part in parts.items() if index not in remote.native
+        }
+        self._native.activate(remote.handle, list(remote.native.items()))
+        if remote.controlled and self._on_controlled is not None:
             self._on_controlled(entity)
+
+    def _drop(self, remote: _Remote) -> None:
+        """Forget a remote that will never have an entity."""
+        self._remotes.pop(remote.net_id, None)
+        self._by_handle.pop(remote.handle, None)
+        self._native.forget(remote.handle)
 
     def _destroy(self, remote: _Remote) -> None:
         remote.gone = True
+        self._by_handle.pop(remote.handle, None)
+        self._native.forget(remote.handle)
         if self._active.get(remote.net_id) is remote:
             del self._active[remote.net_id]
         if remote.entity is not None:

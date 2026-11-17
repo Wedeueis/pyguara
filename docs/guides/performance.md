@@ -904,6 +904,33 @@ a question. Both pools are still held to linear scaling with capacity
 
 ---
 
+## Networking, the guest
+
+### Replication on a guest -- milliseconds per 60 Hz frame
+
+A guest decodes each 20 Hz snapshot and, every frame, writes every remote
+entity's state blended between the two snapshots around the render tick.
+Measured with a `Transform` of a 16-bit `QuantisedVector` position and an
+8-bit `Angle` rotation, every entity moving, one machine, best of three:
+
+| Entities | Before: snapshots | Before: update | Before: total | Now: snapshots | Now: update | Now: total | |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 200 | 0.144 | 0.531 | 0.675 | 0.115 | 0.148 | 0.263 | 2.6x |
+| 500 | 0.547 | 1.504 | 2.051 | 0.303 | 0.400 | 0.703 | 2.9x |
+
+**What moved.** A component whose every field interpolates is decoded,
+kept and blended by `NativeInterpolator` (`rust/src/replica.rs`), which then
+calls one generated writer per component. Components with a discrete field
+stay on the Python path, and the two are held bit for bit equal by
+`tests/test_net_native_interpolation.py`.
+
+**Why not more.** Writing 200 `Transform`s through their property setters
+costs 0.081 ms however the values were computed, and the snapshot loop that
+keeps a Python record per entity, for digests and discrete fields, is most
+of the rest. A tighter Python path, tried first, bought 1.2x. The port
+misses ADR 0004's 5x bar; what would clear it is component data that does
+not have to be written back to Python at all, which is roadmap item 6g.
+
 ## Rendering, CPU side
 
 These are the portable figures, and the surprise is where the time goes.

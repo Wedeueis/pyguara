@@ -68,6 +68,7 @@ mod imaging;
 mod mixer;
 mod net;
 mod particles;
+mod replica;
 mod solids;
 mod sparks;
 mod spatialhash;
@@ -86,6 +87,7 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<flowfield::NativeFlowField>()?;
     module.add_class::<gpu::NativeGpu>()?;
     module.add_class::<particles::NativeParticlePool>()?;
+    module.add_class::<replica::NativeInterpolator>()?;
     module.add_class::<solids::NativeSolids>()?;
     module.add_class::<sparks::NativeSparkPool>()?;
     module.add_class::<spatialhash::NativeSpatialHash>()?;
