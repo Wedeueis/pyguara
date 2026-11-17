@@ -412,6 +412,25 @@ Bisecting the walk would be faster and would reintroduce tunnelling.
 
 ---
 
+### Queries that see a body where it now is -- microseconds
+
+Two fixes to the pymunk backend's queries, each with a cost measured on
+the same machine:
+
+| | before | after |
+| --- | ---: | ---: |
+| setting a body's position | 1.10 | 1.61 |
+| a ray through 40 boxes | 6.17 | 6.54 |
+| a ray hitting one box | 2.40 | 2.43 |
+
+Setting a position now reindexes the body's shapes, without which a query
+found a static body where it had been for good, and anything else until
+the next step: 0.5 us a set, about 0.1 ms a tick for 200 bodies synced
+every tick. A ray now skips sensors, as the protocol promised; it still
+asks Chipmunk for the first hit, and collects every hit only when that
+one is a sensor or the caster. Collecting every hit unconditionally was
+tried first and cost 88.6 us for the 40-box ray.
+
 ## Object pools
 
 ### The native particle pool -- milliseconds per frame

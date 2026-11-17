@@ -191,7 +191,15 @@ class PymunkBodyAdapter:
         self._static_moved = static_moved
 
     def _moved(self) -> None:
-        """Flag a reposition, if this body is static and anyone asked."""
+        """Reindex a repositioned body's shapes, and flag a static one.
+
+        Chipmunk indexes shapes by bounding box and refreshes a static
+        body's only when asked, and anyone else's only at the next step,
+        so a query made before then found the body where it had been.
+        """
+        space = self._body.space
+        if space is not None:
+            space.reindex_shapes_for_body(self._body)
         if (
             self._static_moved is not None
             and self._body.body_type == pymunk.Body.STATIC
@@ -858,24 +866,35 @@ class PymunkEngine:
         ):
             return None
 
+        # The nearest hit that is neither a sensor nor the caster's own. A
+        # character casting for the ground under its feet starts the ray at
+        # its own edge, and a self-hit reads as permanently grounded.
+        # `segment_query_first` can exclude neither, so it answers only when
+        # its hit is acceptable, and every hit is collected otherwise: that
+        # costs about fourteen times as much along a ray through forty shapes.
         shape_filter = pymunk.ShapeFilter(mask=mask)
-
-        if ignore_entity_id is None:
-            query = self.space.segment_query_first(
-                (start.x, start.y), (end.x, end.y), RAYCAST_RADIUS, shape_filter
-            )
-            return self._to_hit(query, start)
-
-        # segment_query_first cannot exclude one body, so take every hit and
-        # return the nearest that is not the caster's own. A character casting
-        # for the ground under its feet starts the ray at its own edge, and a
-        # self-hit reads as permanently grounded.
+        first = self.space.segment_query_first(
+            (start.x, start.y), (end.x, end.y), RAYCAST_RADIUS, shape_filter
+        )
+        if first is None:
+            return None
+        if not first.shape.sensor and (
+            ignore_entity_id is None
+            or getattr(first.shape.body, "entity_id", None) != ignore_entity_id
+        ):
+            return self._to_hit(first, start)
         hits = self.space.segment_query(
             (start.x, start.y), (end.x, end.y), RAYCAST_RADIUS, shape_filter
         )
         for hit in sorted(hits, key=lambda h: h.alpha):
-            if getattr(hit.shape.body, "entity_id", None) != ignore_entity_id:
-                return self._to_hit(hit, start)
+            if hit.shape is None or hit.shape.sensor:
+                continue
+            if (
+                ignore_entity_id is not None
+                and getattr(hit.shape.body, "entity_id", None) == ignore_entity_id
+            ):
+                continue
+            return self._to_hit(hit, start)
         return None
 
     @staticmethod
