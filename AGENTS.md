@@ -224,10 +224,10 @@ Working rules, which the operations themselves enforce:
 ## The native extension
 
 Rust implements the wgpu renderer, the window, input, images, text and
-the audio mixer, and `FlowFieldService`, `Sparks` and `ParticleSystem`,
-which have no Python implementation. It is also an accelerated
-**store** for two things that still keep one: `FlockingSystem` and
-`SpatialHash`. Each is to lose it in turn (ADR 0011, Decision 3).
+the audio mixer, and `FlowFieldService`, `Sparks`, `ParticleSystem` and
+`FlockingSystem`, which have no Python implementation. It is also an
+accelerated **store** for `SpatialHash`, the last thing that still keeps
+one, and is to lose it too (ADR 0011, Decision 3).
 
 - The module is **`pyguara.pyguara_core_rs`**. `pyproject.toml` and
   `pyguara/native.py` both spell that name and must agree.
@@ -236,14 +236,12 @@ which have no Python implementation. It is also an accelerated
   stores. `pyguara.native.describe()` says which is in force.
 - **That switch governs stores, not backends.** It does not reach audio
   (`PYGUARA_AUDIO_BACKEND=pygame`), networking or the flow field.
-- **The two stores must agree**, and how exactly depends on the
-  subsystem: `SpatialHash` membership is bit-exact and flocking has one
-  permitted cause of difference.
-  Read the parity suite's docstring before touching one.
+- **The two `SpatialHash` stores must agree**: membership is bit-exact.
+  Read the parity suite's docstring before touching either.
 - **A Rust-only subsystem is held to recorded values** in
-  `tests/golden/` (the flow field bit for bit, the pools to 0.001) and to
-  the Python reference in `tests/reference/`. Regenerating a golden file
-  changes what "correct" means; read the diff.
+  `tests/golden/` (the flow field and flocking bit for bit, the pools to
+  0.001) and to the Python reference in `tests/reference/`. Regenerating
+  a golden file changes what "correct" means; read the diff.
 - **`SpatialHash` results have no defined order.** Pick by distance or
   id, never the first.
 - **A test's reference must pin the Python store explicitly**

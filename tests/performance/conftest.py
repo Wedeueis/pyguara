@@ -92,7 +92,7 @@ def build_flock(
     spread: float,
     seed: int = 1234,
     accelerate: bool | None = None,
-) -> tuple[EntityManager, FlockingSystem]:
+) -> tuple[EntityManager, Any]:
     """Build a world of `count` flocking agents and a system to tick it.
 
     Args:
@@ -102,13 +102,13 @@ def build_flock(
             what the spatial hash is sensitive to -- see
             `uniform_spread_for`.
         seed: Scatter seed, so a run is reproducible.
-        accelerate: Which store to tick with. None defers to the
-            engine-wide setting, which is what a sweep reporting "what
-            this machine does" wants; a guard pinning one store's
-            behaviour should say which.
+        accelerate: False builds the Python reference system from
+            `tests.reference.flocking`, the baseline the Rust figures
+            are quoted against. Anything else builds `FlockingSystem`,
+            which is Rust only.
 
     Returns:
-        The populated manager and a `FlockingSystem` over it.
+        The populated manager and a system over it.
     """
     rng = RandomStream(seed)
     manager = EntityManager()
@@ -125,7 +125,11 @@ def build_flock(
                 seek_weight=0.0,
             )
         )
-    return manager, FlockingSystem(manager, accelerate=accelerate)
+    if accelerate is False:
+        from tests.reference.flocking import ReferenceFlockingSystem
+
+        return manager, ReferenceFlockingSystem(manager)
+    return manager, FlockingSystem(manager)
 
 
 def uniform_spread_for(

@@ -16,7 +16,6 @@ import time
 import pytest
 
 from pyguara.ai.flocking_system import FlockingSystem
-from pyguara.ecs.manager import EntityManager
 from tests.performance.conftest import (
     assert_scales_no_worse_than,
     build_flock,
@@ -33,9 +32,7 @@ STORES = [
 
 
 def _flock(count: int, *, spread: float, accelerate: bool):
-    """`build_flock`, skipping the native store when it is not built."""
-    if accelerate and not FlockingSystem(EntityManager()).accelerated:
-        pytest.skip("native extension not built; `cargo build --release`")
+    """`build_flock`: the Rust system, or the Python reference for False."""
     return build_flock(count, spread=spread, accelerate=accelerate)
 
 
@@ -55,15 +52,8 @@ def test_flocking_is_linear_at_constant_density() -> None:
     """4x the agents at the same density should not cost 16x the time."""
     small_n, large_n = 250, 1000
 
-    # Explicitly the Python store: this guard is about the complexity
-    # class of `SpatialHash` plus `flock_force`, which is what it was
-    # written against. The native store has its own guards below.
-    _, small_system = build_flock(
-        small_n, spread=uniform_spread_for(small_n), accelerate=False
-    )
-    _, large_system = build_flock(
-        large_n, spread=uniform_spread_for(large_n), accelerate=False
-    )
+    _, small_system = build_flock(small_n, spread=uniform_spread_for(small_n))
+    _, large_system = build_flock(large_n, spread=uniform_spread_for(large_n))
 
     small = measure(lambda: small_system.update(DT))
     large = measure(lambda: large_system.update(DT))
@@ -87,10 +77,8 @@ def test_clumping_degrades_flocking_but_within_bounds() -> None:
     it becomes quadratic at every density.
     """
     count = 500
-    _, spread_system = build_flock(
-        count, spread=uniform_spread_for(count), accelerate=False
-    )
-    _, clumped_system = build_flock(count, spread=400.0, accelerate=False)
+    _, spread_system = build_flock(count, spread=uniform_spread_for(count))
+    _, clumped_system = build_flock(count, spread=400.0)
 
     spread = measure(lambda: spread_system.update(DT))
     clumped = measure(lambda: clumped_system.update(DT))
@@ -105,13 +93,11 @@ def test_clumping_degrades_flocking_but_within_bounds() -> None:
 
 
 @pytest.mark.performance
-def test_the_native_store_is_wired_up_and_materially_faster() -> None:
-    """The native tick is a small fraction of the Python one at 1000 agents.
+def test_the_rust_tick_is_materially_faster_than_the_python_it_replaced() -> None:
+    """The Rust tick is a small fraction of the Python one at 1000 agents.
 
-    A ratio, not a wall-clock budget, and a loose one: its job is to
-    notice that the native path stopped being taken. A loader that finds
-    no library falls back to Python and every parity test skips, so this
-    is one of the few places a missing extension fails.
+    A ratio, not a wall-clock budget, and a loose one. The Python side
+    is the reference system in `tests.reference.flocking`.
     """
     count = 1000
     spread = uniform_spread_for(count)

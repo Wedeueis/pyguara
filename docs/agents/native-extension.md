@@ -4,9 +4,9 @@ Moved out of `AGENTS.md` on 2026-11-14, unchanged, so that file stays short
 enough to read every session. `AGENTS.md` keeps the rules; this has the
 reasons and the detail.
 
-One subsystem and one shared primitive have a native implementation
-beside the Python one, and `FlowFieldService`, `Sparks` and
-`ParticleSystem` have only the native one:
+One shared primitive, `SpatialHash`, has a native implementation
+beside the Python one. `FlowFieldService`, `Sparks`, `ParticleSystem`
+and `FlockingSystem` have only the native one:
 
 | | native gain | |
 | --- | ---: | --- |
@@ -92,6 +92,29 @@ golden and one reference test, the ones whose scenario has both. The
 `Particle` class went with the Python pool: the Rust pool has no
 per-particle objects, and `_native.slot(index)` reads one slot's columns.
 
+**`FlockingSystem` is the fourth**, and the one ADR 0011 was least sure
+of, because its two stores never agreed bit for bit: a neighbour sum has
+no fixed order in Python. It converts because the Rust solver *is*
+reproducible. It is f64, sweeps in a fixed order and calls no platform
+maths function, and it gives the same bits across processes and hash
+seeds.
+
+- `tests/golden/flocking.json`: every agent's position and velocity
+  after ten scenarios, as float hex, recorded from the Rust solver and
+  compared exactly. Recorded where the Python path was within 4e-13 on
+  the thirty-tick scenarios and 2e-8 after 240 ticks.
+- `tests/reference/flocking.py`: the Python path, which
+  `tests/test_flocking_reference.py` still compares in its three tiers
+  (neighbourhoods exactly, one-flockmate arithmetic exactly, real flocks
+  to 1e-9). It uses the Python `SpatialHash` by name.
+- Sabotage: the alignment force scaled by the cohesion weight fails one
+  golden test and two reference tests. Only the "tuned" scenario has
+  unequal weights, which is why it is one.
+
+Recording the vectors is what found that `integrate=False` steered by
+positions the solver advanced and then discarded: the two stores were
+0.1 apart after one tick. That was fixed before the recording was kept.
+
 The other pure-Python implementations are kept and still run: under
 `PYGUARA_NO_NATIVE=1`, under `native_acceleration = "off"`, on a platform
 with no wheel, and in a checkout with nothing built yet.
@@ -140,18 +163,18 @@ instructions` rewrites what is inside it, and an earlier version of this
 section was placed there and silently deleted on the next regeneration.
 
 The price of keeping two implementations is that they must agree, which is
-paid by `tests/test_native_flocking_parity.py` and
-`tests/test_native_spatial_hash_parity.py` running the same operations
+paid by `tests/test_native_spatial_hash_parity.py` running the same operations
 against both, plus real-GPU pixel comparisons in
 `tests/integration/test_wgpu_pixels.py`. All of those **skip** when the
 extension is not built, so a contributor without Rust sees a green suite
 and has tested none of the accelerator -- build it before trusting a pass
-on anything touching flocking or spatial queries.
+on anything touching spatial queries.
 
 **Adding a native store to an existing class changes the meaning of every
 test that constructs it**, which `SpatialHash` demonstrated the hard way:
 the moment it defaulted to `auto`, the Python reference inside
-`tests/test_native_flocking_parity.py` became native and that suite's
+`tests/test_flocking_reference.py` (then the flocking parity suite)
+became native and that suite's
 first tier compared the native grid with itself -- it passed all 69 tests
 with the grid's distance test deliberately broken. So a reference, a
 complexity guard and a subsystem's own `accelerate=False` path must each

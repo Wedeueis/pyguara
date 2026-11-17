@@ -397,8 +397,8 @@ def price_flocking(agents: int) -> Row:
             agent.velocity = Vector2(packed[base + 2], packed[base + 3])
 
     python_ms = measure(lambda: system.update(DT), iterations=12)
-    native = FlockingSystem(manager, accelerate=None)
-    if not native.accelerated:
+    native = FlockingSystem(manager)
+    if native_module() is None:
         return Row(
             f"flocking, {agents} agents",
             python_ms,
