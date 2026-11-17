@@ -265,7 +265,9 @@ def test_a_tampered_client_state_is_caught_by_the_digest() -> None:
 
     remote = next(iter(replication._remotes.values()))
     sample = remote.history[-1]
-    remote.history[-1] = type(sample)(sample.tick, b"tampered", sample.values)
+    remote.history[-1] = type(sample)(
+        sample.tick, b"tampered", sample.mask, sample.values
+    )
     # Hold the remote's newest record still: `update` keeps comparing it to the next.
     tampered_tick = sample.tick
     message = struct.pack("<BIII", 0xE5, tampered_tick, 1, 0)
