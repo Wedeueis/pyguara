@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pyguara.common.types import Color, Vector2  # noqa: E402
 from pyguara.graphics.components.particles import ParticleSystem  # noqa: E402
-from pyguara.graphics.vfx.sparks import Sparks  # noqa: E402
+from tests.reference.sparks import ReferenceSparks  # noqa: E402
 
 # Nanoseconds per operation, min of 5 x 200k on this machine.
 COST_NS = {
@@ -138,14 +138,14 @@ def _particles(capacity: int, live: int) -> ParticleSystem:
     return system
 
 
-def _sparks(capacity: int, live: int) -> Sparks:
+def _sparks(capacity: int, live: int) -> ReferenceSparks:
     """A spark pool with `live` slots occupied.
 
     Pinned to the Python store: this tool counts `Vector2` operations in
     Python, and the native pool has none to count. Its own figures live in
     `docs/guides/performance.md`.
     """
-    pool = Sparks(capacity=capacity, accelerate=False)
+    pool = ReferenceSparks(capacity=capacity)
     if live:
         pool.burst(Vector2(0.0, 0.0), count=live, life=1e6, color=Color(255, 255, 255))
     return pool
