@@ -1035,6 +1035,24 @@ culling buys nothing, and the trade only pays in a large scrolling world.
 Machine-dependent — see the caveat at the top. Recorded because the *split*
 between Python and GPU work is itself informative.
 
+### Many primitives in one call -- milliseconds to hand them over
+
+`WgpuRenderer.draw_rect` once per rectangle, against `draw_rects` with one
+array, on an offscreen 1280x720 wgpu frame, best of 30. Only the time to
+hand the primitives to the frame is counted; the GPU work is the same
+either way. "Building" includes filling a fresh float32 array from
+positions the game already holds, which is the realistic case.
+
+| Rectangles | One call each | One array | One array, building it |
+| ---: | ---: | ---: | ---: |
+| 400 | 0.106 | 0.021 (5.2x) | 0.041 (2.6x) |
+| 4000 | 1.037 | 0.114 (9.1x) | 0.176 (5.9x) |
+
+The per-call figure, 0.26 us a rectangle here, is the cost
+`next_engine_plan.md` measured at 0.4 us on native Windows. A batch row
+runs the same native drawing code as a `draw_rect` call, which is why the
+frames are byte-identical (`tests/test_graphics_primitive_arrays.py`).
+
 ### Instanced sprite draw — milliseconds
 
 All on the transform path, so the pack column is genuinely a *component* of

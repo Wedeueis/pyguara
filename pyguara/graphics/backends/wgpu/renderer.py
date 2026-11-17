@@ -14,6 +14,7 @@ circle or line at pygame's `(x, y)` is drawn here about
 from __future__ import annotations
 
 import math
+from typing import Any
 
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.backends.wgpu.frame import CIRCLE_SHRINK, GpuFrame, line_quad
@@ -130,6 +131,33 @@ class WgpuRenderer:
             from_x, from_y, to_x, to_y, thickness,
             color.r, color.g, color.b, color.a,
         )  # fmt: skip
+
+    def draw_rects(self, rows: Any) -> None:
+        """Draw one rectangle per row, as `draw_rect` would, in one call.
+
+        See `pyguara.graphics.primitives` for the columns.
+        """
+        from pyguara.graphics.primitives import RECT_COLUMNS, as_rows
+
+        self._gpu.rects(as_rows(rows, RECT_COLUMNS).tobytes())
+
+    def draw_circles(self, rows: Any) -> None:
+        """Draw one circle per row, as `draw_circle` would, in one call.
+
+        See `pyguara.graphics.primitives` for the columns.
+        """
+        from pyguara.graphics.primitives import CIRCLE_COLUMNS, as_rows
+
+        self._gpu.circles(as_rows(rows, CIRCLE_COLUMNS).tobytes())
+
+    def draw_lines(self, rows: Any) -> None:
+        """Draw one line per row, as `draw_line` would, in one call.
+
+        See `pyguara.graphics.primitives` for the columns.
+        """
+        from pyguara.graphics.primitives import LINE_COLUMNS, as_rows
+
+        self._gpu.lines(as_rows(rows, LINE_COLUMNS).tobytes())
 
     def draw_text(
         self, text: str, position: Vector2, color: Color, size: int = 16

@@ -373,6 +373,37 @@ Defines the drawable region on the screen. Used for:
 ### Geometry
 Procedural shapes (`Box`, `Circle`) that lazy-generate their textures. This allows them to be batched alongside standard sprites.
 
+## Many primitives in one call
+
+A game drawing hundreds of rectangles, circles or lines a frame can hand
+each kind over as one array, one row per primitive:
+
+```python
+import numpy
+from pyguara.graphics import primitives
+
+rows = numpy.zeros((len(enemies), 9), dtype=numpy.float32)
+rows[:, 0:2] = positions        # x, y
+rows[:, 2:4] = (8, 8)           # width, height
+rows[:, 4:8] = (220, 40, 40, 255)
+primitives.draw_rects(renderer, rows)
+```
+
+| Function | Row |
+| --- | --- |
+| `draw_rects` | `x, y, width, height, red, green, blue, alpha, outline` |
+| `draw_circles` | `x, y, radius, outline, red, green, blue, alpha` |
+| `draw_lines` | `start_x, start_y, end_x, end_y, width, red, green, blue, alpha` |
+
+Each row draws exactly what the matching `draw_rect`, `draw_circle` or
+`draw_line` call would, truncation to whole pixels included, and rows draw
+in order. On wgpu the whole array crosses to the GPU frame in one call; a
+renderer without the `PrimitiveArrayRenderer` capability, pygame's, gets
+one call per row. Any array-like works, but building it with numpy is
+what keeps the frame free of a Python loop. At 4000 rectangles that is
+about 9x less time handing them over; see
+[performance](../guides/performance.md).
+
 ## Backends
 
 The engine uses the `IRenderer` protocol, allowing for different implementations:

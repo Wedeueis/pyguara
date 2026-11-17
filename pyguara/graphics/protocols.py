@@ -200,6 +200,29 @@ class ShapeRenderer(Protocol):
 
 
 @runtime_checkable
+class PrimitiveArrayRenderer(Protocol):
+    """A renderer that draws many rectangles, circles or lines in one call.
+
+    A capability, tested for with `isinstance`. Each row draws exactly what
+    the matching `draw_rect`, `draw_circle` or `draw_line` call would; the
+    column orders are in `pyguara.graphics.primitives`, which also draws
+    the same arrays one call at a time on a renderer without this.
+    """
+
+    def draw_rects(self, rows: Any) -> None:
+        """Draw one rectangle per row of `x, y, w, h, r, g, b, a, outline`."""
+        ...
+
+    def draw_circles(self, rows: Any) -> None:
+        """Draw one circle per row of `x, y, radius, outline, r, g, b, a`."""
+        ...
+
+    def draw_lines(self, rows: Any) -> None:
+        """Draw one line per row of `x1, y1, x2, y2, width, r, g, b, a`."""
+        ...
+
+
+@runtime_checkable
 class ShapeBatchRenderer(Protocol):
     """A renderer that can take many primitives of one kind in one call.
 

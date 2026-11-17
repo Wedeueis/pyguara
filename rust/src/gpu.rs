@@ -429,6 +429,73 @@ fn runtime_error(context: &str, error: impl std::fmt::Display) -> PyErr {
     PyRuntimeError::new_err(format!("{context}: {error}"))
 }
 
+/// The shrink `GpuFrame` applies to a circle's radius, as `CIRCLE_SHRINK`
+/// in `pyguara/graphics/backends/wgpu/frame.py`.
+const CIRCLE_SHRINK: f32 = 0.25;
+
+/// Floats per row of `NativeGpu.rects`.
+const RECT_COLUMNS: usize = 9;
+/// Floats per row of `NativeGpu.circles`.
+const CIRCLE_COLUMNS: usize = 8;
+/// Floats per row of `NativeGpu.lines`.
+const LINE_COLUMNS: usize = 9;
+
+/// Split a little-endian float32 buffer into rows of `columns`.
+fn float_rows(data: &[u8], columns: usize) -> PyResult<Vec<f32>> {
+    let row_bytes = columns * 4;
+    if data.len() % row_bytes != 0 {
+        return Err(PyValueError::new_err(format!(
+            "{} bytes is not a whole number of {columns}-float rows",
+            data.len()
+        )));
+    }
+    Ok(data
+        .chunks_exact(4)
+        .map(|bytes| f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+        .collect())
+}
+
+/// A colour channel given as a float, as `Color` holds it: 0 to 255.
+fn channel(value: f32) -> u8 {
+    value.clamp(0.0, 255.0) as u8
+}
+
+/// `line_quad` in `pyguara/graphics/backends/wgpu/frame.py`, in the same
+/// order and precision, so a batched line covers the pixels `draw_line`
+/// would.
+fn line_quad(start_x: f64, start_y: f64, end_x: f64, end_y: f64, width: i64) -> [f64; 5] {
+    let from_x = start_x.trunc() + 0.5;
+    let from_y = start_y.trunc() + 0.5;
+    let to_x = end_x.trunc() + 0.5;
+    let to_y = end_y.trunc() + 0.5;
+    let along_x = to_x - from_x;
+    let along_y = to_y - from_y;
+    let length = along_x.hypot(along_y);
+    if length == 0.0 {
+        let shift = if width % 2 == 0 { 0.5 } else { 0.0 };
+        return [from_x - 0.5, from_y + shift, to_x + 0.5, to_y + shift, width as f64];
+    }
+    let major = along_x.abs().max(along_y.abs());
+    let reach = 0.5 * length / major;
+    let reach_x = along_x / length * reach;
+    let reach_y = along_y / length * reach;
+    let (mut shift_x, mut shift_y) = (0.0, 0.0);
+    if width % 2 == 0 {
+        if along_x.abs() >= along_y.abs() {
+            shift_y = 0.5;
+        } else {
+            shift_x = 0.5;
+        }
+    }
+    [
+        from_x - reach_x + shift_x,
+        from_y - reach_y + shift_y,
+        to_x + reach_x + shift_x,
+        to_y + reach_y + shift_y,
+        width as f64 * major / length,
+    ]
+}
+
 fn unit(channel: u8) -> f32 {
     f32::from(channel) / 255.0
 }
@@ -2130,6 +2197,112 @@ impl NativeGpu {
     #[allow(clippy::too_many_arguments)]
     fn rect(&mut self, x: f32, y: f32, width: f32, height: f32, red: u8, green: u8, blue: u8, alpha: u8) {
         self.solid(x, y, width, height, [unit(red), unit(green), unit(blue), unit(alpha)]);
+    }
+
+    /// Many rectangles, as `WgpuRenderer.draw_rect` draws each one.
+    ///
+    /// `data` is little-endian float32 rows of `x, y, width, height, red,
+    /// green, blue, alpha, outline`: colour in 0 to 255, and an outline of
+    /// 0 for a filled rectangle. The rectangle is truncated to whole pixels,
+    /// as `Rect` is. A row with zero alpha draws nothing.
+    fn rects(&mut self, data: &[u8]) -> PyResult<usize> {
+        let values = float_rows(data, RECT_COLUMNS)?;
+        let mut drawn = 0usize;
+        for row in values.chunks_exact(RECT_COLUMNS) {
+            let (red, green, blue, alpha) =
+                (channel(row[4]), channel(row[5]), channel(row[6]), channel(row[7]));
+            if alpha == 0 {
+                continue;
+            }
+            // Truncated, as `Rect` truncates its fields.
+            let (x, y, width, height) =
+                (row[0].trunc(), row[1].trunc(), row[2].trunc(), row[3].trunc());
+            let outline = row[8].trunc();
+            if outline > 0.0 {
+                self.rect_outline(x, y, width, height, outline, red, green, blue, alpha);
+            } else {
+                self.rect(x, y, width, height, red, green, blue, alpha);
+            }
+            drawn += 1;
+        }
+        Ok(drawn)
+    }
+
+    /// Many circles, as `WgpuRenderer.draw_circle` draws each one.
+    ///
+    /// `data` is little-endian float32 rows of `x, y, radius, outline, red,
+    /// green, blue, alpha`. The centre and radius are truncated to whole
+    /// pixels, as there; an outline of 0 fills.
+    fn circles(&mut self, data: &[u8]) -> PyResult<usize> {
+        let values = float_rows(data, CIRCLE_COLUMNS)?;
+        let mut drawn = 0usize;
+        for row in values.chunks_exact(CIRCLE_COLUMNS) {
+            let (red, green, blue, alpha) =
+                (channel(row[4]), channel(row[5]), channel(row[6]), channel(row[7]));
+            if alpha == 0 {
+                continue;
+            }
+            let whole = row[2].trunc();
+            if whole <= 0.0 {
+                continue;
+            }
+            let width = row[3].trunc();
+            let inner = if 0.0 < width && width < whole {
+                whole - width - CIRCLE_SHRINK
+            } else {
+                0.0
+            };
+            self.circle(
+                row[0].trunc(),
+                row[1].trunc(),
+                whole - CIRCLE_SHRINK,
+                inner,
+                red,
+                green,
+                blue,
+                alpha,
+            );
+            drawn += 1;
+        }
+        Ok(drawn)
+    }
+
+    /// Many lines, as `WgpuRenderer.draw_line` draws each one.
+    ///
+    /// `data` is little-endian float32 rows of `start_x, start_y, end_x,
+    /// end_y, width, red, green, blue, alpha`. A width below 1 or a zero
+    /// alpha draws nothing.
+    fn lines(&mut self, data: &[u8]) -> PyResult<usize> {
+        let values = float_rows(data, LINE_COLUMNS)?;
+        let mut drawn = 0usize;
+        for row in values.chunks_exact(LINE_COLUMNS) {
+            let (red, green, blue, alpha) =
+                (channel(row[5]), channel(row[6]), channel(row[7]), channel(row[8]));
+            let width = row[4].trunc() as i64;
+            if alpha == 0 || width <= 0 {
+                continue;
+            }
+            let quad = line_quad(
+                f64::from(row[0]),
+                f64::from(row[1]),
+                f64::from(row[2]),
+                f64::from(row[3]),
+                width,
+            );
+            self.line(
+                quad[0] as f32,
+                quad[1] as f32,
+                quad[2] as f32,
+                quad[3] as f32,
+                quad[4] as f32,
+                red,
+                green,
+                blue,
+                alpha,
+            );
+            drawn += 1;
+        }
+        Ok(drawn)
     }
 
     /// A rectangle's outline, `thickness` pixels wide, drawn inside it.
