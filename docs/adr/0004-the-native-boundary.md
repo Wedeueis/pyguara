@@ -77,6 +77,7 @@ writing:
 | spatial index, 1000 keys | 7.453 | 0.439 | — | **17.0x** | landed, 17.0x |
 | render batcher, 20000 sprites | 44.423 | 1.347 | 3.671 | **8.9x** | deferred (12.2x before Decision 6) |
 | projectiles, 1000 | 3.041 | 0.339 | 1.143 | **2.1x** | declined |
+| guest replication, 200 entities | 0.675 | 0.263 | — | **2.6x** | landed below the bar, by the user's call (#479) |
 
 Two further candidates are priced **per call rather than per tick**, so
 they sit in their own table in `tools/price_native_boundary.py` and must
@@ -84,6 +85,16 @@ not be read beside the rows above: `wfc, 64x64` at 67.7x (once per
 generated level) and `a*, 96x96` at 4250x (per query). Both are declined;
 Track R item 1 has why, and the 4250x is discussed below as a limit of
 this formula rather than a result.
+
+The guest replication row is the one port landed under the 5x threshold.
+It was priced near 6x, on the assumption that the native side would cost
+almost nothing beside the 0.08 ms floor of writing 200 `Transform`s
+through their property setters; building it showed the crossing and the
+per-record Python bookkeeping were not free. It landed anyway because the
+duplicated code is three blend formulas held bit for bit by a test, and
+the gain is per guest per frame. Columnar components (roadmap 6g) are
+what would take it past the bar. Its `T_cross` column is what the native
+path costs in total, not a separate crossing measurement.
 
 The spatial index is the one row that is **not a subsystem**, and reading
 it as one would be a mistake: its 17x is what the *index* costs, while
