@@ -173,14 +173,9 @@ def _run_flock(accelerate: bool, hash_seed: int) -> str:
 class TestASeededFlockReproduces:
     """Exact: every coordinate of every agent, in query order, bit for bit."""
 
-    @pytest.mark.parametrize("accelerate", [False, True], ids=["python", "native"])
+    @pytest.mark.parametrize("accelerate", [False, True], ids=["reference", "rust"])
     def test_across_processes_and_hash_seeds(self, accelerate: bool) -> None:
-        if accelerate:
-            from pyguara.ai.flocking_system import FlockingSystem
-
-            if not FlockingSystem(EntityManager()).accelerated:
-                pytest.skip("extension not built")
-
+        """False ticks the Python reference; see `build_flock`."""
         digests = {_run_flock(accelerate, seed) for seed in (1, 2, 3)}
 
         assert len(digests) == 1, digests

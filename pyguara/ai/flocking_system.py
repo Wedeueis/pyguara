@@ -15,22 +15,20 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any
 
-from pyguara.ai.steering import SteeringBehavior
 from pyguara.common.components import Transform
-from pyguara.common.spatial import SpatialHash
 from pyguara.common.types import Vector2
 from pyguara.ecs.component import StrictComponent
 from pyguara.ecs.manager import EntityManager
-from pyguara.native import native_module
+from pyguara.native import require_extension
 
 # Floats per agent in the row `_pack` writes; mirrors `STRIDE` in
 # `rust/src/flocking.rs`, which rejects a length that is not a multiple.
 _STRIDE = 15
 
 # `tuple.__new__`, which is what `NamedTuple._make` calls, bound once
-# rather than looked up per vector. See `_tick_natively`.
+# rather than looked up per vector. See `FlockingSystem.update`.
 _new_vector = tuple.__new__
 
 
@@ -197,15 +195,15 @@ class FlockingSystem:
     """Ticks every `FlockingAgent` toward its neighbors, each frame.
 
     Neighbor query, weighted force sum, F=ma integration: the same
-    integration shape as `SteeringSystem`. A fresh `SpatialHash` is built
-    every `update()` from the entities' current positions.
+    integration shape as `SteeringSystem`.
 
-    Uses the native extension when it is available; see ADR 0004,
-    Decision 3, and `docs/guides/performance.md`.
+    The flock is steered by the native extension, in one crossing per
+    tick, and there is no Python implementation: `native_acceleration`
+    and `PYGUARA_NO_NATIVE` do not apply. See ADR 0011, Decision 3.
 
     The sweep is Gauss-Seidel, so its order is part of the simulation. It
     follows entity insertion order, so a seeded flock ticks the same way
-    every run, on either store.
+    every run.
 
     Example:
         >>> system_manager.register(FlockingSystem(entity_manager), priority=150)
@@ -217,14 +215,13 @@ class FlockingSystem:
         cell_size: float = 64.0,
         groups: int = 1,
         *,
-        accelerate: bool | None = None,
         integrate: bool = True,
     ) -> None:
         """Initialize the flocking system.
 
         Args:
             entity_manager: The entity manager to query for flocking agents.
-            cell_size: `SpatialHash` bucket size; pick something close to
+            cell_size: The neighbour grid's bucket size; pick something close to
                 the typical `neighbor_radius`.
             groups: How many ticks to spread steering across. 1 (the
                 default) steers every agent every tick. Higher values
@@ -232,14 +229,6 @@ class FlockingSystem:
                 while *every* agent still integrates its position, so
                 motion stays smooth and only the decision rate drops.
                 Values below 1 are clamped to 1.
-            accelerate: Whether to steer the flock natively. None, the
-                default, defers to the engine-wide setting --
-                `PerformanceConfig.native_acceleration`, resolved once at
-                bootstrap -- so a game decides this in one place rather
-                than per system. True demands the extension and raises if
-                it is missing; False forces the Python path. Both are
-                overrides for tests and for the parity suite, not a
-                second configuration surface.
             integrate: Whether to move each agent by its velocity. True, the
                 default, writes `Transform.position` directly, which goes
                 through walls. False only steers: each agent's `velocity` is
@@ -247,7 +236,7 @@ class FlockingSystem:
                 to move, such as `TopDownSystem` or `CharacterMover`.
 
         Raises:
-            RuntimeError: If `accelerate=True` and the extension is absent.
+            RuntimeError: If the native extension cannot be imported.
         """
         self._entity_manager = entity_manager
         self._cell_size = cell_size
@@ -260,56 +249,7 @@ class FlockingSystem:
         self._groups = max(1, groups)
         self._tick = 0
 
-        native = native_module() if accelerate is not False else None
-        if accelerate and native is None:
-            raise RuntimeError(
-                "accelerate=True but the native extension is not available. "
-                "Build it with `cargo build --release`, or leave "
-                "`accelerate` unset to fall back to Python."
-            )
-        self._native: Any | None = native.NativeFlockingSolver() if native else None
-
-    @property
-    def accelerated(self) -> bool:
-        """Whether this system steers its flock natively."""
-        return self._native is not None
-
-    @staticmethod
-    def _neighbors_of(
-        index: int,
-        position: Vector2,
-        agent: FlockingAgent,
-        spatial_hash: SpatialHash[int],
-        transforms: list[Transform],
-        agents: list[FlockingAgent],
-    ) -> Iterable[tuple[Vector2, Vector2]]:
-        """Yield `(position, velocity)` for each flockmate in range.
-
-        The hash is keyed on a slot in `transforms`/`agents`, not on an entity
-        id, so resolving a neighbour is two list subscripts.
-
-        Both reads are live, not snapshotted: the hash is built from
-        start-of-tick positions, but an agent steering later in the tick sees
-        the already-moved positions of the agents ahead of it. Snapshotting
-        would change how a flock settles.
-
-        Args:
-            index: The steering agent's own slot, excluded from its neighbours.
-            position: Its world position, the query centre.
-            agent: Read for `neighbor_radius`.
-            spatial_hash: This tick's index, keyed by slot.
-            transforms: This tick's `Transform` components, by slot.
-            agents: This tick's `FlockingAgent` components, by slot.
-
-        Yields:
-            One `(position, velocity)` pair per flockmate.
-        """
-        for slot in spatial_hash.query_radius(position, agent.neighbor_radius):
-            if slot == index:
-                continue
-            # No None check: slots index lists built from this tick's live
-            # entities, so unlike an id lookup they cannot miss.
-            yield transforms[slot].position, agents[slot].velocity
+        self._native: Any = require_extension("FlockingSystem").NativeFlockingSolver()
 
     def _pack(
         self, agents: list[FlockingAgent], transforms: list[Transform]
@@ -358,50 +298,6 @@ class FlockingSystem:
             )
         return flat
 
-    def _tick_natively(
-        self,
-        dt: float,
-        groups: int,
-        steering_group: int,
-        agents: list[FlockingAgent],
-        transforms: list[Transform],
-    ) -> None:
-        """Steer the whole flock in one crossing, and write the result back.
-
-        The write-back builds its vectors with `_new_vector`, which is cheaper
-        than `Vector2(x, y)` and produces an identical object.
-
-        A disabled agent is skipped, not written back with the unchanged row
-        the solver returns for it, so the Python and native paths leave an
-        identical object graph.
-
-        Args:
-            dt: Delta time in seconds.
-            groups: How many ticks steering is spread across.
-            steering_group: Which group thinks this tick.
-            agents: This tick's `FlockingAgent` components, by slot.
-            transforms: This tick's `Transform` components, by slot.
-        """
-        assert self._native is not None
-        enabled = [agent.enabled for agent in agents]
-        rows = self._native.tick(
-            dt,
-            self._cell_size,
-            groups,
-            steering_group,
-            self._pack(agents, transforms),
-            enabled,
-            self._integrate,
-        )
-        for (position, velocity), agent, transform, is_enabled in zip(
-            rows, agents, transforms, enabled, strict=True
-        ):
-            if not is_enabled:
-                continue
-            if self._integrate:
-                transform.position = _new_vector(Vector2, position)
-            agent.velocity = _new_vector(Vector2, velocity)
-
     def update(self, dt: float) -> None:
         """Update all flocking agents.
 
@@ -425,64 +321,25 @@ class FlockingSystem:
         steering_group = self._tick % groups
         self._tick += 1
 
-        if self._native is not None:
-            self._tick_natively(dt, groups, steering_group, agents, transforms)
-            return
-
-        # `accelerate=False`, not the engine-wide default: reaching this
-        # branch at all means this system is on the Python path, and a
-        # Python path that quietly indexes natively is not one. It also
-        # matters to the parity suite, whose Python reference is only a
-        # reference while nothing native is inside it.
-        spatial_hash: SpatialHash[int] = SpatialHash(
-            cell_size=self._cell_size, accelerate=False
+        # One crossing for the whole flock. The write-back builds its
+        # vectors with `_new_vector`, which is cheaper than `Vector2(x, y)`
+        # and produces an identical object. A disabled agent is skipped,
+        # not written back with the unchanged row the solver returns.
+        enabled = [agent.enabled for agent in agents]
+        rows = self._native.tick(
+            dt,
+            self._cell_size,
+            groups,
+            steering_group,
+            self._pack(agents, transforms),
+            enabled,
+            self._integrate,
         )
-        for slot, transform in enumerate(transforms):
-            spatial_hash.insert(slot, transform.position)
-
-        # One group's worth of accumulated acceleration, so a staggered
-        # agent turns at the same rate as an unstaggered one instead of
-        # `groups` times slower.
-        steering_dt = dt * groups
-
-        for slot, agent in enumerate(agents):
-            if not agent.enabled:
+        for (position, velocity), agent, transform, is_enabled in zip(
+            rows, agents, transforms, enabled, strict=True
+        ):
+            if not is_enabled:
                 continue
-            transform = transforms[slot]
-
-            if groups > 1 and slot % groups != steering_group:
-                # Not this agent's tick to think. It still moves.
-                if self._integrate:
-                    transform.position = transform.position + agent.velocity * dt
-                continue
-
-            position = transform.position
-            force = flock_force(
-                position,
-                agent,
-                self._neighbors_of(
-                    slot, position, agent, spatial_hash, transforms, agents
-                ),
-            )
-            if agent.seek_weight and agent.seek_target is not None:
-                force = (
-                    force
-                    + SteeringBehavior.seek(
-                        transform, agent.seek_target, agent.max_speed, agent.velocity
-                    )
-                    * agent.seek_weight
-                )
-
-            if force.length > agent.max_force:
-                force = cast(Vector2, force.normalized() * agent.max_force)
-
-            acceleration = force * (1.0 / agent.mass)
-            new_velocity = agent.velocity + acceleration * steering_dt
-            if new_velocity.length > agent.max_speed:
-                new_velocity = cast(
-                    Vector2, new_velocity.normalized() * agent.max_speed
-                )
-            agent.velocity = new_velocity
-
             if self._integrate:
-                transform.position = transform.position + agent.velocity * dt
+                transform.position = _new_vector(Vector2, position)
+            agent.velocity = _new_vector(Vector2, velocity)

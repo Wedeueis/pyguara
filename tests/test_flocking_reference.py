@@ -1,8 +1,9 @@
-"""Do the two flocking stores agree, and in what sense?
+"""Does the Rust flocking solver agree with the Python reference?
 
-Not with `==` on a real flock: a radius query yields neighbours in a
-different order on each store, and float addition is not associative.
-So three things are asserted separately:
+"Python" below is `tests.reference.flocking`, the path the Rust-only
+`FlockingSystem` replaced. Not with `==` on a real flock: a radius query
+yields neighbours in a different order on each side, and float addition
+is not associative. So three things are asserted separately:
 
 1. The neighbourhoods agree exactly.
 2. The arithmetic agrees exactly, on geometry where no agent has more
@@ -14,19 +15,15 @@ from __future__ import annotations
 
 import pytest
 
-import pyguara.ai.flocking_system as flocking_module
+import tests.reference.flocking as reference_module
 from pyguara.ai.flocking_system import FlockingAgent, FlockingSystem
 from pyguara.common.components import Transform
 from pyguara.common.random import RandomStream
 from pyguara.common.spatial import SpatialHash
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
-from pyguara.native import native_module
-
-pytestmark = pytest.mark.skipif(
-    native_module() is None,
-    reason="native extension not built; `cargo build --release`",
-)
+from pyguara.native import require_extension
+from tests.reference.flocking import ReferenceFlockingSystem
 
 DT = 1.0 / 60.0
 CELL = 64.0
@@ -53,7 +50,7 @@ def _world(
         entity.add_component(FlockingAgent(velocity=velocity, **agent_kwargs))  # type: ignore[arg-type]
     # Registering the cached query is the system's job, so build one and
     # read the components back in the order the system will see them.
-    FlockingSystem(manager, accelerate=False)
+    ReferenceFlockingSystem(manager)
     entities = list(manager.get_entities_with_cached(FlockingAgent, Transform))
     return (
         manager,
@@ -156,13 +153,13 @@ def _both(
     manager, agents, transforms = _world(layout, **agent_kwargs)
     start = _state(agents, transforms)
 
-    python = FlockingSystem(manager, cell_size=CELL, groups=groups, accelerate=False)
+    python = ReferenceFlockingSystem(manager, cell_size=CELL, groups=groups)
     for _ in range(ticks):
         python.update(DT)
     after_python = _state(agents, transforms)
 
     _restore(start, agents, transforms)
-    native = FlockingSystem(manager, cell_size=CELL, groups=groups, accelerate=True)
+    native = FlockingSystem(manager, cell_size=CELL, groups=groups)
     for _ in range(ticks):
         native.update(DT)
     return after_python, _state(agents, transforms)
@@ -183,18 +180,17 @@ def _assert_close(
 
 
 class TestThePythonPathIsPythonAllTheWayDown:
-    """`accelerate=False` has to mean it in what the system builds too.
+    """The reference must not have a native index inside it.
 
-    `FlockingSystem`'s Python path builds its own `SpatialHash` every
-    tick. Unless it passes `accelerate=False` down, the Python path would
-    index natively, and the reference this file compares against would
-    contain native code.
+    The reference builds its own `SpatialHash` every tick. Unless it asks
+    for the Python store by name it would index natively, and this file
+    would be comparing the Rust grid with itself.
     """
 
     def test_the_index_the_python_path_builds_is_python(self) -> None:
         """Spy on the construction, because the hash is a local."""
         constructed: list[SpatialHash[int]] = []
-        original = flocking_module.SpatialHash
+        original = reference_module.SpatialHash
 
         def recording(*args: object, **kwargs: object) -> SpatialHash[int]:
             index = original(*args, **kwargs)  # type: ignore[arg-type]
@@ -207,26 +203,31 @@ class TestThePythonPathIsPythonAllTheWayDown:
                 (Vector2(10.0, 0.0), Vector2(0.0, 0.0)),
             ]
         )
-        system = FlockingSystem(manager, accelerate=False)
-        flocking_module.SpatialHash = recording  # type: ignore[assignment]
+        system = ReferenceFlockingSystem(manager)
+        reference_module.SpatialHash = recording  # type: ignore[assignment]
         try:
             system.update(DT)
         finally:
-            flocking_module.SpatialHash = original  # type: ignore[assignment]
+            reference_module.SpatialHash = original  # type: ignore[assignment]
 
         assert constructed, "the Python path built no index at all"
         assert all(not index.accelerated for index in constructed), (
-            "FlockingSystem(accelerate=False) built a native index. The "
-            "Python path has to be Python all the way down -- see this "
-            "class's docstring."
+            "The reference built a native index. It has to be Python all "
+            "the way down -- see this class's docstring."
         )
 
     def test_the_spy_would_notice_a_native_index(self) -> None:
         """Guards the guard: the assertion above can actually fail.
 
         If `accelerated` ever stopped reporting the truth, the test above
-        would pass against a native index and prove nothing.
+        would pass against a native index and prove nothing. Skipped when
+        the native `SpatialHash` store is switched off, since there is
+        then no native index to notice.
         """
+        from pyguara.native import native_module
+
+        if native_module() is None:
+            pytest.skip("the native SpatialHash store is switched off")
         assert SpatialHash[int](accelerate=True).accelerated is True
         assert SpatialHash[int](accelerate=False).accelerated is False
 
@@ -282,7 +283,7 @@ class TestTheNeighbourhoodsAgreeExactly:
         manager, agents, transforms = _world(layout, **agent_kwargs)
         expected = self._python_counts(agents, transforms, cell_size)
 
-        system = FlockingSystem(manager, cell_size=cell_size, accelerate=True)
+        system = FlockingSystem(manager, cell_size=cell_size)
         system.update(DT)
 
         assert list(system._native.neighbour_counts()) == expected  # noqa: SLF001
@@ -369,7 +370,7 @@ class TestTheNeighbourhoodsAgreeExactly:
             agent.enabled = False
         expected = self._python_counts(agents, transforms, CELL)
 
-        system = FlockingSystem(manager, cell_size=CELL, accelerate=True)
+        system = FlockingSystem(manager, cell_size=CELL)
         system.update(DT)
 
         counts = list(system._native.neighbour_counts())  # noqa: SLF001
@@ -587,11 +588,11 @@ class TestRealFlocksAgreeWithinSummationNoise:
             agent.separation_weight = 0.5 + 0.25 * (slot % 3)
         start = _state(agents, transforms)
 
-        FlockingSystem(manager, cell_size=CELL, accelerate=False).update(DT)
+        ReferenceFlockingSystem(manager, cell_size=CELL).update(DT)
         after_python = _state(agents, transforms)
 
         _restore(start, agents, transforms)
-        FlockingSystem(manager, cell_size=CELL, accelerate=True).update(DT)
+        FlockingSystem(manager, cell_size=CELL).update(DT)
 
         _assert_close(after_python, _state(agents, transforms))
 
@@ -602,11 +603,11 @@ class TestRealFlocksAgreeWithinSummationNoise:
             agent.enabled = False
         start = _state(agents, transforms)
 
-        FlockingSystem(manager, cell_size=CELL, accelerate=False).update(DT)
+        ReferenceFlockingSystem(manager, cell_size=CELL).update(DT)
         after_python = _state(agents, transforms)
 
         _restore(start, agents, transforms)
-        FlockingSystem(manager, cell_size=CELL, accelerate=True).update(DT)
+        FlockingSystem(manager, cell_size=CELL).update(DT)
 
         _assert_close(after_python, _state(agents, transforms))
 
@@ -621,9 +622,9 @@ class TestRealFlocksAgreeWithinSummationNoise:
         grid sizes its buckets from the agent count.
         """
         manager = EntityManager()
-        FlockingSystem(manager, accelerate=True).update(DT)  # must not raise
+        FlockingSystem(manager).update(DT)  # must not raise
 
-        solver = native_module().NativeFlockingSolver()
+        solver = require_extension("the flocking tests").NativeFlockingSolver()
         assert solver.tick(DT, CELL, 1, 0, [], []) == []
         assert list(solver.neighbour_counts()) == []
 
@@ -641,14 +642,10 @@ class TestSteeringWithoutIntegratingAgrees:
     def test_velocities_agree_and_positions_do_not_move(self, groups: int) -> None:
         layout = _scattered(120, 400.0, seed=21)
         results = []
-        for accelerate in (False, True):
+        for system_type in (ReferenceFlockingSystem, FlockingSystem):
             manager, agents, transforms = _world(layout)
-            system = FlockingSystem(
-                manager,
-                cell_size=CELL,
-                groups=groups,
-                accelerate=accelerate,
-                integrate=False,
+            system = system_type(
+                manager, cell_size=CELL, groups=groups, integrate=False
             )
             for _ in range(5):
                 system.update(DT)
@@ -676,9 +673,7 @@ class TestSteeringWithoutIntegratingAgrees:
         velocities = []
         for integrate in (False, True):
             manager, agents, _ = _world(layout)
-            system = FlockingSystem(
-                manager, cell_size=CELL, accelerate=True, integrate=integrate
-            )
+            system = FlockingSystem(manager, cell_size=CELL, integrate=integrate)
             for _ in range(5):
                 system.update(DT)
             velocities.append(
@@ -753,25 +748,25 @@ class TestTheSolverRejectsNonsense:
     """
 
     def test_a_row_that_is_not_a_whole_agent(self) -> None:
-        solver = native_module().NativeFlockingSolver()
+        solver = require_extension("the flocking tests").NativeFlockingSolver()
         with pytest.raises(ValueError, match="stride"):
             solver.tick(DT, CELL, 1, 0, [0.0] * 14, [True])
 
     def test_a_flag_count_that_does_not_match(self) -> None:
-        solver = native_module().NativeFlockingSolver()
+        solver = require_extension("the flocking tests").NativeFlockingSolver()
         with pytest.raises(ValueError, match="enabled flags"):
             solver.tick(DT, CELL, 1, 0, [0.0] * 15, [True, True])
 
     @pytest.mark.parametrize("cell_size", [0.0, -64.0, float("nan")])
     def test_an_impossible_cell_size(self, cell_size: float) -> None:
         """Python raises `ZeroDivisionError` on 0.0; NaN would be silent."""
-        solver = native_module().NativeFlockingSolver()
+        solver = require_extension("the flocking tests").NativeFlockingSolver()
         with pytest.raises(ValueError, match="cell_size"):
             solver.tick(DT, cell_size, 1, 0, [0.0] * 15, [True])
 
     def test_no_groups_at_all(self) -> None:
         """`FlockingSystem` clamps to 1; `slot % 0` would be a crash."""
-        solver = native_module().NativeFlockingSolver()
+        solver = require_extension("the flocking tests").NativeFlockingSolver()
         with pytest.raises(ValueError, match="at least 1"):
             solver.tick(DT, CELL, 0, 0, [0.0] * 15, [True])
 
@@ -783,7 +778,37 @@ class TestTheSolverRejectsNonsense:
         that never ends. This is the one place the native store
         deliberately refuses something Python accepts.
         """
-        solver = native_module().NativeFlockingSolver()
+        solver = require_extension("the flocking tests").NativeFlockingSolver()
         row = [0.0, 0.0, 0.0, 0.0, 150.0, 400.0, 1.0, 5.0e6, 30.0, 1.0, 1.0, 1.5]
         with pytest.raises(ValueError, match="cells per axis"):
             solver.tick(DT, 0.001, 1, 0, [*row, 0.0, 0.0, 0.0], [True])
+
+
+class TestThereIsOneImplementation:
+    """The system has no Python path left to fall back to."""
+
+    def test_the_store_cannot_be_chosen(self) -> None:
+        with pytest.raises(TypeError):
+            FlockingSystem(EntityManager(), accelerate=False)  # type: ignore[call-arg]
+
+    def test_the_engine_wide_switch_does_not_reach_it(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`PYGUARA_NO_NATIVE` picks between two stores; here there is one."""
+        from pyguara import native
+
+        layout = _scattered(30, 200.0, seed=5)
+        manager, agents, _ = _world(layout)
+        FlockingSystem(manager, cell_size=CELL).update(DT)
+        expected = [(agent.velocity.x, agent.velocity.y) for agent in agents]
+
+        monkeypatch.setenv("PYGUARA_NO_NATIVE", "1")
+        native.reset_for_tests()
+        try:
+            assert native.native_module() is None
+            manager, agents, _ = _world(layout)
+            FlockingSystem(manager, cell_size=CELL).update(DT)
+            assert [(a.velocity.x, a.velocity.y) for a in agents] == expected
+        finally:
+            monkeypatch.delenv("PYGUARA_NO_NATIVE")
+            native.reset_for_tests()
