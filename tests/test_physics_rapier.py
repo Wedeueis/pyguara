@@ -425,11 +425,6 @@ class TestWhatRapierDoesNotDoYet:
                 False,
             )
 
-    def test_it_has_no_optional_capabilities_yet(self, rapier: Any) -> None:
-        """Callers probe for these and fall back; absent is honest."""
-        assert not hasattr(rapier, "sweep_box")
-        assert not hasattr(rapier, "step_bodies")
-
     def test_a_body_before_initialize_is_refused(self) -> None:
         with pytest.raises(RuntimeError, match="initialize"):
             RapierEngine().create_body("x", BodyType.DYNAMIC, Vector2(0, 0))
