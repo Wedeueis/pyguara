@@ -273,7 +273,18 @@ impl NativeFlockingSolver {
     /// the behaviour rather than an implementation detail, and running it
     /// across threads would change the simulation rather than merely speed
     /// it up.
-    fn sweep(&mut self, dt: f64, groups: usize, steering_group: usize, enabled: &[bool]) {
+    ///
+    /// With `integrate` false nobody moves: each agent's velocity is
+    /// updated and every position stays where the tick found it, so a
+    /// later agent steers by positions something else has yet to apply.
+    fn sweep(
+        &mut self,
+        dt: f64,
+        groups: usize,
+        steering_group: usize,
+        enabled: &[bool],
+        integrate: bool,
+    ) {
         let count = enabled.len();
         let steering_dt = dt * groups as f64;
 
@@ -284,8 +295,10 @@ impl NativeFlockingSolver {
 
             if groups > 1 && slot % groups != steering_group {
                 // Not this agent's tick to think. It still moves.
-                self.live_x[slot] += self.vel_x[slot] * dt;
-                self.live_y[slot] += self.vel_y[slot] * dt;
+                if integrate {
+                    self.live_x[slot] += self.vel_x[slot] * dt;
+                    self.live_y[slot] += self.vel_y[slot] * dt;
+                }
                 continue;
             }
 
@@ -331,8 +344,10 @@ impl NativeFlockingSolver {
             self.vel_x[slot] = new_vx;
             self.vel_y[slot] = new_vy;
 
-            self.live_x[slot] = position_x + new_vx * dt;
-            self.live_y[slot] = position_y + new_vy * dt;
+            if integrate {
+                self.live_x[slot] = position_x + new_vx * dt;
+                self.live_y[slot] = position_y + new_vy * dt;
+            }
         }
     }
 }
@@ -379,6 +394,8 @@ impl NativeFlockingSolver {
     ///     enabled: One flag per agent. A disabled agent is skipped
     ///         entirely, but is **still a flockmate** to the others,
     ///         because the Python hash indexes every transform regardless.
+    ///     integrate: Whether agents move by their velocity. When false
+    ///         only velocities change, and positions come back as given.
     ///
     /// Returns:
     ///     `((x, y), (vx, vy))` per agent, in slot order. A skipped
@@ -389,7 +406,8 @@ impl NativeFlockingSolver {
     ///     `Vector2` the components have to hold -- and at 63% of a
     ///     native tick, the write-back is the dominant cost here, not a
     ///     detail. See `FlockingSystem._tick_natively`.
-    #[pyo3(signature = (dt, cell_size, groups, steering_group, agents, enabled))]
+    #[pyo3(signature = (dt, cell_size, groups, steering_group, agents, enabled, integrate = true))]
+    #[allow(clippy::too_many_arguments)]
     fn tick(
         &mut self,
         py: Python<'_>,
@@ -399,6 +417,7 @@ impl NativeFlockingSolver {
         steering_group: usize,
         agents: Vec<f64>,
         enabled: Vec<bool>,
+        integrate: bool,
     ) -> PyResult<Vec<((f64, f64), (f64, f64))>> {
         if agents.len() % STRIDE != 0 {
             return Err(PyValueError::new_err(format!(
@@ -471,7 +490,7 @@ impl NativeFlockingSolver {
 
         py.detach(|| {
             self.grid.build(&self.snap_x, &self.snap_y, cell_size);
-            self.sweep(dt, groups, steering_group, &enabled);
+            self.sweep(dt, groups, steering_group, &enabled, integrate);
         });
 
         Ok((0..count)
