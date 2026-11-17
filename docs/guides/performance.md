@@ -195,24 +195,33 @@ steering path now pins its own index to `accelerate=False`, because a
 "Python path" that indexes natively is not one, and because a parity
 suite's Python reference has to be Python all the way down.
 
-#### The regime where Python wins
+#### The regime where Python used to win
 
-The native grid rebuilds on the first query after any write. Every
-consumer syncs the whole index and then sweeps it, so one rebuild serves
-`n` queries and the rebuild is free. A caller that **alternates** insert
-and query pays one rebuild per query — O(n²) against Python's O(n):
+The native grid is a snapshot. It was rebuilt on the first query after
+any write, which is free for a caller that syncs the whole index and
+then sweeps it, and made a caller that **alternates** insert and query
+pay one rebuild per query: O(n²) against Python's O(n), and 0.25x
+Python's speed at 4000 keys.
 
-| keys | Python | native | |
-| ---: | ---: | ---: | ---: |
-| 250 | 1.29 | 0.69 | 1.9x faster |
-| 1000 | 4.81 | 9.21 | 0.52x |
-| 4000 | 18.51 | 139.77 | **0.13x** |
+A written slot is now *pending*: skipped where the stale grid lists it,
+and checked directly by each query. Once more than `sqrt(2n)` slots are
+pending the next query rebuilds. The alternating loop becomes
+O(n sqrt n), and the sync-then-sweep path is unchanged. Milliseconds for
+the whole loop, insert then `query_radius` per key:
 
-Nothing in the engine does this, and `accelerate=False` is the answer for
-a game that does. It is the first native store that is *worse* than
-Python at something, so
-`test_alternating_writes_and_queries_stays_within_its_known_penalty`
-bounds it rather than leaving it to be discovered.
+| keys | Python | native before | native now | now against Python |
+| ---: | ---: | ---: | ---: | ---: |
+| 500 | 1.9 | 2.5 | 0.5 | 3.5x faster |
+| 1000 | 4.4 | 9.0 | 1.2 | 3.8x faster |
+| 4000 | 34.3 | 134.2 | 6.8 | 5.1x faster |
+| 16000 | 358.3 | not measured | 43.6 | 8.2x faster |
+
+Sync all then sweep all, the engine's own pattern, at 4000 keys: 3.6 ms
+before and 3.3 ms now. Moving every key and querying after each move,
+from a built index: 7.8 ms at 4000 against Python's 46.3.
+
+`test_alternating_writes_and_queries_is_not_slower_natively` and
+`test_alternating_writes_and_queries_does_not_go_quadratic` hold it.
 
 ### `EntityPool` — draining a full pool, milliseconds
 

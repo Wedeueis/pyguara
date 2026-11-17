@@ -468,6 +468,110 @@ class TestMutationAgrees:
         assert len(expected) == 10
 
 
+class TestWritesBetweenQueriesAgree:
+    """Tier two, for the native store's pending list in particular.
+
+    A slot written since the grid was built is skipped where the stale
+    grid lists it and checked directly, and past a limit that grows with
+    the square root of the key count the grid is rebuilt instead. So the
+    stores are compared with a few writes between queries, with many,
+    and with every kind of write and query.
+    """
+
+    @staticmethod
+    def _assert_every_query_agrees(
+        python: SpatialHash[str], native: SpatialHash[str], probe: Vector2, where: str
+    ) -> None:
+        assert sorted(python.query_radius(probe, 120.0)) == sorted(
+            native.query_radius(probe, 120.0)
+        ), f"query_radius diverged {where}"
+        assert sorted(python.query_point(probe)) == sorted(native.query_point(probe)), (
+            f"query_point diverged {where}"
+        )
+        rect = Rect(int(probe.x) - 150, int(probe.y) - 90, 300, 180)
+        assert sorted(python.query_rect(rect)) == sorted(native.query_rect(rect)), (
+            f"query_rect diverged {where}"
+        )
+        assert sorted(python.query_radius(probe, 120.0, mask=0b10)) == sorted(
+            native.query_radius(probe, 120.0, mask=0b10)
+        ), f"masked query_radius diverged {where}"
+
+    @pytest.mark.parametrize("writes", [1, 3, 15, 16, 17, 40, 200])
+    def test_a_burst_of_writes_between_queries_agrees(self, writes: int) -> None:
+        """Bursts below, at and above the pending limit of 16 and beyond."""
+        rng = RandomStream(100 + writes)
+        python, native = _both()
+        entries = _scatter(120, 800.0, seed=7, masks=(0b01, 0b10, FULL))
+        _fill(python, entries)
+        _fill(native, entries)
+        keys = [key for key, _, _ in entries]
+        probe = Vector2(0.0, 0.0)
+        self._assert_every_query_agrees(python, native, probe, "after the fill")
+
+        for burst in range(12):
+            for write in range(writes):
+                action = rng.uniform(0.0, 1.0)
+                position = Vector2(rng.uniform(-400, 400), rng.uniform(-400, 400))
+                if action < 0.5:
+                    key = keys[int(rng.uniform(0, len(keys) - 1e-9))]
+                    mask = (0b01, 0b10, FULL)[(burst + write) % 3]
+                    python.insert(key, position, mask)
+                    native.insert(key, position, mask)
+                elif action < 0.75:
+                    key = f"new-{burst}-{write}"
+                    python.insert(key, position)
+                    native.insert(key, position)
+                    keys.append(key)
+                elif len(keys) > 1:
+                    key = keys.pop(int(rng.uniform(0, len(keys) - 1e-9)))
+                    python.remove(key)
+                    native.remove(key)
+            for _ in range(3):
+                probe = Vector2(rng.uniform(-400, 400), rng.uniform(-400, 400))
+                self._assert_every_query_agrees(
+                    python, native, probe, f"after burst {burst} of {writes}"
+                )
+
+    def test_a_key_moved_since_the_last_query_is_found_once(self) -> None:
+        """Its stale grid entry must not report it a second time."""
+        python, native = _both()
+        entries = _scatter(40, 300.0, seed=9)
+        for index in (python, native):
+            _fill(index, entries)
+            index.query_radius(Vector2(0.0, 0.0), 10.0)
+            index.insert("key-0", Vector2(1.0, 1.0))
+            index.insert("key-0", Vector2(2.0, 2.0))
+            found = index.query_radius(Vector2(2.0, 2.0), 1e4)
+            assert sorted(found) == sorted(key for key, _, _ in entries)
+            assert index.query_point(Vector2(2.0, 2.0)).count("key-0") == 1
+
+    def test_a_slot_freed_and_reused_between_queries_answers_as_the_new_key(
+        self,
+    ) -> None:
+        python, native = _both()
+        for index in (python, native):
+            index.insert("old", Vector2(0.0, 0.0))
+            index.insert("other", Vector2(500.0, 500.0))
+            assert index.query_radius(Vector2(0.0, 0.0), 10.0) == ["old"]
+            index.remove("old")
+            index.insert("new", Vector2(500.0, 510.0))
+            assert index.query_radius(Vector2(0.0, 0.0), 10.0) == []
+            assert sorted(index.query_radius(Vector2(500.0, 505.0), 10.0)) == [
+                "new",
+                "other",
+            ]
+            assert index.query_rect(Rect(-5, -5, 10, 10)) == []
+
+    def test_a_mask_changed_between_queries_takes_effect(self) -> None:
+        python, native = _both()
+        for index in (python, native):
+            index.insert("key", Vector2(0.0, 0.0), 0b01)
+            assert index.query_point(Vector2(0.0, 0.0), mask=0b10) == []
+            index.insert("key", Vector2(0.0, 0.0), 0b10)
+            assert index.query_point(Vector2(0.0, 0.0), mask=0b10) == ["key"]
+            assert index.query_point(Vector2(0.0, 0.0), mask=0b01) == []
+
+
 class TestTheOrderIsTheOnlyDivergence:
     """The one permitted divergence, pinned as a property of Python.
 

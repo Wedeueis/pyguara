@@ -137,16 +137,16 @@ def test_the_native_store_is_wired_up_and_materially_faster() -> None:
 
 
 @pytest.mark.performance
-def test_alternating_writes_and_queries_stays_within_its_known_penalty() -> None:
-    """The one regime where the native store is asymptotically worse.
+def test_alternating_writes_and_queries_is_not_slower_natively() -> None:
+    """The regime the native store used to lose, by a growing margin.
 
-    The native grid rebuilds on the first query after any write. That is
-    one rebuild per tick for a caller that fills the index and then sweeps
-    it, and one per query for a caller that alternates.
+    The native grid is a snapshot. It used to be rebuilt on the first
+    query after any write, which made a loop that alternates the two
+    quadratic. A written slot is now checked directly until enough have
+    piled up to be worth a rebuild.
 
-    This guards a known cost that must not grow. If the rebuild becomes
-    incremental, this test should fail in the good direction, and
-    `docs/agents/native-extension.md` wants updating.
+    Asserted as "not slower than Python", loosely; the measured figure
+    is in `docs/guides/performance.md`.
     """
     count = 4000
     spread = uniform_spread_for(count)
@@ -163,12 +163,36 @@ def test_alternating_writes_and_queries_stays_within_its_known_penalty() -> None
     python_time = measure(lambda: alternate(False), rounds=3)
     native_time = measure(lambda: alternate(True), rounds=3)
 
-    assert native_time < python_time * 15.0, (
+    assert native_time < python_time, (
         f"alternating insert and query cost the native store "
         f"{native_time * 1e3:.1f}ms against Python's "
-        f"{python_time * 1e3:.1f}ms -- {native_time / python_time:.1f}x "
-        "worse, where 7.5x is the known cost of rebuilding the grid once "
-        "per query. Something has made the rebuild more expensive."
+        f"{python_time * 1e3:.1f}ms. A write between two queries should "
+        f"cost a scan of the pending slots, not a rebuild of the grid."
+    )
+
+
+@pytest.mark.performance
+def test_alternating_writes_and_queries_does_not_go_quadratic() -> None:
+    """Four times the keys should cost about eight times, not sixteen.
+
+    A query scans at most `sqrt(2n)` pending slots, so the loop is
+    O(n sqrt n). A rebuild per query would be O(n^2).
+    """
+    _hash(1, spread=1.0, accelerate=True)
+
+    def alternate(count: int) -> None:
+        spread = uniform_spread_for(count)
+        index = SpatialHash[int](accelerate=True)
+        for key, point in enumerate(_sample_points(spread, count)):
+            index.insert(key, point)
+            index.query_radius(point, QUERY_RADIUS)
+
+    small = measure(lambda: alternate(2000), rounds=3)
+    large = measure(lambda: alternate(8000), rounds=3)
+
+    assert large < small * 12.0, (
+        f"4x the keys cost {large / small:.1f}x the time alternating writes "
+        f"and queries; O(n sqrt n) predicts 8x and a rebuild per query 16x."
     )
 
 
