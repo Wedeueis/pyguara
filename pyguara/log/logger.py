@@ -54,6 +54,29 @@ _LOG_CALL_KWARGS = frozenset({"exc_info", "stack_info", "stacklevel"})
 _WRAPPER_FRAMES = 2
 
 
+class _CurrentStdoutHandler(logging.StreamHandler):
+    """Writes to whatever `sys.stdout` is when a record is emitted.
+
+    `logging.StreamHandler(sys.stdout)` keeps the stream it was given. A
+    caller that swaps `sys.stdout` later, as `pyguara studio ops` does to
+    keep stdout for its protocol, would still receive every record from a
+    logger built before the swap.
+    """
+
+    def __init__(self) -> None:
+        """Create the handler with no stream of its own."""
+        super().__init__(sys.stdout)
+
+    @property
+    def stream(self) -> Any:
+        """The current `sys.stdout`."""
+        return sys.stdout
+
+    @stream.setter
+    def stream(self, value: Any) -> None:
+        """Ignore an assigned stream; the current stdout always wins."""
+
+
 class EngineLogger:
     """A `logging.Logger` wrapper adding categories, context and event output.
 
@@ -135,7 +158,7 @@ class EngineLogger:
         self._logger.propagate = propagate
 
         if console_output:
-            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler = _CurrentStdoutHandler()
             console_handler.setFormatter(
                 logging.Formatter(
                     "%(asctime)s [%(levelname)8s] %(name)s: %(message)s",
