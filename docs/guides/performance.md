@@ -420,10 +420,9 @@ Bisecting the walk would be faster and would reintroduce tunnelling.
 wheel ships the extension and `uv sync` builds it in a checkout (see
 `pyguara/native.py` and
 `docs/adr/0006-shipping-the-native-extension.md`), so these are the
-numbers an installed PyGuara gets. The Python pool is kept and used
-whenever the extension is absent -- `PYGUARA_NO_NATIVE=1`,
-`native_acceleration = "off"`, or a platform the wheel matrix does not
-cover -- so this is still an accelerator rather than a requirement.
+numbers an installed PyGuara gets. The Python pool has since been
+retired (ADR 0011); "Python" below is what it cost, and
+`tests/reference/particles.py` keeps it as test code.
 
 Both paths, the same seeded burst, min of 5 rounds:
 

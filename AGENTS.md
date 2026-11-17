@@ -230,10 +230,9 @@ implementation any more (ADR 0011, Decision 3).
 
 - The module is **`pyguara.pyguara_core_rs`**. `pyproject.toml` and
   `pyguara/native.py` both spell that name and must agree.
-- **`PerformanceConfig.native_acceleration` and `PYGUARA_NO_NATIVE`**
-  now reach only the physics engine's static-solid mirror, whose
-  fallback is Chipmunk. They do not reach audio, networking or the five
-  subsystems above.
+- **The extension is required.** Bootstrap stops with an error naming
+  where it looked if it cannot load it. There is no setting or
+  environment variable that runs the engine without it.
 - **Each of the five is held to recorded values** in `tests/golden/`
   (the flow field, flocking and `SpatialHash` membership exactly, the
   pools to 0.001) and to the Python implementation it replaced, kept as

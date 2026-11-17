@@ -858,16 +858,10 @@ class TestRegistryMechanics:
 
 
 class TestProjectOverviewReportsTheEngine:
-    """Which native store is running, where an agent will actually see it.
+    """Where the native extension came from, where an agent will see it.
 
-    ADR 0004, Decision 4, makes the store one engine-wide choice and asks
-    for it to be observable. `pyguara.native.describe()` goes into the
-    boot log; `project_overview` is where an agent attached to a running
-    session reads it.
-
-    With the flow field and flocking native, two machines running one
-    project with one seed can simulate differently, so the store has to
-    be visible.
+    `pyguara.native.describe()` goes into the boot log; `project_overview`
+    is where an agent attached to a running session reads it.
     """
 
     @staticmethod
@@ -879,7 +873,7 @@ class TestProjectOverviewReportsTheEngine:
             project_root=root,
         )
 
-    def test_the_json_form_carries_the_resolved_store(
+    def test_the_json_form_carries_the_extension(
         self,
         ops: OperationRegistry,
         populated: EntityManager,
@@ -893,7 +887,8 @@ class TestProjectOverviewReportsTheEngine:
         result = _call(ops, session, "project_overview")
 
         assert isinstance(result, dict)
-        assert result["engine"]["store"] == native.store_name()
+        assert result["engine"] == native.status()
+        assert result["engine"]["loaded"] is True
 
     def test_the_markdown_form_says_it_too(
         self,
@@ -903,7 +898,6 @@ class TestProjectOverviewReportsTheEngine:
         tmp_path: Path,
     ) -> None:
         """An agent asking for prose should not have to ask twice."""
-        from pyguara import native
 
         session = self._session(populated, core_registry, tmp_path)
 
@@ -911,7 +905,7 @@ class TestProjectOverviewReportsTheEngine:
 
         assert isinstance(result, dict)
         assert "## Engine" in result["markdown"]
-        assert native.store_name() in result["markdown"]
+        assert "Native extension: **loaded**" in result["markdown"]
 
     def test_it_agrees_with_the_line_the_boot_log_prints(
         self,
@@ -920,12 +914,7 @@ class TestProjectOverviewReportsTheEngine:
         core_registry,
         tmp_path: Path,
     ) -> None:
-        """Two reports of one fact are two chances to disagree.
-
-        `describe()` composes prose for a human and `status()` returns
-        fields for a machine. They read the same module state, so the
-        only way they diverge is if one is changed and the other is not.
-        """
+        """Two reports of one fact are two chances to disagree."""
         from pyguara import native
 
         session = self._session(populated, core_registry, tmp_path)
@@ -935,8 +924,7 @@ class TestProjectOverviewReportsTheEngine:
         engine = status["engine"]
         described = native.describe()
 
-        assert f"-> {engine['store']}" in described
-        assert described.startswith(f"native acceleration: {engine['mode']}")
+        assert described == f"native extension: {engine['source']}"
 
     def test_the_markdown_still_honours_its_budget(
         self,

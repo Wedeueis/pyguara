@@ -140,7 +140,6 @@ def faces_for(text: str, bold: bool = False, italic: bool = False) -> list[int]:
 
 
 def _extension() -> Any | None:
-    # A backend's need, not a store's: `PYGUARA_NO_NATIVE` does not apply.
     from pyguara import native
 
     try:

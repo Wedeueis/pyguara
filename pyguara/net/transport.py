@@ -133,8 +133,7 @@ def load_core() -> Any:
     """Return the native module, checked against this Python code.
 
     Called when a session starts rather than at import, so a single-player game
-    on a platform with no wheel is unaffected. A backend, not a store, so
-    `PYGUARA_NO_NATIVE=1` does not turn it off: ADR 0004, Decision 4.
+    on a platform with no wheel is unaffected.
 
     Returns:
         The extension module.

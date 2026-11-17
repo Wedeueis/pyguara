@@ -11,7 +11,6 @@ from pathlib import Path
 
 import pytest
 
-from pyguara import native
 from pyguara.net import (
     Channel,
     ClientSession,
@@ -25,7 +24,6 @@ from pyguara.net import (
     PlayerLeft,
     Refused,
     SimulatedNetwork,
-    UdpTransport,
     Versions,
 )
 from pyguara.net import transport as transport_module
@@ -476,14 +474,3 @@ except RuntimeError as error:
 
     assert result.returncode == 0, result.stderr
     assert "REFUSED True" in result.stdout
-
-
-def test_the_no_native_switch_does_not_turn_networking_off(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A backend, not a store: ADR 0004, Decision 4."""
-    monkeypatch.setenv("PYGUARA_NO_NATIVE", "1")
-
-    assert native.require_extension("test") is not None
-    transport = UdpTransport.host(secrets.token_bytes(32), 0, bind_ip="127.0.0.1")
-    transport.close()

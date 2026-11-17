@@ -4,9 +4,7 @@ Moved out of `AGENTS.md` on 2026-11-14, unchanged, so that file stays short
 enough to read every session. `AGENTS.md` keeps the rules; this has the
 reasons and the detail.
 
-`pyguara.net` is opt-in: a single-player game imports none of it, and it imports
-fine with no extension. It is a backend, not a store, so `PYGUARA_NO_NATIVE=1`
-does not turn it off. The transport, session, replication, prediction and game
+`pyguara.net` is opt-in: a single-player game imports none of it. The transport, session, replication, prediction and game
 events exist; projectiles are the rest of phase 4 of
 `project/backlog/active/network_multiplayer.md`.
 

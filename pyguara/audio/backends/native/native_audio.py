@@ -76,9 +76,9 @@ class NativeAudioSystem:
     `PygameAudioSystem`. It adds continuous pitch, sample-exact loop
     points, and bus volumes that reach sounds already playing.
 
-    Selected by `AudioConfig.backend`, not by `native_acceleration`; see
-    ADR 0004, Decision 4. With no output device, the mixer runs against a
-    silent clock and sounds still end on time; `output` says which.
+    Selected by `AudioConfig.backend`. With no output device, the mixer
+    runs against a silent clock and sounds still end on time; `output`
+    says which.
     """
 
     def __init__(

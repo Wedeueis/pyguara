@@ -323,13 +323,12 @@ def _setup_container(
     logger = log_manager.get_logger("Bootstrap")
     logger.info("Core services (Events, Config, Log) initialized.")
 
-    # 3.3 Resolve the native store, once, for the whole process.
+    # 3.3 Load the native extension, which every backend subsystem needs.
     #
-    # Here rather than later because `required` has to fail at *startup*:
-    # a game that depends on native performance should learn the extension
-    # is missing from a clear error at boot, not from its frame times. And
-    # before anything constructs a pool, because that is what reads it.
-    native.configure(config_manager.config.performance.native_acceleration)
+    # Here, before anything is built, so a missing extension stops the
+    # game at startup with an error naming where it looked, rather than
+    # from whichever service happens to be constructed first.
+    native.require_extension("PyGuara")
     logger.info(native.describe())
 
     # Initialize the container to register the core services
@@ -536,8 +535,8 @@ def _setup_container(
     container.register_instance(CoroutineManager, coroutine_manager)
 
     # 6. Audio System
-    # By `AudioConfig.backend`, not `native_acceleration`: see ADR 0004,
-    # Decision 4. Imported here because only this path may need the extension.
+    # By `AudioConfig.backend`. Imported here so the pygame backend's
+    # modules load only when it is chosen.
     native_audio = config_manager.config.audio.backend is AudioBackend.NATIVE
     audio_system: IAudioSystem
     sound_loader: IResourceLoader

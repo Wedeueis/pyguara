@@ -34,9 +34,7 @@ def _live_devices() -> int:
     """The process's live `NativeGpu` count.
 
     Read from the extension only if something has imported it: until then no
-    device can exist. Not through `native.native_module()`, which answers
-    which *store* is in force and is None under `PYGUARA_NO_NATIVE=1`, a mode
-    in which the wgpu renderer still opens devices.
+    device can exist, and looking it up here would load it.
     """
     extension = sys.modules.get("pyguara.pyguara_core_rs")
     if extension is None:

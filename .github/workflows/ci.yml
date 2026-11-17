@@ -16,8 +16,7 @@ concurrency:
 
 jobs:
   # Two tiers. Every pull request push runs the fast one: quality, the Linux
-  # suite with coverage, the Python store, and Windows, the platform the game
-  # ships on first. The full tier adds Python 3.13, macOS and the five wheels,
+  # suite with coverage, and Windows, the platform the game ships on first. The full tier adds Python 3.13, macOS and the five wheels,
   # and runs on a push to main, by hand, and on a pull request that touches
   # what those jobs exist to check: the crate, the build, or this pipeline.
   scope:
@@ -135,13 +134,13 @@ jobs:
       # build backend this pipeline never compiled the crate, so every
       # parity suite -- particles, sparks, the flow field, flocking, the
       # spatial hash -- skipped on every pull request, and the five Track R
-      # merges were verified by nothing. `required` is the engine's own
-      # mechanism for refusing to run Python by accident.
+      # merges were verified by nothing. `require_extension` is the
+      # engine's own check, and the one bootstrap makes.
       - name: Assert the accelerator is present
         run: |
           uv run python -c "
-          from pyguara.native import NativeAcceleration, configure, describe
-          configure(NativeAcceleration.REQUIRED)
+          from pyguara.native import describe, require_extension
+          require_extension('CI')
           print(describe())
           "
 
@@ -200,53 +199,6 @@ jobs:
         env:
           PYGUARA_REQUIRE_GPU: "1"
 
-  python-fallback:
-    name: Python store (no accelerator)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v1
-        with:
-          version: "latest"
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      # gilrs, the gamepad backend, links libudev on Linux, and its build
-      # script finds it through pkg-config. ALSA needs no headers: it is
-      # opened at run time.
-      # A software GPU as well as udev's headers: tests that build a default
-      # application open the wgpu renderer, whichever store runs underneath.
-      - name: Install software Vulkan and udev headers
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            mesa-vulkan-drivers libvulkan1 libudev-dev pkg-config
-
-      - name: Install Dependencies
-        run: make install
-
-      # Now that the wheel ships the extension, native is what everybody
-      # runs and the pure-Python implementations are the code at risk of
-      # rotting unnoticed. They are not dead code: `PYGUARA_NO_NATIVE=1`
-      # is the first thing to try when a bug might be the accelerator's,
-      # `native_acceleration = "off"` is a supported setting, and a
-      # platform the wheel matrix does not cover falls back to them.
-      - name: Run Unit Tests with the accelerator disabled
-        run: uv run pytest -n auto --dist loadgroup tests/ -m "not slow and not integration"
-        env:
-          PYGUARA_NO_NATIVE: "1"
-          PYGUARA_REQUIRE_GPU: "1"
-
   wheels:
     name: Wheels
     needs: scope
@@ -286,12 +238,12 @@ jobs:
       - name: Install Dependencies
         run: uv sync --all-extras
 
-      - name: Say which store and GPU this runner has
+      - name: Say which extension and GPU this runner has
         shell: bash
         run: |
           uv run python -c "
-          from pyguara.native import NativeAcceleration, configure, describe
-          configure(NativeAcceleration.REQUIRED)
+          from pyguara.native import describe, require_extension
+          require_extension('CI')
           print(describe())
           from pyguara.native import native_module
           try:

@@ -216,9 +216,9 @@ def _facts(app_name: str) -> list[tuple[str, str]]:
     try:
         from pyguara import native
 
-        facts.append(("native store", native.describe()))
+        facts.append(("native extension", native.describe()))
     except Exception as error:  # noqa: BLE001 -- a fact, not the crash
-        facts.append(("native store", f"unknown ({error!r})"))
+        facts.append(("native extension", f"unknown ({error!r})"))
     facts.extend(sorted(_notes.items()))
     return facts
 

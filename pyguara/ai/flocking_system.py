@@ -198,8 +198,7 @@ class FlockingSystem:
     integration shape as `SteeringSystem`.
 
     The flock is steered by the native extension, in one crossing per
-    tick, and there is no Python implementation: `native_acceleration`
-    and `PYGUARA_NO_NATIVE` do not apply. See ADR 0011, Decision 3.
+    tick. There is no Python implementation; see ADR 0011, Decision 3.
 
     The sweep is Gauss-Seidel, so its order is part of the simulation. It
     follows entity insertion order, so a seeded flock ticks the same way

@@ -71,32 +71,23 @@ def test_create_sandbox_application_boots_runs_and_shuts_down_cleanly():
     assert app._log_manager._loggers == {}
 
 
-def test_bootstrap_resolves_the_native_store_from_config():
-    """The engine-wide switch is wired, and wired *before* anything reads it.
+def test_bootstrap_requires_the_native_extension(monkeypatch):
+    """A missing extension stops the engine at bootstrap, naming what is missing.
 
-    `pyguara.native` holds process-wide state that pools consult at
-    construction, so "the config value reaches it" is the whole contract --
-    and nothing else in the suite runs the real bootstrap, which is the
-    gap this file exists for in the first place.
-
-    Asserted through `configure`, the hook that runs after the config
-    loads and before the window, because that is where a game sets this.
+    Not later, from whichever service is built first: every backend
+    subsystem needs it, and an error from the middle of the container
+    setup would name the wrong thing.
     """
+    import sys
+
     from pyguara import native
-    from pyguara.config.types import GameConfig
-    from pyguara.native import NativeAcceleration
 
-    def pick_python(config: GameConfig) -> None:
-        config.performance.native_acceleration = NativeAcceleration.OFF
-
+    monkeypatch.setitem(sys.modules, native._MODULE_NAME, None)
+    monkeypatch.setattr(native, "_candidate_paths", list)
+    native.reset_lookup()
     try:
-        app = create_application(configure=pick_python)
-
-        assert native.resolved() is NativeAcceleration.OFF
-        assert native.in_use() is False
-
-        app._window.close()
+        with pytest.raises(RuntimeError, match="PyGuara needs the native extension"):
+            create_application()
     finally:
-        # Process-wide state: leaving it OFF would decide the store for
-        # every test that runs after this one.
-        native.reset_for_tests()
+        monkeypatch.undo()
+        native.reset_lookup()

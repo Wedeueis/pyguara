@@ -51,9 +51,7 @@ none was needed before. That is the price, and
 paying.
 
 **`FlowFieldService` is Rust-only** (ADR 0011, Decision 3), the first of
-the five to lose its Python store. It takes no `accelerate=`, ignores
-`native_acceleration` and `PYGUARA_NO_NATIVE`, and raises at construction
-if the extension cannot be imported. What it must compute is held three
+the five to lose its Python store. It takes no `accelerate=`. What it must compute is held three
 ways:
 
 - `tests/golden/flow_field.json`: the cost and direction of every cell
@@ -135,11 +133,6 @@ uv sync                              # maturin is the backend; this builds it
 make native                          # rebuild in place after editing Rust
 ```
 
-**`PYGUARA_NO_NATIVE=1` does not reach audio.** `NativeAudioSystem` is a
-*backend* with no Python counterpart, chosen by `AudioConfig.backend`, and is not
-one of the stores above: to rule it out, set `PYGUARA_AUDIO_BACKEND=pygame`. See
-`docs/systems/audio.md` and ADR 0004, Decision 4.
-
 `make native` is `maturin develop --release`, and the `--release` matters:
 `maturin develop` alone produces a *debug* build, which is slower than the
 Python it replaces. A bare `cargo build --release` still works and is
@@ -147,26 +140,19 @@ still found, but it is the second place looked at -- an installed library
 wins, so after `uv sync` a plain `cargo build` leaves the new code
 silently unused.
 
-**The store is one engine-wide choice**, not a per-subsystem one:
-`PerformanceConfig.native_acceleration` is `off`, `auto` (the default) or
-`required`, resolved once at bootstrap by `pyguara.native.configure()` and
-reported in the boot log. `required` fails at *startup* without the
-extension, which is what a game depending on native performance should
-ship. `pyguara.native.describe()` says which store is in force and where
-it came from, `pyguara.native.status()` returns the same facts as fields,
-and Studio's `project_overview` reports it -- so an agent or an author
-who attached to a running session, and never saw the boot line, can still
-find out.
+**The extension is required.** Bootstrap calls
+`pyguara.native.require_extension()` before it builds anything, so a
+missing or broken extension stops the game at startup with an error that
+lists where it looked. `pyguara.native.describe()` says where it was
+loaded from, `pyguara.native.status()` returns the same as fields, and
+Studio's `project_overview` reports it.
 
-It is engine-wide because a store picked silently from whether a `.so`
-happens to be on disk means the same game, with the same code and seed,
-behaves differently on a machine that built the extension and one that
-did not -- invisible for a particle, gameplay for a flock. See
-`docs/adr/0004-the-native-boundary.md`, Decision 4.
-
-`accelerate=True`/`False` on a pool or a service still overrides it,
-because the parity tests have to construct both stores side by side. That
-is what it is for, not a second place to configure the engine.
+`PerformanceConfig.native_acceleration` and `PYGUARA_NO_NATIVE`, which
+chose between the two stores, are gone with the second store. A config
+file that still sets the former loads, with a warning naming the key.
+`PymunkEngine(accelerate=False)` remains: it makes Chipmunk answer box
+and ray queries instead of the static-solid mirror, which is a physics
+choice, not a store (ADR 0009).
 
 Written outside the generated block above on purpose: `pyguara studio
 instructions` rewrites what is inside it, and an earlier version of this
