@@ -178,6 +178,7 @@ def test_alternating_writes_and_queries_does_not_go_quadratic() -> None:
     A query scans at most `sqrt(2n)` pending slots, so the loop is
     O(n sqrt n). A rebuild per query would be O(n^2).
     """
+    _hash(1, spread=1.0, accelerate=True)
 
     def alternate(count: int) -> None:
         spread = uniform_spread_for(count)
