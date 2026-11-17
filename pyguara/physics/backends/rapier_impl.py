@@ -4,10 +4,10 @@
 in the native extension (`rust/src/physics.rs`). It is chosen with
 `physics.backend = "rapier"`; pymunk stays the default (roadmap 6e).
 
-One-way platforms, segment and polygon shapes, a `max_force` on a joint
-other than a motor, and the optional `sweep_box`/`step_bodies`
-capabilities are not implemented yet: the first three raise, and a caller
-of the last two falls back as it does for any engine without them. Known differences from pymunk are in
+Segment and polygon shapes, a `max_force` on a joint other than a motor,
+and the optional `sweep_box`/`step_bodies` capabilities are not
+implemented yet: the first two raise, and a caller of the last two falls
+back as it does for any engine without them. Known differences from pymunk are in
 `docs/physics/simulation.md`.
 """
 
@@ -327,23 +327,25 @@ class RapierEngine:
         one_way: bool = False,
         one_way_normal: Vector2 | None = None,
     ) -> Any:
-        """Attach a circle or box collider.
+        """Attach a circle or box collider, solid from every side or one.
+
+        A one-way collider drops each solver step's contacts whose normal
+        does not leave its solid face, as the pymunk backend does.
 
         Raises:
             TypeError: If the handle is not one of this backend's bodies.
-            NotImplementedError: For a segment or polygon shape, or a
-                one-way platform, which this backend does not do yet.
+            NotImplementedError: For a segment or polygon shape, which this
+                backend does not do yet.
         """
         if not isinstance(body, RapierBody):
             raise TypeError(
                 f"Invalid body handle for Rapier backend: expected RapierBody, "
                 f"got {type(body).__name__}"
             )
+        solid_face: tuple[float, float] | None = None
         if one_way:
-            raise NotImplementedError(
-                "One-way platforms are not implemented by the Rapier backend yet; "
-                'use physics.backend = "pymunk".'
-            )
+            normal = one_way_normal if one_way_normal is not None else Vector2(0, -1)
+            solid_face = (normal.x, normal.y)
         if shape_type is ShapeType.CIRCLE:
             kind, first, second = "circle", dimensions[0], 0.0
         elif shape_type is ShapeType.BOX:
@@ -367,6 +369,7 @@ class RapierEngine:
             collision_layer.mask & _FULL_MASK,
             collision_layer.group & _FULL_MASK,
             is_sensor,
+            solid_face,
         )
 
     def _entities(self, slots: list[int]) -> list[int | str]:

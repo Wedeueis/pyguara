@@ -344,26 +344,73 @@ class TestCollisionEvents:
         assert recorder.kinds(("box", "ground"))[-1] == "end"
 
 
+class TestOneWayPlatforms:
+    """Solid from above, passable from below, decided every step."""
+
+    @staticmethod
+    def _platform(engine: Any) -> None:
+        engine.set_collision_system(_Recorder())
+        body = engine.create_body("platform", BodyType.STATIC, Vector2(100, 200))
+        engine.add_shape(
+            body,
+            ShapeType.BOX,
+            [200, 10],
+            Vector2(0, 0),
+            SOLID,
+            EVERYTHING,
+            False,
+            one_way=True,
+        )
+
+    def test_a_box_dropped_from_above_lands_on_it(self, engine: Any) -> None:
+        self._platform(engine)
+        box = _box(engine, "box", Vector2(100, 100))
+        _run(engine, 1.5)
+        assert box.position.y == pytest.approx(185.0, abs=1.5)
+
+    def test_a_box_thrown_up_from_below_passes_and_lands_on_top(
+        self, engine: Any
+    ) -> None:
+        self._platform(engine)
+        box = _box(engine, "box", Vector2(100, 260))
+        box.velocity = Vector2(0, -700)
+        _run(engine, 2.0)
+        assert box.position.y == pytest.approx(185.0, abs=1.5)
+
+    def test_a_box_below_it_falls_away(self, engine: Any) -> None:
+        self._platform(engine)
+        box = _box(engine, "box", Vector2(100, 215))
+        _run(engine, 0.5)
+        assert box.position.y > 240
+
+    def test_the_solid_face_can_point_another_way(self, engine: Any) -> None:
+        """A ceiling solid from below: a box thrown up stops under it."""
+        engine.set_collision_system(_Recorder())
+        engine.initialize(Vector2(0, 0))
+        ceiling = engine.create_body("ceiling", BodyType.STATIC, Vector2(100, 100))
+        engine.add_shape(
+            ceiling,
+            ShapeType.BOX,
+            [200, 10],
+            Vector2(0, 0),
+            SOLID,
+            EVERYTHING,
+            False,
+            one_way=True,
+            one_way_normal=Vector2(0, 1),
+        )
+        box = _box(engine, "box", Vector2(100, 200))
+        box.velocity = Vector2(0, -300)
+        _run(engine, 1.0)
+        assert box.position.y == pytest.approx(115.0, abs=1.5)
+
+
 class TestWhatRapierDoesNotDoYet:
     @pytest.fixture
     def rapier(self) -> Any:
         engine = RapierEngine()
         engine.initialize(Vector2(0, 0))
         return engine
-
-    def test_one_way_platforms_are_refused(self, rapier: Any) -> None:
-        body = rapier.create_body("p", BodyType.STATIC, Vector2(0, 0))
-        with pytest.raises(NotImplementedError, match="One-way"):
-            rapier.add_shape(
-                body,
-                ShapeType.BOX,
-                [10, 10],
-                Vector2(0, 0),
-                SOLID,
-                EVERYTHING,
-                False,
-                one_way=True,
-            )
 
     def test_polygons_are_refused(self, rapier: Any) -> None:
         body = rapier.create_body("p", BodyType.STATIC, Vector2(0, 0))
