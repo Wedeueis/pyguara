@@ -26,7 +26,6 @@ from pyguara.graphics.components.camera import (
 from pyguara.graphics.components.floating_text import FloatingText
 from pyguara.graphics.components.geometry import Box, Circle, Geometry
 from pyguara.graphics.components.particles import (
-    Particle,
     ParticleEmitterConfig,
     ParticleSystem,
 )
@@ -55,7 +54,6 @@ __all__ = [
     "Geometry",
     "Sprite",
     # Effects
-    "Particle",
     "ParticleEmitterConfig",
     "ParticleSystem",
     "ScreenFlash",

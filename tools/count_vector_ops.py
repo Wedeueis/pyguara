@@ -26,7 +26,7 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pyguara.common.types import Color, Vector2  # noqa: E402
-from pyguara.graphics.components.particles import ParticleSystem  # noqa: E402
+from tests.reference.particles import ReferenceParticles  # noqa: E402
 from tests.reference.sparks import ReferenceSparks  # noqa: E402
 
 # Nanoseconds per operation, min of 5 x 200k on this machine.
@@ -122,12 +122,12 @@ def _report(label: str, ticks: int) -> None:
     _counts.clear()
 
 
-def _particles(capacity: int, live: int) -> ParticleSystem:
+def _particles(capacity: int, live: int) -> ReferenceParticles:
     """A particle system with `live` slots occupied.
 
     Pinned to the Python store, for the reason `_sparks` below gives.
     """
-    system = ParticleSystem(capacity=capacity, accelerate=False)
+    system = ReferenceParticles(capacity=capacity)
     if live:
         system.emit(
             _FakeTexture(),  # type: ignore[arg-type]

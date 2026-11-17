@@ -4,9 +4,9 @@ Moved out of `AGENTS.md` on 2026-11-14, unchanged, so that file stays short
 enough to read every session. `AGENTS.md` keeps the rules; this has the
 reasons and the detail.
 
-Two subsystems and one shared primitive have a native implementation
-beside the Python one, and `FlowFieldService` and `Sparks` have only the
-native one:
+One subsystem and one shared primitive have a native implementation
+beside the Python one, and `FlowFieldService`, `Sparks` and
+`ParticleSystem` have only the native one:
 
 | | native gain | |
 | --- | ---: | --- |
@@ -82,6 +82,14 @@ nothing about it is bit-exact.
 - Sabotage: gravity applied before drag in `rust/src/sparks.rs` fails 7
   golden tests and 3 reference tests.
 
+**`ParticleSystem` is the third**, and the same shape as `Sparks`:
+`tests/golden/particles.json` (eight scenarios, compared to 0.001),
+`tests/reference/particles.py`, and `tests/test_particles_reference.py`.
+Damping applied before acceleration in `rust/src/particles.rs` fails one
+golden and one reference test, the ones whose scenario has both. The
+`Particle` class went with the Python pool: the Rust pool has no
+per-particle objects, and `_native.slot(index)` reads one slot's columns.
+
 The other pure-Python implementations are kept and still run: under
 `PYGUARA_NO_NATIVE=1`, under `native_acceleration = "off"`, on a platform
 with no wheel, and in a checkout with nothing built yet.
@@ -130,14 +138,13 @@ instructions` rewrites what is inside it, and an earlier version of this
 section was placed there and silently deleted on the next regeneration.
 
 The price of keeping two implementations is that they must agree, which is
-paid by `tests/test_native_particle_parity.py`,
-`tests/test_native_flocking_parity.py` and
+paid by `tests/test_native_flocking_parity.py` and
 `tests/test_native_spatial_hash_parity.py` running the same operations
 against both, plus real-GPU pixel comparisons in
 `tests/integration/test_wgpu_pixels.py`. All of those **skip** when the
 extension is not built, so a contributor without Rust sees a green suite
 and has tested none of the accelerator -- build it before trusting a pass
-on anything touching particles, flocking or spatial queries.
+on anything touching flocking or spatial queries.
 
 **Adding a native store to an existing class changes the meaning of every
 test that constructs it**, which `SpatialHash` demonstrated the hard way:

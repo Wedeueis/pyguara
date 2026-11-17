@@ -1,5 +1,3 @@
-import pytest
-
 from pyguara.common.types import Vector2
 from pyguara.graphics.components.animation import (
     AnimationClip,
@@ -49,20 +47,9 @@ def test_animator_playback():
     assert sprite.texture == tex1
 
 
-@pytest.mark.parametrize("accelerate", [False, True])
-def test_particle_system_emission(accelerate):
-    """Particles are spawned, moved and recycled.
-
-    Run against both backing stores. It used to read `ps._pool` directly,
-    which only the Python store has -- the native one keeps its state in
-    flat arrays with no per-particle objects to hand out. `live_count` is
-    the question it was really asking, and asking it that way makes the
-    test cover both.
-    """
-    if accelerate and not ParticleSystem(capacity=1).accelerated:
-        pytest.skip("native extension not built; `cargo build --release`")
-
-    ps = ParticleSystem(capacity=10, accelerate=accelerate)
+def test_particle_system_emission():
+    """Particles are spawned, moved and recycled."""
+    ps = ParticleSystem(capacity=10)
     tex = MockTexture("smoke")
 
     # 1. Emit
@@ -79,23 +66,19 @@ def test_particle_system_emission(accelerate):
     assert ps.live_count == 0
 
 
-def test_particle_state_is_readable_on_the_python_store():
-    """The per-particle detail the parametrised test above gave up.
+def test_particle_state_is_readable_slot_by_slot():
+    """The pool has no particle objects; a slot's columns are the state."""
+    ps = ParticleSystem(capacity=10)
 
-    Only meaningful for the Python store, so it is asserted here rather
-    than lost: the native store has no `Particle` objects by design.
-    """
-    ps = ParticleSystem(capacity=10, accelerate=False)
-    tex = MockTexture("smoke")
+    ps.emit(MockTexture("smoke"), Vector2(0, 0), count=5, speed=100, life=1.0)
 
-    ps.emit(tex, Vector2(0, 0), count=5, speed=100, life=1.0)
-
-    active = [p for p in ps._pool if p.active]
+    slots = [ps._native.slot(index) for index in range(10)]
+    active = [slot for slot in slots if slot[6]]
     assert len(active) == 5
-    assert active[0].texture == tex
-    assert active[0].life == 1.0
-    assert active[0].velocity.length > 0
+    _x, _y, velocity_x, velocity_y, life, _rotation, _active = active[0]
+    assert life == 1.0
+    assert (velocity_x, velocity_y) != (0.0, 0.0)
 
     ps.update(0.5)
-    assert active[0].position != Vector2(0, 0)
-    assert active[0].life == 0.5
+    assert ps._native.slot(slots.index(active[0]))[:2] != (0.0, 0.0)
+    assert ps._native.slot(slots.index(active[0]))[4] == 0.5

@@ -90,6 +90,7 @@ from pyguara.kits.procgen import AdjacencyRule, generate_wfc  # noqa: E402
 from pyguara.kits.projectiles.projectile import Projectile  # noqa: E402
 from pyguara.kits.projectiles.system import ProjectileSystem  # noqa: E402
 from pyguara.native import native_module  # noqa: E402
+from tests.reference.particles import ReferenceParticles  # noqa: E402
 from tests.reference.sparks import ReferenceSparks  # noqa: E402
 
 DT = 1.0 / 60.0
@@ -194,13 +195,16 @@ class _Sink:
 
 def price_particles(live: int) -> Row | None:
     """Landed. Calibration row: predicted ceiling against achieved speedup."""
-    if not ParticleSystem(capacity=1).accelerated:
+    if native_module() is None:
         return None
 
     sink, camera = _Sink(), _Camera()
     pools = {}
     for accelerate in (False, True):
-        pool = ParticleSystem(live, RandomStream(7), accelerate=accelerate)
+        # `ParticleSystem` is Rust only; its Python side is the test reference.
+        pool = (ParticleSystem if accelerate else ReferenceParticles)(
+            live, RandomStream(7)
+        )
         pool.emit(
             _FakeTexture(),  # type: ignore[arg-type]
             Vector2.zero(),
