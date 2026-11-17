@@ -431,6 +431,26 @@ asks Chipmunk for the first hit, and collects every hit only when that
 one is a sensor or the caster. Collecting every hit unconditionally was
 tried first and cost 88.6 us for the 40-box ray.
 
+### Pymunk against Rapier -- milliseconds per tick
+
+20x20 boxes dropped in rows onto a static floor, four substeps, a
+collision system attached that accepts every pair, median of 60 ticks,
+one machine. "Settled" is after five seconds.
+
+| Boxes | | pymunk | Rapier |
+| ---: | --- | ---: | ---: |
+| 200 | falling | 8.33 | 1.72 |
+| 200 | settled | 0.01 | 0.18 |
+| 800 | falling | 34.27 | 8.55 |
+| 800 | settled | 33.56 | 0.83 |
+
+Most of pymunk's cost is its Python collision callback per contact per
+substep. With no collision system attached the two are close while the
+boxes fall (200: 0.83 and 0.82). Pymunk's 800-box pile had not gone to
+sleep after five seconds; Rapier's had. Rapier reports no persist for a
+pair whose bodies are all asleep, as Chipmunk does; before that it spent
+0.92 ms on the settled 200.
+
 ## Object pools
 
 ### The native particle pool -- milliseconds per frame

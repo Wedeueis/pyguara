@@ -9,7 +9,12 @@ from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.manager import AudioManager
 from pyguara.common.extras import require_pygame
 from pyguara.config.manager import ConfigManager
-from pyguara.config.types import AudioBackend, GameConfig, RenderingBackend
+from pyguara.config.types import (
+    AudioBackend,
+    GameConfig,
+    PhysicsBackend,
+    RenderingBackend,
+)
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.pipeline.framebuffer import FramebufferManager
@@ -23,6 +28,7 @@ from pyguara.persistence.manager import PersistenceManager
 from pyguara.persistence.migration import MigrationManager, get_global_registry
 from pyguara.persistence.storage import FileStorageBackend
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.protocols import IPhysicsEngine
 from pyguara.prefabs.loader import PrefabCache, PrefabLoader
@@ -587,12 +593,18 @@ def _setup_container(
 
     # Physics Engine
     physics_config = config_manager.config.physics
-    physics_engine = PymunkEngine(
-        substeps=physics_config.substeps,
-        penetration_recovery=physics_config.penetration_recovery,
-        sleep_time_threshold=physics_config.sleep_time_threshold,
-    )
-    container.register_instance(IPhysicsEngine, physics_engine)  # type: ignore[type-abstract]
+    physics_engine: PymunkEngine | RapierEngine
+    if physics_config.backend is PhysicsBackend.RAPIER:
+        # Rapier has its own contact solver; the two Chipmunk tunings below
+        # do not apply to it.
+        physics_engine = RapierEngine(substeps=physics_config.substeps)
+    else:
+        physics_engine = PymunkEngine(
+            substeps=physics_config.substeps,
+            penetration_recovery=physics_config.penetration_recovery,
+            sleep_time_threshold=physics_config.sleep_time_threshold,
+        )
+    container.register_instance(IPhysicsEngine, physics_engine)
 
     # Collision System (bridges pymunk callbacks to PyGuara events)
     collision_system = CollisionSystem(event_dispatcher)

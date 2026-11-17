@@ -56,6 +56,39 @@ Two consequences worth knowing:
 - Reading a sleeping body's position is fine and cheap; it still appears in
   every [spatial query](queries.md).
 
+### Two engines
+
+`physics.backend` chooses the engine: `pymunk`, the default, or `rapier`,
+a Rapier world in the native extension. Rapier is the engine's future
+(roadmap 6e) and becomes the default once it does everything pymunk does.
+Today it covers bodies, circle and box colliders, materials, collision
+layers and groups, sensors, collision events, forces and impulses, and
+every query, all held to the same tests as pymunk
+(`tests/test_physics_rapier.py`).
+
+Not yet, and refused rather than ignored:
+
+- joints, one-way platforms, and segment and polygon colliders raise
+  `NotImplementedError`;
+- `sweep_box` and `step_bodies` are absent, so `CharacterMover` and
+  `TopDownSystem` take the slower path they take on any engine without
+  them.
+
+Where the two differ on purpose or for now:
+
+- **Collision events are reported after each solver step**, not during
+  it. A pair whose `on_collision_begin` returns False is resolved for one
+  solver step before it stops being; pymunk stops at once.
+- **A ray is a line**, where pymunk's has a radius of one pixel.
+- **Results differ**: Rapier settles a stack differently, so a replay or a
+  golden frame with rigid bodies in it changes when a game switches.
+- `penetration_recovery` and `sleep_time_threshold` are Chipmunk's tuning
+  and do not apply.
+
+With a collision system attached, which every game started through
+`create_application` has, Rapier steps a pile of falling boxes in about a
+fifth of pymunk's time; see [performance](../guides/performance.md).
+
 ## Collision Handling
 
 Collisions generate events via the `CollisionSystem`, which `bootstrap.py`

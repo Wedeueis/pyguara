@@ -135,6 +135,19 @@ class InputConfig:
     gamepad_deadzone: float = 0.2
 
 
+class PhysicsBackend(Enum):
+    """Which engine simulates physics.
+
+    PYMUNK: The default. Chipmunk through pymunk.
+    RAPIER: Rapier, in the native extension. Joints, one-way platforms and
+        segment and polygon shapes are not supported yet; see
+        `docs/physics/simulation.md`.
+    """
+
+    PYMUNK = "pymunk"
+    RAPIER = "rapier"
+
+
 @dataclass
 class PhysicsConfig:
     """Physics simulation configuration."""
@@ -146,6 +159,9 @@ class PhysicsConfig:
     # Maximum frame time to prevent spiral of death
     # If a frame takes longer than this, we clamp the accumulator
     max_frame_time: float = 0.25
+
+    backend: PhysicsBackend = PhysicsBackend.PYMUNK
+    """Which engine simulates physics. Pymunk until Rapier matches it."""
 
     # Gravity for platformers (pixels/second^2). Use (0,0) for top-down.
     gravity_x: float = 0.0
