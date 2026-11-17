@@ -18,7 +18,7 @@ Needs the extension built first, which needs a Rust toolchain:
     cargo build --release
     uv run python tools/bench_native_pool.py
 
-Parity is *not* checked here -- `tests/test_native_particle_parity.py` and
+Parity is *not* checked here -- `tests/test_particles_reference.py` and
 `tests/test_sparks_reference.py` do that properly, and a benchmark that
 also claimed to prove correctness proved neither.
 """
@@ -40,6 +40,8 @@ from pyguara.common.types import Color, Vector2  # noqa: E402
 from pyguara.graphics.components.particles import ParticleSystem  # noqa: E402
 from pyguara.graphics.types import ShapeBatch, ShapeKind  # noqa: E402
 from pyguara.graphics.vfx.sparks import Sparks  # noqa: E402
+from pyguara.native import native_module  # noqa: E402
+from tests.reference.particles import ReferenceParticles  # noqa: E402
 from tests.reference.sparks import ReferenceSparks  # noqa: E402
 
 DT = 1.0 / 60.0
@@ -181,7 +183,9 @@ def _ms(fn: object, number: int = 100, repeat: int = 5) -> float:
     return min(timeit.repeat(fn, number=number, repeat=repeat)) / number * 1e3  # type: ignore[arg-type]
 
 
-def _particles(live: int, accelerate: bool, *, tinted: bool) -> ParticleSystem:
+def _particles(
+    live: int, accelerate: bool, *, tinted: bool
+) -> ParticleSystem | ReferenceParticles:
     """A particle pool with `live` slots occupied.
 
     `tinted` matters more than it looks: a colour animation makes the
@@ -190,7 +194,10 @@ def _particles(live: int, accelerate: bool, *, tinted: bool) -> ParticleSystem:
     because fire, smoke and every fading effect set one, and because the
     untinted row is the conservative figure to quote.
     """
-    pool = ParticleSystem(live, RandomStream(SEED), accelerate=accelerate)
+    # `ParticleSystem` is Rust only; its Python side is the test reference.
+    pool = (ParticleSystem if accelerate else ReferenceParticles)(
+        live, RandomStream(SEED)
+    )
     pool.emit(
         _FakeTexture(),  # type: ignore[arg-type]
         Vector2(0.0, 0.0),
@@ -240,7 +247,7 @@ def main() -> int:
     Returns:
         0 on success, 1 if the extension is not built.
     """
-    if not ParticleSystem(capacity=1).accelerated:
+    if native_module() is None:
         print("extension not built -- run `cargo build --release` first")
         return 1
 

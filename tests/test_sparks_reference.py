@@ -188,7 +188,7 @@ def test_the_fallback_draws_what_python_draws(streak: bool) -> None:
     Aged a third of the way through, not halfway: the fade is a straight
     multiply, so a path that got `remaining` backwards would still agree at
     the midpoint of a symmetric life -- the trap
-    `tests/test_native_particle_parity.py` fell into.
+    `tests/test_particles_reference.py` fell into.
     """
     python_pool, native_pool = _pair()
     for pool in (python_pool, native_pool):

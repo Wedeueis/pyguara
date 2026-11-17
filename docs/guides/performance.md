@@ -866,11 +866,11 @@ vectorised rewrite would have to win, and it is the opposite of where the
 Defensible scale on this machine: roughly **1000 live particles at 60 Hz**
 (2.2 ms) alongside everything else a frame does; 4000 is not reachable.
 
-Those are the Python pools. `Sparks` now exists only in Rust, where the
-same update costs a few hundredths of a percent as much and the
-dead-slot argument stops mattering in either direction. Both columns
-measured in one run, the Python one from `tests/reference/sparks.py`
-(which is faster today than the table above records):
+Those are the Python pools. Both pools now exist only in Rust, where the
+same update costs about a quarter of a percent as much and the dead-slot
+argument stops mattering in either direction. Each table's two columns
+were measured in one run, the Python one from `tests/reference/` (which
+is faster today than the table above records):
 
 | `Sparks` update | Capacity | Live | Python pool (before) | Rust pool (now) |
 | --- | ---: | ---: | ---: | ---: |
@@ -878,11 +878,20 @@ measured in one run, the Python one from `tests/reference/sparks.py`
 | full | 1000 | 1000 | 1.246 ms | 0.0027 ms |
 | full, 4x | 4000 | 4000 | 5.004 ms | 0.0103 ms |
 
-An idle Rust pool is 26% of a full one, where the Python pool's is 0.8%,
-because a live spark is now nearly as cheap as a dead slot.
-`tests/performance/test_perf_pools.py` therefore holds only the particle
-pool to the "idle is under a fifth of full" ratio, and holds the spark
-pool to linear scaling with capacity (3.8x for 4x).
+| `ParticleSystem` update | Capacity | Live | Python pool (before) | Rust pool (now) |
+| --- | ---: | ---: | ---: | ---: |
+| idle | 1000 | 0 | 0.0236 ms | 0.0007 ms |
+| full | 1000 | 1000 | 2.137 ms | 0.0061 ms |
+| full, 4x | 4000 | 4000 | 8.552 ms | 0.0240 ms |
+
+An idle Rust spark pool is 26% of a full one and an idle Rust particle
+pool 11.5%, where the Python pools' were about 1%, because a live
+element is now nearly as cheap as a dead slot. The "idle is under a
+fifth of full" guard is therefore gone from
+`tests/performance/test_perf_pools.py`: it existed to say compacting a
+pool is the wrong optimisation, and at 6 us for a full pool that is not
+a question. Both pools are still held to linear scaling with capacity
+(3.8x and 3.9x for 4x).
 
 ---
 

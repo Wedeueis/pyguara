@@ -1,94 +1,24 @@
-"""High-performance Particle System logic.
+"""Textured particles for transient effects: smoke, fire, debris.
 
-This module implements a specialized rendering system for transient visual effects
-(smoke, fire, sparks). It prioritizes raw throughput (count) over individual
-sorting precision.
-
-It utilizes the 'Object Pool' pattern to minimize memory allocation during gameplay,
-ensuring smooth frame rates even when emitting hundreds of particles per second.
+`ParticleSystem` is a fixed-capacity pool that favours count over
+per-particle sorting. The pool is held in Rust as arrays and has no
+Python implementation; the random draws of an emission stay in Python,
+on the engine's seeded stream.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pyguara.common.random import RandomStream
-from pyguara.common.types import Color, Vector2
+from pyguara.common.types import Vector2
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.viewport import Viewport
 from pyguara.graphics.protocols import IRenderer
 from pyguara.graphics.types import RenderBatch
-from pyguara.native import native_module
+from pyguara.native import require_extension
 from pyguara.resources.types import Texture
-
-if TYPE_CHECKING:
-    pass
-
-_OPAQUE_WHITE = (255, 255, 255, 255)
-
-
-def _particle_color(p: Particle) -> tuple[int, int, int, int]:
-    """Return the particle's current tint, lerped from color_start to color_end.
-
-    Opaque white (a no-op tint) if this particle has no color animation
-    set -- `emit()`'s default, so a particle spawned without `color_start`/
-    `color_end` renders exactly as before this existed.
-    """
-    if p.color_start is None or p.color_end is None:
-        return _OPAQUE_WHITE
-    t = 0.0 if p.life_total <= 0 else 1.0 - (p.life / p.life_total)
-    t = max(0.0, min(1.0, t))
-    blended = Color(*p.color_start).lerp(Color(*p.color_end), t)
-    return (blended.r, blended.g, blended.b, blended.a)
-
-
-@dataclass
-class Particle:
-    """A single particle instance with physics and visual effects.
-
-    Attributes:
-        position (Vector2): Current world position.
-        velocity (Vector2): Movement vector per second.
-        life (float): Time remaining in seconds.
-        texture (Texture): The visual representation.
-        active (bool): Whether this particle is currently in use.
-        acceleration (Vector2): Constant acceleration (e.g., gravity).
-        damping (float): Velocity damping factor (0.0 = no damping, 1.0 = instant stop).
-        rotation (float): Rotation in degrees.
-        scale (Vector2): Scale factor.
-        angular_velocity (float): Rotation speed in degrees per second.
-        scale_velocity (Vector2): Scale change per second.
-        color_start (Color): Initial color.
-        color_end (Color): Final color (lerped based on lifetime).
-        life_total (float): Total lifetime for calculating color lerp.
-    """
-
-    position: Vector2
-    velocity: Vector2
-    life: float
-    texture: Texture | None = None
-    active: bool = False
-
-    # Physics
-    acceleration: Vector2 = field(default_factory=Vector2.zero)
-    damping: float = 1.0  # 1.0 = no damping, 0.98 = slight air resistance
-
-    # Protocol compliance for Renderable
-    rotation: float = 0.0
-    scale: Vector2 = field(default_factory=lambda: Vector2(1, 1))
-
-    # Visual effects
-    angular_velocity: float = 0.0  # degrees per second
-    scale_velocity: Vector2 = field(default_factory=Vector2.zero)
-
-    # Color animation (optional, None = no color animation)
-    color_start: tuple[int, int, int, int] | None = None
-    color_end: tuple[int, int, int, int] | None = None
-    life_total: float = 1.0
-
-    # Optional material for custom shaders/effects (None = default shader)
-    material: Any = None  # Type: Optional["Material"]
 
 
 class ParticleSystem:
@@ -98,13 +28,7 @@ class ParticleSystem:
     and batching (Render) of thousands of small entities.
     """
 
-    def __init__(
-        self,
-        capacity: int = 1000,
-        rng: RandomStream | None = None,
-        *,
-        accelerate: bool | None = None,
-    ):
+    def __init__(self, capacity: int = 1000, rng: RandomStream | None = None):
         """Initialize the particle pool.
 
         Args:
@@ -112,63 +36,24 @@ class ParticleSystem:
                             Higher numbers use more RAM but allow denser effects.
             rng (RandomStream | None): Random stream driving per-particle
                 spread/speed/rotation. Defaults to a fresh, unseeded stream.
-            accelerate: Whether to back the pool with the native
-                structure-of-arrays pool. None, the default, defers to the
-                engine-wide setting -- `PerformanceConfig.native_acceleration`,
-                resolved once at bootstrap -- so a game decides this in one
-                place rather than per pool. True demands the extension and
-                raises if it is missing; False forces the Python pool.
-                Both are overrides for tests and for the parity suite,
-                not a second configuration surface.
 
         Raises:
-            RuntimeError: If `accelerate=True` and the extension is absent.
+            RuntimeError: If the native extension cannot be imported.
         """
         self._capacity = capacity
-        # Pointer to the next available slot (Simple Ring Buffer or Search)
-        self._next_index = 0
         self._rng = rng if rng is not None else RandomStream()
-
-        native = native_module() if accelerate is not False else None
-        if accelerate and native is None:
-            raise RuntimeError(
-                "accelerate=True but the native extension is not available. "
-                "Build it with `cargo build --release`, or leave "
-                "`accelerate` unset to fall back to Python."
-            )
-
-        self._native = native.NativeParticlePool(capacity) if native else None
+        self._native: Any = require_extension("ParticleSystem").NativeParticlePool(
+            capacity
+        )
         # Textures cannot live in a float column, so the native pool holds
         # an index into this list and the mapping stays here.
         self._textures: list[Texture] = []
         self._texture_ids: dict[int, int] = {}
 
-        # Only the Python path has per-particle objects. Kept as `_pool` for
-        # the code that has always read it; empty under acceleration, where
-        # `live_count` is the way to ask.
-        self._pool: list[Particle] = (
-            []
-            if self._native is not None
-            else [
-                Particle(Vector2.zero(), Vector2.zero(), 0.0) for _ in range(capacity)
-            ]
-        )
-
-    @property
-    def accelerated(self) -> bool:
-        """Whether this pool is backed by the native extension."""
-        return self._native is not None
-
     @property
     def live_count(self) -> int:
-        """How many particles are currently alive.
-
-        The way to ask on either path: the Python pool exposes `_pool` and
-        the native one has no per-particle objects to expose.
-        """
-        if self._native is not None:
-            return int(self._native.live_count())
-        return sum(1 for particle in self._pool if particle.active)
+        """How many particles are currently alive."""
+        return int(self._native.live_count())
 
     def _texture_slot(self, texture: Texture) -> int:
         """Return this texture's index, registering it on first use.
@@ -218,114 +103,11 @@ class ParticleSystem:
             color_start (Optional[tuple]): Initial RGBA color (r, g, b, a).
             color_end (Optional[tuple]): Final RGBA color for fade effect.
         """
-        if self._native is not None:
-            self._emit_native(
-                texture,
-                position,
-                count,
-                speed,
-                spread,
-                life,
-                acceleration,
-                damping,
-                angular_velocity,
-                scale,
-                scale_velocity,
-                color_start,
-                color_end,
-            )
-            return
-
-        spawned = 0
-        search_start = self._next_index
-
-        # Linear search for inactive particles (Ring Buffer strategy)
-        while spawned < count:
-            p = self._pool[self._next_index]
-
-            # Found a dead particle, recycle it
-            if not p.active:
-                p.active = True
-                p.position = Vector2(position.x, position.y)
-                p.texture = texture
-                p.life = life
-                p.life_total = life
-
-                # Random Velocity Calculation
-                angle = self._rng.uniform(0, spread)
-                direction = Vector2.right().rotate_degrees(angle)
-                random_velocity = direction * self._rng.uniform(
-                    speed * 0.5, speed * 1.5
-                )
-                p.velocity = random_velocity
-
-                # Physics
-                p.acceleration = acceleration
-                p.damping = damping
-
-                # Visual effects
-                p.rotation = self._rng.uniform(0, 360)  # Random initial rotation
-                p.angular_velocity = angular_velocity
-                p.scale = Vector2(scale.x, scale.y)
-                p.scale_velocity = scale_velocity
-
-                # Color animation
-                p.color_start = color_start
-                p.color_end = color_end
-
-                spawned += 1
-
-            # Advance index, wrap around if needed
-            self._next_index = (self._next_index + 1) % self._capacity
-
-            # Safety: If we looped back to start, pool is full
-            if self._next_index == search_start:
-                # Optional: Force overwrite oldest? For now, just stop emitting.
-                break
-
-    def _emit_native(
-        self,
-        texture: Texture,
-        position: Vector2,
-        count: int,
-        speed: float,
-        spread: float,
-        life: float,
-        acceleration: Vector2,
-        damping: float,
-        angular_velocity: float,
-        scale: Vector2,
-        scale_velocity: Vector2,
-        color_start: tuple[int, int, int, int] | None,
-        color_end: tuple[int, int, int, int] | None,
-    ) -> None:
-        """Spawn a burst into the native pool.
-
-        The random draws stay in Python: `emit` takes three per particle from
-        the engine's seeded `RandomStream`, and a replay restores that seed.
-        They are handed over as whole arrays, in one call per burst. The
-        arithmetic matches the Python path exactly, including building each
-        direction through `Vector2.rotate_degrees`.
-
-        Only as many particles as will fit are drawn for, as the Python path
-        does, so both leave the stream at the same position.
-
-        Args:
-            texture: Resolved to an index the native pool stores.
-            position: Emission origin.
-            count: How many to spawn; the pool drops any it cannot fit.
-            speed: Base speed, jittered per particle.
-            spread: Angle spread in degrees.
-            life: Seconds each particle lives.
-            acceleration: Shared across the burst.
-            damping: Shared velocity decay.
-            angular_velocity: Shared spin.
-            scale: Shared initial scale.
-            scale_velocity: Shared scale change per second.
-            color_start: Tint at birth, or None for no colour animation.
-            color_end: Tint at death, or None.
-        """
-        assert self._native is not None
+        # The random draws stay in Python: an emission takes three per
+        # particle from the engine's seeded stream, and a replay restores
+        # that seed. Only as many particles as will fit are drawn for, so
+        # an emission that overflows leaves the stream where a smaller one
+        # would have.
         spawnable = min(count, self._capacity - int(self._native.live_count()))
 
         velocity_x: list[float] = []
@@ -358,38 +140,6 @@ class ParticleSystem:
             color_start,
             color_end,
         )
-
-    def _render_native(
-        self,
-        backend: IRenderer,
-        zoom: float,
-        offset_x: float,
-        offset_y: float,
-    ) -> None:
-        """Draw the native pool, one `RenderBatch` per texture.
-
-        The world-to-screen transform, the colour lerp and the grouping happen
-        natively; this turns the result into the `RenderBatch`es the renderer
-        takes, whose fields are Python lists.
-
-        Args:
-            backend: Receives one batch per texture.
-            zoom: Camera zoom.
-            offset_x: World-to-screen x offset.
-            offset_y: World-to-screen y offset.
-        """
-        assert self._native is not None
-        for slot, destinations, tints, tinted in self._native.pack_for_render(
-            zoom, offset_x, offset_y
-        ):
-            backend.render_batch(
-                RenderBatch(
-                    self._textures[slot],
-                    destinations,
-                    colors=tints if tinted else [],
-                    colors_enabled=tinted,
-                )
-            )
 
     def emit_preset(
         self,
@@ -441,48 +191,12 @@ class ParticleSystem:
         Args:
             dt (float): Delta time in seconds.
         """
-        if self._native is not None:
-            self._native.update(dt)
-            return
-
-        for p in self._pool:
-            if p.active:
-                p.life -= dt
-                if p.life <= 0:
-                    p.active = False
-                    p.texture = None  # Release reference
-                else:
-                    # Physics: Apply acceleration
-                    p.velocity = Vector2(
-                        p.velocity.x + p.acceleration.x * dt,
-                        p.velocity.y + p.acceleration.y * dt,
-                    )
-
-                    # Physics: Apply damping (air resistance)
-                    p.velocity = Vector2(
-                        p.velocity.x * p.damping,
-                        p.velocity.y * p.damping,
-                    )
-
-                    # Euler Integration for position
-                    p.position = Vector2(
-                        p.position.x + p.velocity.x * dt,
-                        p.position.y + p.velocity.y * dt,
-                    )
-
-                    # Visual effects: Rotation
-                    p.rotation += p.angular_velocity * dt
-
-                    # Visual effects: Scale
-                    p.scale = Vector2(
-                        p.scale.x + p.scale_velocity.x * dt,
-                        p.scale.y + p.scale_velocity.y * dt,
-                    )
+        self._native.update(dt)
 
     def render(
         self, backend: IRenderer, camera: Camera2D, viewport: Viewport | None = None
     ) -> None:
-        """Draw all active particles to the backend."""
+        """Draw all active particles, one `RenderBatch` per texture."""
         if viewport is None:
             viewport = Viewport(0, 0, backend.width, backend.height)
 
@@ -490,40 +204,19 @@ class ParticleSystem:
         offset_vec = camera.screen_offset(viewport)
         offset_x, offset_y = offset_vec.x, offset_vec.y
 
-        if self._native is not None:
-            self._render_native(backend, zoom, offset_x, offset_y)
-            return
-
-        batches: dict[Texture, list[tuple[float, float]]] = {}
-        colors: dict[Texture, list[tuple[int, int, int, int]]] = {}
-        has_color: dict[Texture, bool] = {}
-
-        for p in self._pool:
-            if p.active and p.texture:
-                if p.texture not in batches:
-                    batches[p.texture] = []
-                    colors[p.texture] = []
-                    has_color[p.texture] = False
-
-                screen_x = (p.position.x * zoom) + offset_x
-                screen_y = (p.position.y * zoom) + offset_y
-
-                batches[p.texture].append((screen_x, screen_y))
-
-                rgba = _particle_color(p)
-                colors[p.texture].append(rgba)
-                if rgba != _OPAQUE_WHITE:
-                    has_color[p.texture] = True
-
-        for texture, destinations in batches.items():
-            enabled = has_color[texture]
-            batch = RenderBatch(
-                texture,
-                destinations,
-                colors=colors[texture] if enabled else [],
-                colors_enabled=enabled,
+        # The world-to-screen transform, the colour lerp and the grouping
+        # by texture happen in Rust; this wraps each group for the renderer.
+        for slot, destinations, tints, tinted in self._native.pack_for_render(
+            zoom, offset_x, offset_y
+        ):
+            backend.render_batch(
+                RenderBatch(
+                    self._textures[slot],
+                    destinations,
+                    colors=tints if tinted else [],
+                    colors_enabled=tinted,
+                )
             )
-            backend.render_batch(batch)
 
 
 # ===== Particle Emitter Presets =====

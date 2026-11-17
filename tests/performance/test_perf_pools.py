@@ -1,13 +1,10 @@
-"""What the self-contained object pools cost per frame.
+"""What the particle and spark pools cost per frame.
 
-`ParticleSystem`, `Sparks` and `ProjectileSystem` each pre-allocate a
-pool and iterate its whole capacity every frame. A dead slot costs one
-boolean test; the cost is integrating the live ones.
-
-`ParticleSystem` is pinned to its Python store with `accelerate=False`,
-the baseline its native figures in `docs/guides/performance.md` are
-quoted against. `Sparks` has only a Rust pool; its Python baseline is
-`tests.reference.sparks`. One test checks Rust is materially faster.
+`ParticleSystem` and `Sparks` each pre-allocate a pool and walk its
+whole capacity every frame. Both are held in Rust; their Python
+baselines are the pools in `tests.reference`. One test checks Rust is
+materially faster, and one that the walk stays linear in capacity.
+The figures are in `docs/guides/performance.md`.
 """
 
 from __future__ import annotations
@@ -21,6 +18,7 @@ from tests.performance.conftest import (
     assert_scales_no_worse_than,
     measure,
 )
+from tests.reference.particles import ReferenceParticles
 from tests.reference.sparks import ReferenceSparks
 
 CAPACITY = 1000
@@ -47,7 +45,16 @@ class _FakeTexture:
 
 def _particles(capacity: int, live: int) -> ParticleSystem:
     """A particle system with `live` of `capacity` slots occupied."""
-    system = ParticleSystem(capacity=capacity, accelerate=False)
+    return _emit_into(ParticleSystem(capacity=capacity), live)
+
+
+def _python_particles(capacity: int, live: int) -> ReferenceParticles:
+    """The Python reference pool with `live` of `capacity` slots occupied."""
+    return _emit_into(ReferenceParticles(capacity=capacity), live)
+
+
+def _emit_into(system, live: int):
+    """Occupy `live` slots of a particle pool, Rust or reference."""
     if live:
         system.emit(
             _FakeTexture(),  # type: ignore[arg-type]
@@ -78,34 +85,6 @@ def _burst_into(pool, live: int):
             color=Color(255, 255, 255),
         )
     return pool
-
-
-@pytest.mark.performance
-@pytest.mark.parametrize("make", [_particles], ids=["particles"])
-def test_the_cost_is_the_live_elements_not_the_dead_slots(make) -> None:
-    """Where the time actually goes, which is not where it looks.
-
-    Particles only: in the Rust spark pool a live spark is nearly as
-    cheap as a dead slot, so the ratio says nothing there.
-
-    Walking the whole capacity every frame is real and is cheap: a dead
-    slot is one boolean test. The integration of a live element is ~90x
-    that. This pins the ratio so that "compact the pool" is recognisable
-    as the wrong optimisation without re-deriving it.
-
-    A ratio rather than a budget, so it is safe on a shared runner.
-    """
-    empty = make(CAPACITY, 0)
-    full = make(CAPACITY, CAPACITY)
-
-    idle = measure(lambda: empty.update(1.0 / 60.0))
-    busy = measure(lambda: full.update(1.0 / 60.0))
-
-    assert idle < busy * 0.2, (
-        f"an idle pool cost {idle / max(busy, 1e-9):.1%} of a full one. If "
-        f"dead slots have become expensive, skipping them is worth doing "
-        f"after all -- which this asserts is not currently the case."
-    )
 
 
 @pytest.mark.performance
@@ -149,42 +128,26 @@ def test_sweep_spark_update(benchmark, live: int) -> None:
 
 @pytest.mark.performance
 @pytest.mark.parametrize(
-    ("make", "native"),
-    [
-        (_particles, lambda n: ParticleSystem(capacity=n)),
-        (_python_sparks, lambda n: Sparks(capacity=n)),
-    ],
+    ("python", "rust"),
+    [(_python_particles, _particles), (_python_sparks, _sparks)],
     ids=["particles", "sparks"],
 )
-def test_the_native_store_is_wired_up_and_materially_faster(make, native) -> None:
-    """That the accelerator is reached at all, which is easy to lose.
-
-    The loader falls back silently when the extension is missing or stale,
-    so a broken build would show only as the Python pool.
+def test_the_rust_pool_is_materially_faster_than_the_python_it_replaced(
+    python, rust
+) -> None:
+    """The reason the pools are in Rust, kept as a measurement.
 
     Asserted at a quarter of the Python cost, loosely, for a shared
     runner; the exact figure is in `docs/guides/performance.md`.
     """
-    accelerated = native(CAPACITY)
-    if isinstance(accelerated, ParticleSystem) and not accelerated.accelerated:
-        pytest.skip("native extension not built; `cargo build --release`")
-
-    python_pool = make(CAPACITY, CAPACITY)
-    _fill(accelerated, CAPACITY)
+    python_pool = python(CAPACITY, CAPACITY)
+    rust_pool = rust(CAPACITY, CAPACITY)
 
     python_time = measure(lambda: python_pool.update(1.0 / 60.0))
-    native_time = measure(lambda: accelerated.update(1.0 / 60.0))
+    rust_time = measure(lambda: rust_pool.update(1.0 / 60.0))
 
-    assert native_time < python_time * 0.25, (
-        f"the native store took {native_time / max(python_time, 1e-9):.0%} of "
-        f"the Python one. Either it is not actually being used, or the "
-        f"arithmetic has regressed to within noise of interpreted Python."
+    assert rust_time < python_time * 0.25, (
+        f"the Rust pool took {rust_time / max(python_time, 1e-9):.0%} of the "
+        f"Python reference. The arithmetic has regressed to within noise of "
+        f"interpreted Python."
     )
-
-
-def _fill(pool, live: int) -> None:
-    """Occupy `live` slots, whichever pool kind this is."""
-    if isinstance(pool, Sparks):
-        pool.burst(Vector2(0.0, 0.0), Color(255, 255, 255), count=live, life=1e6)
-    else:
-        pool.emit(_FakeTexture(), Vector2(0.0, 0.0), count=live, life=1e6)

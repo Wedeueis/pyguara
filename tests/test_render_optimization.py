@@ -5,7 +5,6 @@ import dis
 from pyguara.common.types import Color, Vector2
 from pyguara.graphics.backends.headless_renderer import HeadlessTextureFactory
 from pyguara.graphics.components.geometry import Box, Circle
-from pyguara.graphics.components.particles import Particle
 from pyguara.graphics.components.sprite import Sprite
 from pyguara.graphics.pipeline.render_system import RenderSystem
 from pyguara.graphics.protocols import Renderable
@@ -64,21 +63,6 @@ def test_sprite_implements_renderable():
     assert sprite.position == Vector2(100, 200)
     assert sprite.rotation == 45.0
     assert sprite.scale == Vector2(2, 2)
-
-
-def test_particle_has_rotation_and_scale():
-    """Particle must have rotation and scale attributes (Renderable protocol)."""
-    particle = Particle(
-        position=Vector2(0, 0), velocity=Vector2(0, 0), life=1.0, texture=MockTexture()
-    )
-
-    # Verify attributes exist
-    assert hasattr(particle, "rotation")
-    assert hasattr(particle, "scale")
-
-    # Verify default values
-    assert particle.rotation == 0.0
-    assert particle.scale == Vector2(1, 1)
 
 
 def test_geometry_has_rotation_and_scale():

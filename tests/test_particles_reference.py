@@ -1,14 +1,12 @@
-"""The two particle stores must agree.
+"""The Rust particle pool must agree with the Python reference.
 
-The same operations run against the native pool and the Python one,
-and the results are compared.
+`ParticleSystem` has only a Rust implementation. "Python" below is
+`tests.reference.particles`, the pool it replaced, kept as test code.
 
-Floats are compared with a tolerance, because the native pool stores
-f32 where Python uses f64. A particle is a visual effect, so sub-pixel
+Floats are compared with a tolerance, because the Rust pool stores f32
+where Python uses f64. A particle is a visual effect, so sub-pixel
 disagreement over a lifetime is acceptable. If a tolerance ever has to
 be loosened, that is a finding.
-
-Skipped when the extension is not built.
 """
 
 from __future__ import annotations
@@ -20,31 +18,24 @@ import pytest
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Vector2
 from pyguara.graphics.components.particles import ParticleSystem
+from tests.reference.particles import ReferenceParticles
 
 CAPACITY = 64
 DT = 1.0 / 60.0
 
 
-def _available() -> bool:
-    """Whether the native extension is present."""
-    return ParticleSystem(capacity=1).accelerated
-
-
-pytestmark = pytest.mark.skipif(
-    not _available(), reason="native extension not built; `cargo build --release`"
-)
-
-
-def _pair(capacity: int = CAPACITY, seed: int = 99) -> tuple[ParticleSystem, ...]:
-    """A Python pool and a native pool on identical seeded streams.
+def _pair(
+    capacity: int = CAPACITY, seed: int = 99
+) -> tuple[ReferenceParticles, ParticleSystem]:
+    """The Python reference and the Rust pool on identical seeded streams.
 
     The same seed matters: `emit` takes three draws per particle, so two
     pools on different streams spawn different particles and nothing can be
     compared.
     """
     return (
-        ParticleSystem(capacity, RandomStream(seed), accelerate=False),
-        ParticleSystem(capacity, RandomStream(seed), accelerate=True),
+        ReferenceParticles(capacity, RandomStream(seed)),
+        ParticleSystem(capacity, RandomStream(seed)),
     )
 
 
@@ -70,7 +61,7 @@ def test_a_burst_larger_than_the_pool_fills_it_and_stops() -> None:
 
 
 def test_an_overflowing_burst_leaves_both_streams_in_step() -> None:
-    """The subtle one, and the reason `_emit_native` counts free slots.
+    """The subtle one, and the reason `emit` counts free slots.
 
     The Python loop asks for a slot before it draws, so an emission that
     overflows consumes nothing for the particles it drops. A native path
@@ -90,7 +81,7 @@ def test_an_overflowing_burst_leaves_both_streams_in_step() -> None:
         pool.emit(texture, Vector2.zero(), count=4, speed=100.0, life=5.0)
 
     expected = sorted(
-        (p.velocity.x, p.velocity.y) for p in python_pool._pool if p.active
+        (p.velocity.x, p.velocity.y) for p in python_pool.pool if p.active
     )
     got = sorted(
         native_pool._native.slot(i)[2:4]
@@ -124,7 +115,7 @@ def test_positions_agree_after_a_hundred_ticks() -> None:
         native_pool.update(DT)
 
     expected = sorted(
-        (p.position.x, p.position.y) for p in python_pool._pool if p.active
+        (p.position.x, p.position.y) for p in python_pool.pool if p.active
     )
     got = sorted(
         native_pool._native.slot(i)[:2]
@@ -239,3 +230,28 @@ def _summarise(backend: MagicMock) -> list[tuple[int, int, bool]]:
             (id(batch.texture), len(batch.destinations), batch.colors_enabled)
         )
     return summary
+
+
+class TestThereIsOneImplementation:
+    """The pool has no Python path left to fall back to."""
+
+    def test_the_store_cannot_be_chosen(self) -> None:
+        with pytest.raises(TypeError):
+            ParticleSystem(capacity=4, accelerate=False)  # type: ignore[call-arg]
+
+    def test_the_engine_wide_switch_does_not_reach_it(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`PYGUARA_NO_NATIVE` picks between two stores; here there is one."""
+        from pyguara import native
+
+        monkeypatch.setenv("PYGUARA_NO_NATIVE", "1")
+        native.reset_for_tests()
+        try:
+            assert native.native_module() is None
+            pool = ParticleSystem(capacity=4)
+            pool.emit(MagicMock(), Vector2.zero(), count=3, life=1.0)
+            assert pool.live_count == 3
+        finally:
+            monkeypatch.delenv("PYGUARA_NO_NATIVE")
+            native.reset_for_tests()
