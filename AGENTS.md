@@ -224,9 +224,9 @@ Working rules, which the operations themselves enforce:
 ## The native extension
 
 Rust implements the wgpu renderer, the window, input, images, text and
-the audio mixer, and `FlowFieldService`, which has no Python
-implementation. It is also an accelerated **store** for four things that
-still keep one: `ParticleSystem`, `Sparks`, `FlockingSystem` and
+the audio mixer, and `FlowFieldService` and `Sparks`, which have no
+Python implementation. It is also an accelerated **store** for three
+things that still keep one: `ParticleSystem`, `FlockingSystem` and
 `SpatialHash`. Each is to lose it in turn (ADR 0011, Decision 3).
 
 - The module is **`pyguara.pyguara_core_rs`**. `pyproject.toml` and
@@ -240,10 +240,10 @@ still keep one: `ParticleSystem`, `Sparks`, `FlockingSystem` and
   subsystem: `SpatialHash` membership is bit-exact, the pools compare
   within a tolerance, flocking has one permitted cause of difference.
   Read the parity suite's docstring before touching one.
-- **A Rust-only subsystem is held to recorded values**: the flow field
-  to `tests/golden/flow_field.json`, bit for bit, and to the Python
-  reference in `tests/reference/`. Regenerating a golden file changes
-  what "correct" means; read the diff.
+- **A Rust-only subsystem is held to recorded values** in
+  `tests/golden/` (the flow field bit for bit, `Sparks` to 0.001) and to
+  the Python reference in `tests/reference/`. Regenerating a golden file
+  changes what "correct" means; read the diff.
 - **`SpatialHash` results have no defined order.** Pick by distance or
   id, never the first.
 - **A test's reference must pin the Python store explicitly**

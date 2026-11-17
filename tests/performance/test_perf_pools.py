@@ -4,10 +4,10 @@
 pool and iterate its whole capacity every frame. A dead slot costs one
 boolean test; the cost is integrating the live ones.
 
-Every pool here is pinned to its Python store with `accelerate=False`:
-these are the baseline the native figures in
-`docs/guides/performance.md` are quoted against. One test checks that
-the native store is wired up and materially faster.
+`ParticleSystem` is pinned to its Python store with `accelerate=False`,
+the baseline its native figures in `docs/guides/performance.md` are
+quoted against. `Sparks` has only a Rust pool; its Python baseline is
+`tests.reference.sparks`. One test checks Rust is materially faster.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from tests.performance.conftest import (
     assert_scales_no_worse_than,
     measure,
 )
+from tests.reference.sparks import ReferenceSparks
 
 CAPACITY = 1000
 
@@ -59,7 +60,16 @@ def _particles(capacity: int, live: int) -> ParticleSystem:
 
 def _sparks(capacity: int, live: int) -> Sparks:
     """A spark pool with `live` of `capacity` slots occupied."""
-    pool = Sparks(capacity=capacity, accelerate=False)
+    return _burst_into(Sparks(capacity=capacity), live)
+
+
+def _python_sparks(capacity: int, live: int) -> ReferenceSparks:
+    """The Python reference pool with `live` of `capacity` slots occupied."""
+    return _burst_into(ReferenceSparks(capacity=capacity), live)
+
+
+def _burst_into(pool, live: int):
+    """Occupy `live` slots of a spark pool, Rust or reference."""
     if live:
         pool.burst(
             Vector2(0.0, 0.0),
@@ -71,9 +81,12 @@ def _sparks(capacity: int, live: int) -> Sparks:
 
 
 @pytest.mark.performance
-@pytest.mark.parametrize("make", [_particles, _sparks], ids=["particles", "sparks"])
+@pytest.mark.parametrize("make", [_particles], ids=["particles"])
 def test_the_cost_is_the_live_elements_not_the_dead_slots(make) -> None:
     """Where the time actually goes, which is not where it looks.
+
+    Particles only: in the Rust spark pool a live spark is nearly as
+    cheap as a dead slot, so the ratio says nothing there.
 
     Walking the whole capacity every frame is real and is cheap: a dead
     slot is one boolean test. The integration of a live element is ~90x
@@ -139,7 +152,7 @@ def test_sweep_spark_update(benchmark, live: int) -> None:
     ("make", "native"),
     [
         (_particles, lambda n: ParticleSystem(capacity=n)),
-        (_sparks, lambda n: Sparks(capacity=n)),
+        (_python_sparks, lambda n: Sparks(capacity=n)),
     ],
     ids=["particles", "sparks"],
 )
@@ -153,7 +166,7 @@ def test_the_native_store_is_wired_up_and_materially_faster(make, native) -> Non
     runner; the exact figure is in `docs/guides/performance.md`.
     """
     accelerated = native(CAPACITY)
-    if not accelerated.accelerated:
+    if isinstance(accelerated, ParticleSystem) and not accelerated.accelerated:
         pytest.skip("native extension not built; `cargo build --release`")
 
     python_pool = make(CAPACITY, CAPACITY)

@@ -3,16 +3,15 @@
 Both must stay bounded: a pool that grew, or a shake list that never
 retired an entry, would leak on a busy frame.
 
-Every `Sparks` test runs against both stores; the native cases skip
-when the extension is not built. This file asks whether each store
-behaves, and `tests/test_native_spark_parity.py` whether they agree.
+`Sparks` is held in Rust and has no other implementation, so these fail,
+not skip, without the extension. This file asks whether the pool behaves;
+`tests/test_sparks_reference.py` and `tests/test_sparks_golden.py` ask
+whether it computes the right thing.
 """
 
 from __future__ import annotations
 
 import math
-
-import pytest
 
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Color, Vector2
@@ -21,40 +20,28 @@ from pyguara.graphics.vfx.sparks import Sparks
 
 RED = Color(255, 0, 0)
 
-# `False` is the Python pool, `True` the native one; see `_pool`.
-STORES = [
-    pytest.param(False, id="python"),
-    pytest.param(True, id="native"),
-]
 
-
-def _pool(accelerate: bool, capacity: int, seed: int = 1) -> Sparks:
-    """A spark pool on the requested store, skipping an absent extension."""
-    if accelerate and not Sparks(capacity=1).accelerated:
-        pytest.skip("native extension not built; `cargo build --release`")
-    return Sparks(capacity=capacity, rng=RandomStream(seed), accelerate=accelerate)
+def _pool(capacity: int, seed: int = 1) -> Sparks:
+    """A spark pool on a seeded stream."""
+    return Sparks(capacity=capacity, rng=RandomStream(seed))
 
 
 def velocities(sparks: Sparks) -> list[tuple[float, float]]:
-    """Every live spark's velocity, from whichever store holds it."""
-    if sparks._native is not None:
-        return [
-            sparks._native.slot(i)[2:4]
-            for i in range(sparks._capacity)
-            if sparks._native.slot(i)[6]
-        ]
-    return [(s.velocity.x, s.velocity.y) for s in sparks._pool if s.active]
+    """Every live spark's velocity."""
+    return [
+        sparks._native.slot(i)[2:4]
+        for i in range(sparks._capacity)
+        if sparks._native.slot(i)[6]
+    ]
 
 
 def positions(sparks: Sparks) -> list[tuple[float, float]]:
-    """Every live spark's position, from whichever store holds it."""
-    if sparks._native is not None:
-        return [
-            sparks._native.slot(i)[0:2]
-            for i in range(sparks._capacity)
-            if sparks._native.slot(i)[6]
-        ]
-    return [(s.position.x, s.position.y) for s in sparks._pool if s.active]
+    """Every live spark's position."""
+    return [
+        sparks._native.slot(i)[0:2]
+        for i in range(sparks._capacity)
+        if sparks._native.slot(i)[6]
+    ]
 
 
 class _Recorder:
@@ -84,34 +71,31 @@ class _Recorder:
         self.lines.append((start, end, color, width))
 
 
-@pytest.mark.parametrize("accelerate", STORES)
 class TestSparkPool:
-    def test_a_burst_emits_the_requested_count(self, accelerate: bool) -> None:
-        sparks = _pool(accelerate, 64)
+    def test_a_burst_emits_the_requested_count(self) -> None:
+        sparks = _pool(64)
         sparks.burst(Vector2(10, 10), RED, count=12)
 
         assert sparks.live_count == 12
 
-    def test_a_full_pool_drops_the_excess_rather_than_growing(
-        self, accelerate: bool
-    ) -> None:
+    def test_a_full_pool_drops_the_excess_rather_than_growing(self) -> None:
         """The same contract `ParticleSystem` has: bounded, never resized."""
-        sparks = _pool(accelerate, 8)
+        sparks = _pool(8)
         sparks.burst(Vector2.zero(), RED, count=40)
 
         assert sparks.live_count == 8
         assert sparks._capacity == 8
 
-    def test_particles_retire_when_their_life_runs_out(self, accelerate: bool) -> None:
-        sparks = _pool(accelerate, 16)
+    def test_particles_retire_when_their_life_runs_out(self) -> None:
+        sparks = _pool(16)
         sparks.burst(Vector2.zero(), RED, count=6, life=0.2)
 
         sparks.update(1.0)
 
         assert sparks.live_count == 0
 
-    def test_a_retired_slot_is_reused(self, accelerate: bool) -> None:
-        sparks = _pool(accelerate, 4)
+    def test_a_retired_slot_is_reused(self) -> None:
+        sparks = _pool(4)
         sparks.burst(Vector2.zero(), RED, count=4, life=0.1)
         sparks.update(1.0)
 
@@ -119,8 +103,8 @@ class TestSparkPool:
 
         assert sparks.live_count == 4
 
-    def test_gravity_and_drag_move_a_particle(self, accelerate: bool) -> None:
-        sparks = _pool(accelerate, 4)
+    def test_gravity_and_drag_move_a_particle(self) -> None:
+        sparks = _pool(4)
         sparks.burst(
             Vector2.zero(),
             RED,
@@ -139,8 +123,8 @@ class TestSparkPool:
         assert velocities(sparks)[0][1] == 50.0
         assert positions(sparks)[0][1] == 25.0
 
-    def test_a_directed_burst_stays_inside_its_cone(self, accelerate: bool) -> None:
-        sparks = _pool(accelerate, 64, seed=7)
+    def test_a_directed_burst_stays_inside_its_cone(self) -> None:
+        sparks = _pool(64, seed=7)
         sparks.burst(
             Vector2.zero(),
             RED,
@@ -155,10 +139,9 @@ class TestSparkPool:
             assert abs(math.atan2(y, x)) <= 0.2 + 1e-6
 
 
-@pytest.mark.parametrize("accelerate", STORES)
 class TestSparkRendering:
-    def test_only_live_particles_are_drawn(self, accelerate: bool) -> None:
-        sparks = _pool(accelerate, 16)
+    def test_only_live_particles_are_drawn(self) -> None:
+        sparks = _pool(16)
         sparks.burst(Vector2.zero(), RED, count=5, life=1.0)
         renderer = _Recorder()
 
@@ -166,10 +149,8 @@ class TestSparkRendering:
 
         assert len(renderer.circles) == 5
 
-    def test_streaks_are_drawn_as_lines_rather_than_dots(
-        self, accelerate: bool
-    ) -> None:
-        sparks = _pool(accelerate, 16)
+    def test_streaks_are_drawn_as_lines_rather_than_dots(self) -> None:
+        sparks = _pool(16)
         sparks.burst(Vector2.zero(), RED, count=5, life=1.0, streak=True)
         renderer = _Recorder()
 
@@ -178,8 +159,8 @@ class TestSparkRendering:
         assert len(renderer.lines) == 5
         assert renderer.circles == []
 
-    def test_the_offset_shifts_every_particle(self, accelerate: bool) -> None:
-        sparks = _pool(accelerate, 4)
+    def test_the_offset_shifts_every_particle(self) -> None:
+        sparks = _pool(4)
         sparks.burst(Vector2(100, 100), RED, count=1, speed=0.0, speed_jitter=0.0)
         renderer = _Recorder()
 
@@ -188,8 +169,8 @@ class TestSparkRendering:
         centre = renderer.circles[0][0]
         assert (centre.x, centre.y) == (110, 95)
 
-    def test_a_particle_fades_as_it_ages(self, accelerate: bool) -> None:
-        sparks = _pool(accelerate, 4)
+    def test_a_particle_fades_as_it_ages(self) -> None:
+        sparks = _pool(4)
         sparks.burst(Vector2.zero(), RED, count=1, life=1.0, speed=0.0)
         renderer = _Recorder()
 

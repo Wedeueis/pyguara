@@ -4,8 +4,9 @@ Moved out of `AGENTS.md` on 2026-11-14, unchanged, so that file stays short
 enough to read every session. `AGENTS.md` keeps the rules; this has the
 reasons and the detail.
 
-Three subsystems and one shared primitive have a native implementation
-beside the Python one, and `FlowFieldService` has only the native one:
+Two subsystems and one shared primitive have a native implementation
+beside the Python one, and `FlowFieldService` and `Sparks` have only the
+native one:
 
 | | native gain | |
 | --- | ---: | --- |
@@ -66,6 +67,21 @@ ways:
 Those tests fail, not skip, without the extension. The next store to be
 retired follows the same three steps, in that order.
 
+**`Sparks` is Rust-only too**, the second. The same three steps, with
+one difference: the pool is f32 where the Python pool was f64, so
+nothing about it is bit-exact.
+
+- `tests/golden/sparks.json`: every slot, every unbatched primitive and
+  every batched row after seven scenarios, recorded from the Rust pool
+  where the Python pool agreed to the parity tolerance. Compared to
+  0.001, not exactly, because a burst's velocity passes through
+  `math.cos` and a row's angle through the platform's `atan2`.
+- `tests/reference/sparks.py`: the Python pool, which
+  `tests/test_sparks_reference.py` compares with the old tolerances.
+  The benchmark tools use it as their Python side.
+- Sabotage: gravity applied before drag in `rust/src/sparks.rs` fails 7
+  golden tests and 3 reference tests.
+
 The other pure-Python implementations are kept and still run: under
 `PYGUARA_NO_NATIVE=1`, under `native_acceleration = "off"`, on a platform
 with no wheel, and in a checkout with nothing built yet.
@@ -115,14 +131,13 @@ section was placed there and silently deleted on the next regeneration.
 
 The price of keeping two implementations is that they must agree, which is
 paid by `tests/test_native_particle_parity.py`,
-`tests/test_native_spark_parity.py`,
 `tests/test_native_flocking_parity.py` and
 `tests/test_native_spatial_hash_parity.py` running the same operations
 against both, plus real-GPU pixel comparisons in
 `tests/integration/test_wgpu_pixels.py`. All of those **skip** when the
 extension is not built, so a contributor without Rust sees a green suite
 and has tested none of the accelerator -- build it before trusting a pass
-on anything touching particles, sparks, flocking or spatial queries.
+on anything touching particles, flocking or spatial queries.
 
 **Adding a native store to an existing class changes the meaning of every
 test that constructs it**, which `SpatialHash` demonstrated the hard way:

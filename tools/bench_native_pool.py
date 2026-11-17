@@ -19,7 +19,7 @@ Needs the extension built first, which needs a Rust toolchain:
     uv run python tools/bench_native_pool.py
 
 Parity is *not* checked here -- `tests/test_native_particle_parity.py` and
-`tests/test_native_spark_parity.py` do that properly, and a benchmark that
+`tests/test_sparks_reference.py` do that properly, and a benchmark that
 also claimed to prove correctness proved neither.
 """
 
@@ -40,6 +40,7 @@ from pyguara.common.types import Color, Vector2  # noqa: E402
 from pyguara.graphics.components.particles import ParticleSystem  # noqa: E402
 from pyguara.graphics.types import ShapeBatch, ShapeKind  # noqa: E402
 from pyguara.graphics.vfx.sparks import Sparks  # noqa: E402
+from tests.reference.sparks import ReferenceSparks  # noqa: E402
 
 DT = 1.0 / 60.0
 LIFE = 1e6  # outlive the measurement
@@ -202,9 +203,10 @@ def _particles(live: int, accelerate: bool, *, tinted: bool) -> ParticleSystem:
     return pool
 
 
-def _sparks(live: int, accelerate: bool, streak: bool) -> Sparks:
+def _sparks(live: int, accelerate: bool, streak: bool) -> Sparks | ReferenceSparks:
     """A spark pool with `live` slots occupied."""
-    pool = Sparks(live, RandomStream(SEED), accelerate=accelerate)
+    # `Sparks` is Rust only; its Python side is the test reference.
+    pool = (Sparks if accelerate else ReferenceSparks)(live, RandomStream(SEED))
     pool.burst(
         Vector2.zero(),
         Color(255, 180, 60),
@@ -280,7 +282,9 @@ def main() -> int:
                     else _ShapeSink(batched=False)
                 )
 
-                def render(p: Sparks = pool, s: _ShapeSink = sink) -> None:
+                def render(
+                    p: Sparks | ReferenceSparks = pool, s: _ShapeSink = sink
+                ) -> None:
                     s.clear()
                     p.render(s)  # type: ignore[arg-type]
 

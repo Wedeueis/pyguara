@@ -5,9 +5,9 @@ and `draw_line`, not as textured sprites. Use `ParticleSystem` when
 particles are sprites; a spark has no texture, takes a colour per
 primitive, and batches each shape type into one instanced draw.
 
-Uses the native pool when the extension is built, which hands the
-primitives to the renderer through `ShapeBatch`. See
-`docs/guides/performance.md`.
+The pool is held in Rust as arrays, and hands its primitives to a
+renderer that can take them through `ShapeBatch`. It has no Python
+implementation. See `docs/guides/performance.md`.
 
 Example:
     sparks = Sparks()
@@ -19,41 +19,19 @@ Example:
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from typing import Any
 
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Color, Vector2
 from pyguara.graphics.protocols import IRenderer, ShapeBatchRenderer
 from pyguara.graphics.types import ShapeBatch, ShapeKind
-from pyguara.native import native_module
-
-
-@dataclass(slots=True)
-class _Spark:
-    """One pooled particle. Inactive entries keep their storage."""
-
-    position: Vector2 = field(default_factory=Vector2.zero)
-    velocity: Vector2 = field(default_factory=Vector2.zero)
-    life: float = 0.0
-    life_total: float = 1.0
-    radius: float = 2.0
-    color: Color = field(default_factory=lambda: Color(255, 255, 255))
-    gravity: float = 0.0
-    drag: float = 1.0
-    streak: bool = False
-    active: bool = False
+from pyguara.native import require_extension
 
 
 class Sparks:
     """A pool of short-lived coloured particles."""
 
-    def __init__(
-        self,
-        capacity: int = 320,
-        rng: RandomStream | None = None,
-        *,
-        accelerate: bool | None = None,
-    ) -> None:
+    def __init__(self, capacity: int = 320, rng: RandomStream | None = None) -> None:
         """Pre-allocate the pool.
 
         Args:
@@ -61,53 +39,18 @@ class Sparks:
                 exceed it drops the excess rather than growing, the same
                 way `ParticleSystem` does.
             rng: Random stream driving spread and speed jitter.
-            accelerate: Whether to back the pool with the native
-                structure-of-arrays pool. None, the default, defers to the
-                engine-wide setting -- `PerformanceConfig.native_acceleration`,
-                resolved once at bootstrap -- so a game decides this in one
-                place rather than per pool. True demands the extension and
-                raises if it is missing; False forces the Python pool.
-                Both are overrides for tests and for the parity suite,
-                not a second configuration surface.
 
         Raises:
-            RuntimeError: If `accelerate=True` and the extension is absent.
+            RuntimeError: If the native extension cannot be imported.
         """
         self._capacity = capacity
-        self._next = 0
         self._rng = rng if rng is not None else RandomStream()
-
-        native = native_module() if accelerate is not False else None
-        if accelerate and native is None:
-            raise RuntimeError(
-                "accelerate=True but the native extension is not available. "
-                "Build it with `cargo build --release`, or leave "
-                "`accelerate` unset to fall back to Python."
-            )
-        self._native = native.NativeSparkPool(capacity) if native else None
-
-        # Only the Python path has per-spark objects. Kept as `_pool` for
-        # the code that has always read it; empty under acceleration, where
-        # `live_count` is the way to ask.
-        self._pool: list[_Spark] = (
-            [] if self._native is not None else [_Spark() for _ in range(capacity)]
-        )
-
-    @property
-    def accelerated(self) -> bool:
-        """Whether this pool is backed by the native extension."""
-        return self._native is not None
+        self._native: Any = require_extension("Sparks").NativeSparkPool(capacity)
 
     @property
     def live_count(self) -> int:
-        """How many sparks are currently alive.
-
-        The way to ask on either path: the Python pool exposes `_pool` and
-        the native one has no per-spark objects to expose.
-        """
-        if self._native is not None:
-            return int(self._native.live_count())
-        return sum(1 for spark in self._pool if spark.active)
+        """How many sparks are currently alive."""
+        return int(self._native.live_count())
 
     def burst(
         self,
@@ -142,86 +85,10 @@ class Sparks:
             streak: Draw each particle as a short line along its velocity
                 instead of a dot -- right for rain splashes and embers.
         """
-        if self._native is not None:
-            self._burst_native(
-                position,
-                color,
-                count,
-                speed,
-                speed_jitter,
-                direction,
-                spread,
-                life,
-                radius,
-                gravity,
-                drag,
-                streak,
-            )
-            return
-
-        for _ in range(count):
-            spark = self._acquire()
-            if spark is None:
-                return
-
-            if direction is None:
-                angle = self._rng.uniform(0.0, math.tau)
-            else:
-                angle = direction + self._rng.uniform(-spread / 2, spread / 2)
-            magnitude = speed * (1.0 + self._rng.uniform(-speed_jitter, speed_jitter))
-
-            spark.position = position
-            spark.velocity = Vector2(
-                math.cos(angle) * magnitude, math.sin(angle) * magnitude
-            )
-            spark.life = life * (1.0 + self._rng.uniform(-0.25, 0.25))
-            spark.life_total = spark.life
-            spark.radius = radius
-            spark.color = color
-            spark.gravity = gravity
-            spark.drag = drag
-            spark.streak = streak
-            spark.active = True
-
-    def _burst_native(
-        self,
-        position: Vector2,
-        color: Color,
-        count: int,
-        speed: float,
-        speed_jitter: float,
-        direction: float | None,
-        spread: float,
-        life: float,
-        radius: float,
-        gravity: float,
-        drag: float,
-        streak: bool,
-    ) -> None:
-        """Emit a burst into the native pool, in one crossing.
-
-        The random draws stay in Python, as in `ParticleSystem._emit_native`:
-        a burst takes three per spark from the engine's seeded stream, and a
-        replay restores that seed. They are handed over as whole arrays.
-
-        Only as many sparks as will fit are drawn for, as the Python pool
-        does, so both leave the stream at the same position.
-
-        Args:
-            position: Screen-space origin.
-            color: Starting colour.
-            count: How many to emit; the pool takes what it can fit.
-            speed: Base speed in pixels per second.
-            speed_jitter: Fraction of `speed` to vary each spark by.
-            direction: Centre angle in radians, or None for a full circle.
-            spread: Angular width of the cone around `direction`.
-            life: Seconds each spark lives, jittered per spark.
-            radius: Spark radius in pixels.
-            gravity: Downward acceleration.
-            drag: Per-frame velocity retention.
-            streak: Draw as a line along the velocity rather than a dot.
-        """
-        assert self._native is not None
+        # The random draws stay in Python: a burst takes three per spark
+        # from the engine's seeded stream, and a replay restores that seed.
+        # Only as many sparks as will fit are drawn for, so a burst that
+        # overflows leaves the stream where a smaller one would have.
         spawnable = min(count, self._capacity - int(self._native.live_count()))
 
         velocity_x: list[float] = []
@@ -256,71 +123,20 @@ class Sparks:
         Args:
             dt: Seconds since the last frame.
         """
-        if self._native is not None:
-            self._native.update(dt)
-            return
-
-        for spark in self._pool:
-            if not spark.active:
-                continue
-
-            spark.life -= dt
-            if spark.life <= 0.0:
-                spark.active = False
-                continue
-
-            spark.velocity = Vector2(
-                spark.velocity.x * spark.drag,
-                spark.velocity.y * spark.drag + spark.gravity * dt,
-            )
-            spark.position = spark.position + spark.velocity * dt
+        self._native.update(dt)
 
     def render(self, renderer: IRenderer, offset: Vector2 = Vector2.zero()) -> None:
         """Draw every live particle.
 
-        Args:
-            renderer: Target renderer.
-            offset: Screen-space offset applied to every particle, so the
-                sparks shake with the rest of the arena.
-        """
-        if self._native is not None:
-            self._render_native(renderer, offset)
-            return
-
-        for spark in self._pool:
-            if not spark.active:
-                continue
-
-            remaining = spark.life / spark.life_total if spark.life_total > 0 else 0.0
-            color = Color(
-                spark.color.r,
-                spark.color.g,
-                spark.color.b,
-                int(spark.color.a * remaining),
-            )
-            position = spark.position + offset
-
-            if spark.streak:
-                tail = position - spark.velocity * 0.03
-                renderer.draw_line(
-                    tail, position, color, width=max(1, int(spark.radius))
-                )
-            else:
-                renderer.draw_circle(position, spark.radius * remaining, color)
-
-    def _render_native(self, renderer: IRenderer, offset: Vector2) -> None:
-        """Draw the native pool, batched where the renderer can take it.
-
-        A renderer that implements `ShapeBatchRenderer` receives two calls for
-        the whole pool, with the primitives packed natively. Any other
+        A renderer that implements `ShapeBatchRenderer` receives two calls
+        for the whole pool, with the primitives packed in Rust. Any other
         renderer gets one call per spark.
 
         Args:
             renderer: Target renderer, batched if it can be.
-            offset: Screen-space offset applied to every spark.
+            offset: Screen-space offset applied to every particle, so the
+                sparks shake with the rest of the arena.
         """
-        assert self._native is not None
-
         if isinstance(renderer, ShapeBatchRenderer):
             circles, lines = self._native.pack_rows(offset.x, offset.y)
             if circles:
@@ -339,14 +155,3 @@ class Sparks:
                 Color(*line_color),
                 width=width,
             )
-
-    def _acquire(self) -> _Spark | None:
-        """Return the next free pool slot, or None when the pool is full."""
-        start = self._next
-        while True:
-            spark = self._pool[self._next]
-            self._next = (self._next + 1) % self._capacity
-            if not spark.active:
-                return spark
-            if self._next == start:
-                return None

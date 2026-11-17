@@ -1,13 +1,12 @@
-"""The two spark stores must agree.
+"""The Rust spark pool must agree with the Python reference.
 
-The native path has two render routes. A renderer that implements
+`Sparks` has only a Rust implementation. "Python" below is
+`tests.reference.sparks`, the pool it replaced, kept as test code.
+
+The Rust pool has two render routes. A renderer that implements
 `ShapeBatchRenderer` receives packed instance rows; any other receives
 one `draw_circle` or `draw_line` per spark. Both are compared with
-what the Python pool draws.
-
-Floats are compared with a tolerance, as in
-`tests/test_native_particle_parity.py`. Skipped when the extension is
-not built.
+what the Python pool draws, with a tolerance: f32 against f64.
 """
 
 from __future__ import annotations
@@ -20,32 +19,23 @@ from pyguara.common.random import RandomStream
 from pyguara.common.types import Color, Vector2
 from pyguara.graphics.types import ShapeBatch, ShapeKind
 from pyguara.graphics.vfx.sparks import Sparks
+from tests.reference.sparks import ReferenceSparks
 
 CAPACITY = 64
 DT = 1.0 / 60.0
 AMBER = Color(255, 180, 60)
 
 
-def _available() -> bool:
-    """Whether the native extension is present."""
-    return Sparks(capacity=1).accelerated
-
-
-pytestmark = pytest.mark.skipif(
-    not _available(), reason="native extension not built; `cargo build --release`"
-)
-
-
-def _pair(capacity: int = CAPACITY, seed: int = 99) -> tuple[Sparks, Sparks]:
-    """A Python pool and a native pool on identical seeded streams.
+def _pair(capacity: int = CAPACITY, seed: int = 99) -> tuple[ReferenceSparks, Sparks]:
+    """The Python reference and the Rust pool on identical seeded streams.
 
     The same seed matters: `burst` takes three draws per spark, so two
     pools on different streams spawn different sparks and nothing can be
     compared.
     """
     return (
-        Sparks(capacity, RandomStream(seed), accelerate=False),
-        Sparks(capacity, RandomStream(seed), accelerate=True),
+        ReferenceSparks(capacity, RandomStream(seed)),
+        Sparks(capacity, RandomStream(seed)),
     )
 
 
@@ -107,7 +97,7 @@ def test_a_burst_larger_than_the_pool_fills_it_and_stops() -> None:
 
 
 def test_an_overflowing_burst_leaves_both_streams_in_step() -> None:
-    """The subtle one, and the reason `_burst_native` counts free slots.
+    """The subtle one, and the reason `burst` counts free slots.
 
     The Python pool asks for a slot before it draws, so a burst that
     overflows consumes nothing for the sparks it drops. A native path that
@@ -126,7 +116,7 @@ def test_an_overflowing_burst_leaves_both_streams_in_step() -> None:
 
     expected = sorted(
         (spark.velocity.x, spark.velocity.y)
-        for spark in python_pool._pool
+        for spark in python_pool.pool
         if spark.active
     )
     got = sorted(
@@ -161,7 +151,7 @@ def test_positions_agree_after_a_hundred_ticks() -> None:
 
     expected = sorted(
         (spark.position.x, spark.position.y)
-        for spark in python_pool._pool
+        for spark in python_pool.pool
         if spark.active
     )
     got = sorted(
@@ -303,3 +293,28 @@ def test_an_empty_pool_sends_no_batches() -> None:
     native_pool.render(recorder, Vector2.zero())
 
     assert recorder.batches == []
+
+
+class TestThereIsOneImplementation:
+    """The pool has no Python path left to fall back to."""
+
+    def test_the_store_cannot_be_chosen(self) -> None:
+        with pytest.raises(TypeError):
+            Sparks(capacity=4, accelerate=False)  # type: ignore[call-arg]
+
+    def test_the_engine_wide_switch_does_not_reach_it(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`PYGUARA_NO_NATIVE` picks between two stores; here there is one."""
+        from pyguara import native
+
+        monkeypatch.setenv("PYGUARA_NO_NATIVE", "1")
+        native.reset_for_tests()
+        try:
+            assert native.native_module() is None
+            pool = Sparks(capacity=4)
+            pool.burst(Vector2.zero(), AMBER, count=3, life=1.0)
+            assert pool.live_count == 3
+        finally:
+            monkeypatch.delenv("PYGUARA_NO_NATIVE")
+            native.reset_for_tests()

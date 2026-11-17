@@ -90,6 +90,7 @@ from pyguara.kits.procgen import AdjacencyRule, generate_wfc  # noqa: E402
 from pyguara.kits.projectiles.projectile import Projectile  # noqa: E402
 from pyguara.kits.projectiles.system import ProjectileSystem  # noqa: E402
 from pyguara.native import native_module  # noqa: E402
+from tests.reference.sparks import ReferenceSparks  # noqa: E402
 
 DT = 1.0 / 60.0
 LIFE = 1e6  # outlive the measurement
@@ -228,13 +229,14 @@ def price_particles(live: int) -> Row | None:
 
 def price_sparks(live: int, streak: bool) -> Row | None:
     """Landed. The row that justified `ShapeBatch`."""
-    if not Sparks(capacity=1).accelerated:
+    if native_module() is None:
         return None
 
     sink = _Sink()
     pools = {}
     for accelerate in (False, True):
-        pool = Sparks(live, RandomStream(7), accelerate=accelerate)
+        # `Sparks` is Rust only; its Python side is the test reference.
+        pool = (Sparks if accelerate else ReferenceSparks)(live, RandomStream(7))
         pool.burst(
             Vector2.zero(),
             Color(255, 180, 60),
