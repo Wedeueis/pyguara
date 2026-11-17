@@ -1,15 +1,11 @@
-"""Do the two `SpatialHash` stores agree, and in what sense?
+"""Does the Rust `SpatialHash` agree with the Python reference?
 
-Membership is compared exactly: an index decides which target a
-bullet hits and who is a flockmate. See ADR 0004, Decision 5.
-
-The order of a result differs between the stores and is not defined
-on either, so every comparison here sorts;
-`TestTheOrderIsTheOnlyDivergence` pins that. The native-only guards
-at the end have no Python counterpart: a coordinate outside the
-native cell range, and a query spanning too many cells, both raise.
-
-All of it skips when the extension is absent.
+"Python" below is `tests.reference.spatial`, the index the Rust-only
+`SpatialHash` replaced. Membership is compared exactly: an index
+decides which target a bullet hits and who is a flockmate. The order
+of a result is defined by neither, so every comparison sorts. The
+guards at the end are the Rust index's own and have no Python
+counterpart.
 """
 
 from __future__ import annotations
@@ -21,17 +17,14 @@ import pytest
 from pyguara.common.random import RandomStream
 from pyguara.common.spatial import SpatialHash
 from pyguara.common.types import Rect, Vector2
-from pyguara.native import native_module
-
-pytestmark = pytest.mark.skipif(
-    native_module() is None,
-    reason="native extension not built; `cargo build --release`",
-)
+from tests.reference.spatial import ReferenceSpatialHash
 
 FULL = 0xFFFFFFFF
 
 
-def _both(cell_size: float = 64.0) -> tuple[SpatialHash[str], SpatialHash[str]]:
+def _both(
+    cell_size: float = 64.0,
+) -> tuple[ReferenceSpatialHash[str], SpatialHash[str]]:
     """One index of each store, over the same cell size.
 
     Two separate indexes rather than one driven twice, which the flocking
@@ -39,8 +32,8 @@ def _both(cell_size: float = 64.0) -> tuple[SpatialHash[str], SpatialHash[str]]:
     with no `EntityManager` handing out ids that differ between runs.
     """
     return (
-        SpatialHash[str](cell_size=cell_size, accelerate=False),
-        SpatialHash[str](cell_size=cell_size, accelerate=True),
+        ReferenceSpatialHash[str](cell_size=cell_size),
+        SpatialHash[str](cell_size=cell_size),
     )
 
 
@@ -588,7 +581,7 @@ class TestTheOrderIsTheOnlyDivergence:
         If it were, the native store would owe it. It is not: the result
         comes out of a `set`, whose iteration order is the keys' hashes.
         """
-        python = SpatialHash[str](cell_size=64.0, accelerate=False)
+        python = ReferenceSpatialHash[str](cell_size=64.0)
         keys = [f"key-{i}" for i in range(16)]
         for key in keys:
             python.insert(key, Vector2(0.0, 0.0))
@@ -697,7 +690,7 @@ class TestTheNativeStoreRefusesWhatPythonMerelySurvives:
         query into a hang. The Python store genuinely has no limit, so
         this is not compared against it.
         """
-        native = SpatialHash[str](cell_size=1e-9, accelerate=True)
+        native = SpatialHash[str](cell_size=1e-9)
         native.insert("key", Vector2(0.0, 0.0))
 
         with pytest.raises(ValueError, match="cells per axis"):
@@ -708,7 +701,7 @@ class TestTheNativeStoreRefusesWhatPythonMerelySurvives:
         radius. 1e6 over 64 is 9.8e8 cells, which Python would visit one
         dict lookup at a time rather than refusing.
         """
-        native = SpatialHash[str](cell_size=64.0, accelerate=True)
+        native = SpatialHash[str](cell_size=64.0)
         native.insert("key", Vector2(0.0, 0.0))
 
         with pytest.raises(ValueError, match="cells per axis"):
@@ -719,7 +712,7 @@ class TestTheNativeStoreRefusesWhatPythonMerelySurvives:
         1e5-unit square over 64-unit cells is 2.4 million of them. A
         caller wanting that really wants every key, and should raise
         `cell_size` or iterate instead."""
-        native = SpatialHash[str](cell_size=64.0, accelerate=True)
+        native = SpatialHash[str](cell_size=64.0)
         native.insert("key", Vector2(0.0, 0.0))
 
         with pytest.raises(ValueError, match="cells per axis"):
@@ -729,7 +722,7 @@ class TestTheNativeStoreRefusesWhatPythonMerelySurvives:
         """Python indexes it with an arbitrary-precision cell; the native
         store would saturate two distant cells onto one and then report a
         key from the far side of the world out of `query_point`."""
-        native = SpatialHash[str](cell_size=64.0, accelerate=True)
+        native = SpatialHash[str](cell_size=64.0)
 
         with pytest.raises(ValueError, match="cannot tell two cells apart"):
             native.insert("key", Vector2(1e300, 0.0))
@@ -737,7 +730,7 @@ class TestTheNativeStoreRefusesWhatPythonMerelySurvives:
     def test_the_python_store_accepts_that_same_coordinate(self) -> None:
         """Guards the guard above: if Python ever started rejecting it too,
         the asymmetry would be gone and the note should go with it."""
-        python = SpatialHash[str](cell_size=64.0, accelerate=False)
+        python = ReferenceSpatialHash[str](cell_size=64.0)
 
         python.insert("key", Vector2(1e300, 0.0))
 
@@ -755,8 +748,8 @@ class TestTheNativeStoreRefusesWhatPythonMerelySurvives:
         result while removing keys, is tested in
         `tests/test_common_spatial.py`.
         """
-        python = SpatialHash[object](cell_size=64.0, accelerate=False)
-        native = SpatialHash[object](cell_size=64.0, accelerate=True)
+        python = ReferenceSpatialHash[object](cell_size=64.0)
+        native = SpatialHash[object](cell_size=64.0)
 
         class ReEntersOnce:
             def __init__(self, index: SpatialHash[object]) -> None:
@@ -784,13 +777,30 @@ class TestTheNativeStoreRefusesWhatPythonMerelySurvives:
         on first use; the native store refuses at construction, where the
         error can still name the argument."""
         with pytest.raises(ValueError, match="cell_size"):
-            SpatialHash[str](cell_size=cell_size, accelerate=True)
+            SpatialHash[str](cell_size=cell_size)
 
 
-def test_demanding_the_extension_when_it_is_absent_is_the_loaders_business() -> None:
-    """`accelerate=True` raises only when there is nothing to accelerate
-    with, which under this suite's skip there always is. Pinned anyway, so
-    the message stays the one `pyguara.native` tells everywhere else."""
-    index = SpatialHash[str](accelerate=True)
+class TestThereIsOneImplementation:
+    """The index has no Python path left to fall back to."""
 
-    assert index.accelerated is True
+    def test_the_store_cannot_be_chosen(self) -> None:
+        with pytest.raises(TypeError):
+            SpatialHash[str](accelerate=False)  # type: ignore[call-arg]
+
+    def test_the_engine_wide_switch_does_not_reach_it(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`PYGUARA_NO_NATIVE` picks between two stores; here there is one."""
+        from pyguara import native
+
+        monkeypatch.setenv("PYGUARA_NO_NATIVE", "1")
+        native.reset_for_tests()
+        try:
+            assert native.native_module() is None
+            index = SpatialHash[str]()
+            index.insert("key", Vector2(0.0, 0.0))
+            assert index.query_radius(Vector2(0.0, 0.0), 1.0) == ["key"]
+            assert len(index) == 1
+        finally:
+            monkeypatch.delenv("PYGUARA_NO_NATIVE")
+            native.reset_for_tests()

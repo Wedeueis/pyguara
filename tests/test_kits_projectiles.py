@@ -13,6 +13,7 @@ from pyguara.graphics.components.camera import Camera2D
 from pyguara.kits.action_combat import ARMOR_STAT, DamageDealt, Health, Hurtbox
 from pyguara.kits.projectiles import ProjectileEnd, ProjectileSystem
 from pyguara.kits.stats import DamageType, StatBlock
+from tests.reference.spatial import ReferenceSpatialHash
 
 
 class _FakeRenderer:
@@ -410,15 +411,13 @@ def test_targets_equally_far_along_the_path_are_taken_by_id(
 def test_the_index_order_does_not_choose_the_target(event_dispatcher: Any) -> None:
     """The query's own order is reversed; the same target must still be hit."""
 
-    class _Reversed(SpatialHash[str]):
+    class _Reversed(ReferenceSpatialHash[str]):
         def query_radius(self, *args: Any, **kwargs: Any) -> list[str]:
             return list(reversed(super().query_radius(*args, **kwargs)))
 
     for reverse in (False, True):
         manager = EntityManager()
-        index: SpatialHash[str] = (
-            _Reversed(accelerate=False) if reverse else SpatialHash(accelerate=False)
-        )
+        index: Any = _Reversed() if reverse else ReferenceSpatialHash()
         system = ProjectileSystem(manager, event_dispatcher, index, capacity=4)
         targets = [_target(manager, index, Vector2(50, offset)) for offset in (-2, 2)]
         system.spawn(

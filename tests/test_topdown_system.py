@@ -207,7 +207,7 @@ def test_a_body_moved_elsewhere_still_takes_part_in_separation() -> None:
 _CROWD = """
 from unittest.mock import MagicMock
 from pyguara.common.components import Transform
-from pyguara.common.spatial import SpatialHash
+from tests.reference.spatial import ReferenceSpatialHash
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.kits.topdown_movement.body import TopDownBody
@@ -216,7 +216,7 @@ from pyguara.spatial.components import SpatialTracked
 engine = MagicMock()
 engine.overlap_box.return_value = None
 manager = EntityManager()
-index = SpatialHash(cell_size=32.0, accelerate=False)
+index = ReferenceSpatialHash(cell_size=32.0)
 system = TopDownSystem(manager, engine, index)
 transforms = []
 for i in range(40):

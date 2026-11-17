@@ -4,9 +4,9 @@ The rebuild must stay linear in key count; `FlockingSystem` does a
 full one every tick. A query must stay flat in key count, or the index
 has stopped indexing.
 
-Both complexity guards run against the Python store
-(`accelerate=False` in `build_hash`), so they measure the same thing
-on every machine. The native store has its own guards further down.
+Both complexity guards run against the shipped index, which is Rust
+only. The comparisons further down use the Python reference from
+`tests.reference.spatial` as their baseline.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from tests.performance.conftest import (
     measure,
     uniform_spread_for,
 )
+from tests.reference.spatial import ReferenceSpatialHash
 
 QUERY_RADIUS = 80.0
 
@@ -30,10 +31,8 @@ STORES = [
 ]
 
 
-def _hash(count: int, *, spread: float, accelerate: bool) -> SpatialHash[int]:
-    """`build_hash`, skipping the native store when it is not built."""
-    if accelerate and not SpatialHash[int]().accelerated:
-        pytest.skip("native extension not built; `cargo build --release`")
+def _hash(count: int, *, spread: float, accelerate: bool):
+    """`build_hash`: the Rust index, or the Python reference for False."""
     return build_hash(count, spread=spread, accelerate=accelerate)
 
 
@@ -155,7 +154,7 @@ def test_alternating_writes_and_queries_is_not_slower_natively() -> None:
     _hash(1, spread=spread, accelerate=True)
 
     def alternate(accelerate: bool) -> None:
-        index = SpatialHash[int](accelerate=accelerate)
+        index = (SpatialHash if accelerate else ReferenceSpatialHash)[int]()
         for key, point in zip(keys, points, strict=True):
             index.insert(key, point)
             index.query_radius(point, QUERY_RADIUS)
@@ -182,7 +181,7 @@ def test_alternating_writes_and_queries_does_not_go_quadratic() -> None:
 
     def alternate(count: int) -> None:
         spread = uniform_spread_for(count)
-        index = SpatialHash[int](accelerate=True)
+        index = SpatialHash[int]()
         for key, point in enumerate(_sample_points(spread, count)):
             index.insert(key, point)
             index.query_radius(point, QUERY_RADIUS)
@@ -237,8 +236,6 @@ def test_the_native_advantage_does_not_wash_out_with_density() -> None:
 def test_sweep_rebuild(benchmark, count: int, accelerate: bool) -> None:
     """Report the cost of building a hash of `count` keys."""
     spread = uniform_spread_for(count)
-    if accelerate and not SpatialHash[int]().accelerated:
-        pytest.skip("native extension not built; `cargo build --release`")
     benchmark.pedantic(
         lambda: build_hash(count, spread=spread, accelerate=accelerate),
         rounds=5,

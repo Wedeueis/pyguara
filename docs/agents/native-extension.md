@@ -4,9 +4,9 @@ Moved out of `AGENTS.md` on 2026-11-14, unchanged, so that file stays short
 enough to read every session. `AGENTS.md` keeps the rules; this has the
 reasons and the detail.
 
-One shared primitive, `SpatialHash`, has a native implementation
-beside the Python one. `FlowFieldService`, `Sparks`, `ParticleSystem`
-and `FlockingSystem` have only the native one:
+Four subsystems and one shared primitive had a native implementation
+beside a Python one. All five now have only the native one, and the
+Python implementations live on as test code in `tests/reference/`:
 
 | | native gain | |
 | --- | ---: | --- |
@@ -115,14 +115,24 @@ Recording the vectors is what found that `integrate=False` steered by
 positions the solver advanced and then discarded: the two stores were
 0.1 apart after one tick. That was fixed before the recording was kept.
 
-The other pure-Python implementations are kept and still run: under
-`PYGUARA_NO_NATIVE=1`, under `native_acceleration = "off"`, on a platform
-with no wheel, and in a checkout with nothing built yet.
+**`SpatialHash` is the fifth and last.** Membership is exact, so
+`tests/golden/spatial.json` records the sorted answer to every query in
+six scripts of interleaved writes (1,000 to 4,000 queries each), and
+`tests/test_spatial_hash_golden.py` compares exactly.
+`tests/reference/spatial.py` is the Python index;
+`tests/test_spatial_hash_reference.py` is the old parity suite against
+it. Making the rect query inclusive on its right edge in
+`rust/src/spatialhash.rs` fails three golden tests and one reference
+test. Tests that exist to prove a caller does not depend on result order
+use `ReferenceSpatialHash`, because its order changes per process and the
+Rust index's does not.
+
+None of the five runs without the extension, and their tests fail rather
+than skip without it.
 
 ```bash
 uv sync                              # maturin is the backend; this builds it
 make native                          # rebuild in place after editing Rust
-PYGUARA_NO_NATIVE=1 uv run pytest    # force the Python path
 ```
 
 **`PYGUARA_NO_NATIVE=1` does not reach audio.** `NativeAudioSystem` is a
@@ -162,13 +172,8 @@ Written outside the generated block above on purpose: `pyguara studio
 instructions` rewrites what is inside it, and an earlier version of this
 section was placed there and silently deleted on the next regeneration.
 
-The price of keeping two implementations is that they must agree, which is
-paid by `tests/test_native_spatial_hash_parity.py` running the same operations
-against both, plus real-GPU pixel comparisons in
-`tests/integration/test_wgpu_pixels.py`. All of those **skip** when the
-extension is not built, so a contributor without Rust sees a green suite
-and has tested none of the accelerator -- build it before trusting a pass
-on anything touching spatial queries.
+Real-GPU pixel comparisons are in `tests/integration/test_wgpu_pixels.py`,
+and they skip when there is no adapter.
 
 **Adding a native store to an existing class changes the meaning of every
 test that constructs it**, which `SpatialHash` demonstrated the hard way:
