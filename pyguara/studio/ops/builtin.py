@@ -1091,8 +1091,8 @@ _OPERATIONS: tuple[Operation, ...] = (
             "with the reason when the value is the wrong type, fails "
             "validation, or the setting is pinned by an active profile. A "
             "subsystem that read the setting at startup does not notice "
-            "the change. 'save' writes the configuration file, and is "
-            "refused while a profile is active."
+            "the change. 'save' writes the configuration file; a setting "
+            "an active profile overrides is written with the value under it."
         ),
         risk=RiskClass.WRITE_DISK,
         parameters=_schema(

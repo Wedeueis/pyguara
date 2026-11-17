@@ -152,18 +152,8 @@ def _save(manager: ConfigManager) -> dict[str, Any]:
         The path written.
 
     Raises:
-        OperationError: If profiles are active, or the write failed.
+        OperationError: If the write failed.
     """
-    active = manager.active_profiles
-    if active:
-        # The file holds the settings underneath the profiles. Written
-        # now it would hold the layered values, and a profile meant for
-        # one run would become the game's permanent configuration.
-        raise OperationError(
-            f"Not saved: the profile(s) {', '.join(active)} are active, and "
-            f"the file would be written with their values instead of the "
-            f"ones underneath. Pop them, then save."
-        )
     if not manager.save():
         raise OperationError(
             f"Saving to '{manager.file_path}' failed; the engine log says why."

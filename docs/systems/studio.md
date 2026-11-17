@@ -265,9 +265,9 @@ Four things to know:
 - **Nothing reaches the file until `save`.** Saving leaves the history
   alone, so an edit can still be undone afterwards, and the file then
   holds the value from before the undo until it is saved again.
-- **A setting an active profile sets is shown and not editable**, and
-  `save` is refused while any profile is active: the file would be
-  written with the profile's values in place of the ones underneath.
+- **A setting an active profile sets is shown and not editable.** `save`
+  writes such a setting with the value underneath the profile, and the
+  profile stays applied.
 - **A planned edit announces itself twice.** `plan` mode applies an edit
   and reverts it, and both writes dispatch `OnConfigurationChanged`.
 
