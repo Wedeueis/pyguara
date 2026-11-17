@@ -17,17 +17,16 @@
 //! candidate is a reference count, not a string allocation. Returning
 //! `Vec<String>` would have made the ADR's original objection true.
 //!
-//! **One access pattern is slower here than in Python, and it is
-//! asymptotically slower rather than a little slower.** The grid is
-//! rebuilt on the first query after any write, which costs O(n) and is
-//! free for the pattern every consumer in the engine has -- sync the
-//! whole index, then sweep it, so one rebuild serves `n` queries. A
-//! caller that *alternates* insert and query instead pays for `n`
-//! rebuilds: measured against Python, 1.9x faster at 250 keys, 0.52x at
-//! 1000 and **0.13x at 4000**. Python's incremental insert is O(1) and
-//! wins outright there. `accelerate=False` is the remedy, and
-//! `tests/performance/test_perf_spatial.py` bounds how bad it is allowed
-//! to get.
+//! **A write does not rebuild the grid by itself.** The grid is a
+//! snapshot, rebuilt wholesale in O(n), and a slot written since the
+//! last rebuild is *pending*: skipped where the stale grid lists it and
+//! checked directly by every query. Once more than about `sqrt(2n)`
+//! slots are pending the next query rebuilds instead. So the pattern
+//! every consumer in the engine has -- sync the whole index, then sweep
+//! it -- still costs one rebuild for `n` queries, and a caller that
+//! *alternates* writes and queries pays O(sqrt n) a query where a
+//! rebuild per query made that loop quadratic.
+//! `tests/performance/test_perf_spatial.py` holds both.
 //!
 //! **A key that re-enters the index while being hashed raises here and
 //! does not in Python.** Every method takes `&mut self`, so PyO3 holds an
@@ -86,8 +85,14 @@ pub struct NativeSpatialHash {
     slot_of: Py<PyDict>,
     /// Slots whose key was removed, available for the next insert.
     free: Vec<u32>,
-    /// Set by every write, cleared by the rebuild the next query forces.
+    /// The grid must be rebuilt before the next query can use it.
     dirty: bool,
+    /// Slots written since the grid was built, while there are few
+    /// enough to check one by one. Not maintained once `dirty` is set.
+    pending: Vec<u32>,
+    /// Slot -> whether it is in `pending`, so the grid's stale entry for
+    /// it is skipped.
+    is_pending: Vec<bool>,
     grid: Grid,
     /// Reused between queries, so a query allocates only its result.
     scratch: Vec<u32>,
@@ -113,6 +118,8 @@ impl NativeSpatialHash {
             slot_of: PyDict::new(python).unbind(),
             free: Vec::new(),
             dirty: true,
+            pending: Vec::new(),
+            is_pending: Vec::new(),
             grid: Grid::default(),
             scratch: Vec::new(),
         })
@@ -121,10 +128,8 @@ impl NativeSpatialHash {
     /// Add `key`, or reposition it if already present.
     ///
     /// Unlike the Python index this does no cell comparison to decide
-    /// whether a move is "free": the grid is rebuilt on the next query
-    /// regardless, so checking would be work that changes nothing. That
-    /// deferral is also what makes an alternating insert/query loop
-    /// quadratic here -- see the module docstring.
+    /// whether a move is "free": the slot becomes pending either way,
+    /// and a pending slot is checked by position, not by cell.
     #[pyo3(signature = (key, position, mask = FULL_MASK))]
     fn insert(
         &mut self,
@@ -140,7 +145,7 @@ impl NativeSpatialHash {
             self.xs[slot] = position.0;
             self.ys[slot] = position.1;
             self.masks[slot] = mask;
-            self.dirty = true;
+            self.touched(slot);
             return Ok(());
         }
 
@@ -158,11 +163,12 @@ impl NativeSpatialHash {
                 self.xs.push(position.0);
                 self.ys.push(position.1);
                 self.masks.push(mask);
+                self.is_pending.push(false);
                 self.keys.len() - 1
             }
         };
         map.set_item(key, slot)?;
-        self.dirty = true;
+        self.touched(slot);
         Ok(())
     }
 
@@ -187,7 +193,9 @@ impl NativeSpatialHash {
         self.xs[slot] = f64::NAN;
         self.ys[slot] = f64::NAN;
         self.free.push(slot as u32);
-        self.dirty = true;
+        // The grid is left alone: its entry for this slot fails the
+        // liveness check until a rebuild drops it, and a later insert
+        // that reuses the slot marks it pending.
         Ok(())
     }
 
@@ -210,6 +218,21 @@ impl NativeSpatialHash {
         let found = PyList::empty(python);
         self.grid.visit_bucket(want_cx, want_cy, &mut self.scratch);
         for &slot in &self.scratch {
+            let index = slot as usize;
+            let Some(key) = &self.keys[index] else {
+                continue;
+            };
+            if self.is_pending[index] || self.masks[index] & mask == 0 {
+                continue;
+            }
+            if self.grid.cell_of(self.xs[index]) != want_cx
+                || self.grid.cell_of(self.ys[index]) != want_cy
+            {
+                continue;
+            }
+            found.append(key)?;
+        }
+        for &slot in &self.pending {
             let index = slot as usize;
             let Some(key) = &self.keys[index] else {
                 continue;
@@ -261,12 +284,28 @@ impl NativeSpatialHash {
             let Some(key) = &self.keys[index] else {
                 continue;
             };
-            if self.masks[index] & mask == 0 {
+            if self.is_pending[index] || self.masks[index] & mask == 0 {
                 continue;
             }
             found.append(key)?;
         }
         self.scratch = scratch;
+        // The same squared-distance test `Grid::neighbours` applies.
+        let radius_sq = radius * radius;
+        for &slot in &self.pending {
+            let index = slot as usize;
+            let Some(key) = &self.keys[index] else {
+                continue;
+            };
+            if self.masks[index] & mask == 0 {
+                continue;
+            }
+            let offset_x = self.xs[index] - center.0;
+            let offset_y = self.ys[index] - center.1;
+            if offset_x * offset_x + offset_y * offset_y <= radius_sq {
+                found.append(key)?;
+            }
+        }
         Ok(found)
     }
 
@@ -311,7 +350,7 @@ impl NativeSpatialHash {
             let Some(key) = &self.keys[index] else {
                 continue;
             };
-            if self.masks[index] & mask == 0 {
+            if self.is_pending[index] || self.masks[index] & mask == 0 {
                 continue;
             }
             // `Rect.contains_point` is `left <= x < right`: inclusive on
@@ -326,6 +365,20 @@ impl NativeSpatialHash {
             found.append(key)?;
         }
         self.scratch = scratch;
+        for &slot in &self.pending {
+            let index = slot as usize;
+            let Some(key) = &self.keys[index] else {
+                continue;
+            };
+            if self.masks[index] & mask == 0 {
+                continue;
+            }
+            let (x, y) = (self.xs[index], self.ys[index]);
+            if x < left || x >= right || y < top || y >= bottom {
+                continue;
+            }
+            found.append(key)?;
+        }
         Ok(found)
     }
 
@@ -337,12 +390,35 @@ impl NativeSpatialHash {
 }
 
 impl NativeSpatialHash {
-    /// Re-index, if a write has happened since the last query.
+    /// Record that a slot's position or mask was written.
+    ///
+    /// The slot joins `pending` while that list is short enough to scan
+    /// on every query. Past `sqrt(2n)` slots, scanning costs more than a
+    /// rebuild amortised over the queries it serves, so the index is
+    /// marked for one and stops tracking.
+    fn touched(&mut self, slot: usize) {
+        if self.dirty || self.is_pending[slot] {
+            return;
+        }
+        let limit = (((2 * self.keys.len()) as f64).sqrt() as usize).max(16);
+        if self.pending.len() >= limit {
+            self.dirty = true;
+            return;
+        }
+        self.pending.push(slot as u32);
+        self.is_pending[slot] = true;
+    }
+
+    /// Re-index, if enough has been written since the grid was built.
     fn rebuild_if_dirty(&mut self) {
         if !self.dirty {
             return;
         }
         self.grid.build(&self.xs, &self.ys, self.cell_size);
+        for &slot in &self.pending {
+            self.is_pending[slot as usize] = false;
+        }
+        self.pending.clear();
         self.dirty = false;
     }
 }

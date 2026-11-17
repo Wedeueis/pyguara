@@ -27,12 +27,14 @@ which stays declined as a port of its own. `docs/guides/performance.md`
 has the whole table and ADR 0004 Decision 7 has why a primitive is priced
 differently.
 
-`SpatialHash` is also the first native store that is **worse** than
-Python at something. It rebuilds its grid on the first query after any
-write, which is free for the pattern every consumer has -- sync the index,
-then sweep it -- and quadratic for a caller that alternates `insert` and a
-query: 0.13x the Python speed over 4000 keys. Nothing in the engine does
-that; `accelerate=False` is the answer for a game that does.
+`SpatialHash` used to be **worse** than Python at one thing: it rebuilt
+its grid on the first query after any write, which is free when a caller
+syncs the index and then sweeps it and quadratic when a caller
+alternates `insert` and a query. A written slot is now kept on a short
+pending list and checked directly, and the grid is rebuilt only once
+about `sqrt(2n)` slots are pending, so the alternating loop is 5x faster
+than Python at 4000 keys where it was 4x slower.
+`docs/guides/performance.md` has the table.
 
 A key whose `__hash__` or `__eq__` calls back into the same index raises
 `RuntimeError: Already borrowed` on the native store, which holds an
