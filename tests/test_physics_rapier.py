@@ -449,3 +449,42 @@ def test_the_config_chooses_rapier(
         assert isinstance(app.container.get(IPhysicsEngine), RapierEngine)
     finally:
         app.shutdown()
+
+
+class TestCreatePhysicsEngine:
+    """One place builds the configured engine, so a game's own world -- a
+    room's walls -- follows `physics.backend` as bootstrap's does. Reclaimer
+    built its walls on `PymunkEngine()` by name and never saw Rapier."""
+
+    def test_rapier_is_built_with_the_substeps(self) -> None:
+        from pyguara.config.types import PhysicsBackend, PhysicsConfig
+        from pyguara.physics import create_physics_engine
+
+        engine = create_physics_engine(
+            PhysicsConfig(backend=PhysicsBackend.RAPIER, substeps=3)
+        )
+
+        assert isinstance(engine, RapierEngine)
+        assert engine._substeps == 3
+
+    def test_pymunk_is_built_with_chipmunks_tunings(self) -> None:
+        from pyguara.config.types import PhysicsConfig
+        from pyguara.physics import create_physics_engine
+
+        engine = create_physics_engine(
+            PhysicsConfig(
+                substeps=2, penetration_recovery=0.5, sleep_time_threshold=1.5
+            )
+        )
+
+        assert isinstance(engine, PymunkEngine)
+        assert engine._substeps == 2
+        assert engine._penetration_recovery == 0.5
+        assert engine._sleep_time_threshold == 1.5
+
+    def test_each_call_is_a_new_world(self) -> None:
+        from pyguara.config.types import PhysicsConfig
+        from pyguara.physics import create_physics_engine
+
+        config = PhysicsConfig()
+        assert create_physics_engine(config) is not create_physics_engine(config)
