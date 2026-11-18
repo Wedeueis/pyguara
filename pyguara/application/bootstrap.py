@@ -605,6 +605,11 @@ def _setup_container(
             sleep_time_threshold=physics_config.sleep_time_threshold,
         )
     container.register_instance(IPhysicsEngine, physics_engine)
+    logger.info(
+        "physics: %s, %d substeps",
+        physics_config.backend.value,
+        physics_config.substeps,
+    )
 
     # Collision System (bridges pymunk callbacks to PyGuara events)
     collision_system = CollisionSystem(event_dispatcher)
