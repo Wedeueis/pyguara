@@ -1,8 +1,8 @@
-"""The Rapier physics backend, beside pymunk until it matches it.
+"""The Rapier physics backend, the default.
 
 `RapierEngine` keeps `IPhysicsEngine`'s contract over a Rapier world held
-in the native extension (`rust/src/physics.rs`). It is chosen with
-`physics.backend = "rapier"`; pymunk stays the default (roadmap 6e).
+in the native extension (`rust/src/physics.rs`). `physics.backend =
+"pymunk"` chooses Chipmunk instead.
 
 Segment and polygon shapes, which the pymunk backend refuses too, and a
 `max_force` on a joint other than a motor raise `NotImplementedError`.
