@@ -1,6 +1,6 @@
 # ADR 0008: The columnar world spike
 
-**Status:** In progress -- increment 1 of the spike, measured. No decision yet.
+**Status:** In progress -- increments 1 and 2 measured; criterion 1 met. No decision yet.
 **Date:** 2026-11-10
 **Scope:** This fork only. `Wedeueis/pyguara` is unchanged by any of it.
 
@@ -148,6 +148,38 @@ Increment 2 is therefore a columnar `Transform` and `Sprite`, a native
 extraction that sorts, batches and packs instances from them, and the
 20,000-sprite frame measured against the 39.2 ms in
 `docs/guides/performance.md`.
+
+## Increment 2: sprites drawn from columns
+
+**Criterion 1 is met: 1.7 ms against the 4 ms bar.**
+
+`ColumnarSprite` and `ColumnarTransform` (`pyguara/columnar/render.py`) hold
+the fields `Scene.render` reads from `Sprite` and `Transform`. The native
+`SpriteExtraction` (`rust/src/extract.rs`) reads them in place, joins the
+two tables, places and sorts each sprite by `Scene.render`'s and
+`RenderQueue`'s rules, and pushes each instance into the `NativeGpu` through
+the same function `NativeGpu.sprites` uses. `tests/test_columnar_render.py`
+holds the instance bytes equal to the object path's, ties and all.
+
+Building the frame's instances at 20,000 sprites:
+
+| | Objects | Columns | |
+| --- | ---: | ---: | ---: |
+| One texture | 51.3-52.2 ms | 1.62-1.75 ms | 30-32x |
+| Texture changes every sprite | 156-170 ms | 2.00-2.06 ms | 76-83x |
+
+The object side here includes the scene's component reads and the hand-over
+to `NativeGpu.sprites`, so it is larger than the 39.9 ms in
+`docs/guides/performance.md`, which stops at the batches.
+
+What it leaves out, each of which keeps a sprite in the object ECS: atlas
+regions, materials, `Transform` parenting (the column is a world position),
+and anything the object `Sprite` holds that is not a number.
+
+Criterion 4 holds for what exists: nothing on the object path changed except
+that `NativeGpu.sprites` now calls the shared per-sprite function, and the
+pixel and snapshot suites pass. Criterion 2, flocking over columns, is not
+built.
 
 ## Decisions taken in this increment
 

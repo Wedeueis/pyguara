@@ -304,6 +304,63 @@ impl NativeWorld {
     }
 }
 
+/// One component's rows, read in place by a native system in this crate.
+///
+/// `entities[row]` is the row's owner, or `u64::MAX` for a tombstone,
+/// which a reader skips.
+pub(crate) struct TableRead<'a> {
+    pub(crate) entities: &'a [u64],
+    held: &'a Table,
+}
+
+impl<'a> TableRead<'a> {
+    fn wrong(&self, column: usize, dtype: &str) -> PyErr {
+        PyTypeError::new_err(format!(
+            "column {column} of component {:?} is not {dtype}",
+            self.held.name
+        ))
+    }
+
+    pub(crate) fn f64(&self, column: usize) -> PyResult<&'a [f64]> {
+        check_column(self.held, column)?;
+        match &self.held.columns[column] {
+            Column::F64(values) => Ok(values),
+            _ => Err(self.wrong(column, "f8")),
+        }
+    }
+
+    pub(crate) fn i64(&self, column: usize) -> PyResult<&'a [i64]> {
+        check_column(self.held, column)?;
+        match &self.held.columns[column] {
+            Column::I64(values) => Ok(values),
+            _ => Err(self.wrong(column, "i8")),
+        }
+    }
+
+    pub(crate) fn u8(&self, column: usize) -> PyResult<&'a [u8]> {
+        check_column(self.held, column)?;
+        match &self.held.columns[column] {
+            Column::U8(values) => Ok(values),
+            _ => Err(self.wrong(column, "u1")),
+        }
+    }
+
+    /// The row of a live owner seen in another table, if it has one here.
+    pub(crate) fn row_of(&self, owner: u64) -> Option<usize> {
+        self.held.row_of(index_of(owner))
+    }
+}
+
+impl NativeWorld {
+    pub(crate) fn read(&self, table: usize) -> PyResult<TableRead<'_>> {
+        let held = self.table(table)?;
+        Ok(TableRead {
+            entities: &held.entities,
+            held,
+        })
+    }
+}
+
 fn check_column(held: &Table, column: usize) -> PyResult<()> {
     if column < held.columns.len() {
         Ok(())

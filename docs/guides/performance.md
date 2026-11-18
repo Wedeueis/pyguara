@@ -1114,6 +1114,35 @@ is paid. This is the number a culling change would have to beat; it is recorded
 rather than acted on, because for a game where everything is on screen anyway
 culling buys nothing, and the trade only pays in a large scrolling world.
 
+### Sprites from columns — milliseconds to build a frame
+
+ADR 0008's deciding criterion: the CPU side of a 20,000-sprite frame, under
+4 ms. The object side is everything between the components and the GPU's
+instance list: `Scene.render`'s loop, `RenderSystem.submit`, the sort, the
+`Batcher` and `WgpuRenderer.render_batch` into `NativeGpu.sprites`. The
+columnar side is one `ColumnarSpriteRenderer.draw`, which reads the same fields
+from columns and pushes the same instances (`tests/test_columnar_render.py`
+compares the bytes). Rendering the frame is the same on both and left out.
+
+Every sprite has a transform, a turn, a scale and a tint. Ten textures means
+the texture changes on every sprite, which is the worst case for batching.
+Best of seven, three fresh processes, WSL2, RTX 3050 through D3D12;
+`tools/columnar_probe.py` reproduces it.
+
+| Sprites | Textures | Objects | Columns | |
+| ---: | ---: | ---: | ---: | ---: |
+| 1,000 | 1 | 2.09 | 0.093 | 23x |
+| 5,000 | 1 | 11.42 | 0.415 | 28x |
+| 20,000 | 1 | 51.3–52.2 | **1.62–1.75** | **30–32x** |
+| 1,000 | 10 | 5.34 | 0.113 | 47x |
+| 5,000 | 10 | 29.46 | 0.531 | 55x |
+| 20,000 | 10 | 156–170 | 2.00–2.06 | 76–83x |
+
+**Criterion 1 is met:** 1.7 ms against the 4 ms bar. The object frame here is
+larger than the 39.9 ms "CPU frame" above because that one stops at the
+batches, and this one includes the scene's component reads and the hand-over
+to `NativeGpu.sprites`.
+
 ---
 
 ## Rendering, GL side
