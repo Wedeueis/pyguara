@@ -69,6 +69,11 @@ query, every joint type, one-way platforms and the native swept mover
 `tests/test_physics_rapier_sweep.py`, and `tests/test_joint_system.py`
 and the platformer feel suite, which run on both).
 
+A game that builds a physics world of its own -- a room's walls kept
+apart from the main world, say -- should make it with
+`pyguara.physics.create_physics_engine(config.physics)` rather than
+naming an engine class, so that world follows `physics.backend` too.
+
 Refused rather than ignored: segment and polygon colliders, which pymunk
 refuses too, and a `max_force` on any joint but a motor, which Rapier can
 cap only on a motor. Both raise `NotImplementedError`.

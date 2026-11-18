@@ -12,7 +12,6 @@ from pyguara.config.manager import ConfigManager
 from pyguara.config.types import (
     AudioBackend,
     GameConfig,
-    PhysicsBackend,
     RenderingBackend,
 )
 from pyguara.di.container import DIContainer
@@ -27,9 +26,8 @@ from pyguara.log import LogManager, default_log_manager
 from pyguara.persistence.manager import PersistenceManager
 from pyguara.persistence.migration import MigrationManager, get_global_registry
 from pyguara.persistence.storage import FileStorageBackend
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
-from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.collision_system import CollisionSystem
+from pyguara.physics.engines import create_physics_engine
 from pyguara.physics.protocols import IPhysicsEngine
 from pyguara.prefabs.loader import PrefabCache, PrefabLoader
 from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
@@ -593,17 +591,7 @@ def _setup_container(
 
     # Physics Engine
     physics_config = config_manager.config.physics
-    physics_engine: PymunkEngine | RapierEngine
-    if physics_config.backend is PhysicsBackend.RAPIER:
-        # Rapier has its own contact solver; the two Chipmunk tunings below
-        # do not apply to it.
-        physics_engine = RapierEngine(substeps=physics_config.substeps)
-    else:
-        physics_engine = PymunkEngine(
-            substeps=physics_config.substeps,
-            penetration_recovery=physics_config.penetration_recovery,
-            sleep_time_threshold=physics_config.sleep_time_threshold,
-        )
+    physics_engine = create_physics_engine(physics_config)
     container.register_instance(IPhysicsEngine, physics_engine)
     logger.info(
         "physics: %s, %d substeps",

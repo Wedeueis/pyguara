@@ -3,6 +3,7 @@
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
 from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.components import Collider, RigidBody
+from pyguara.physics.engines import create_physics_engine
 from pyguara.physics.joint_system import JointSystem
 from pyguara.physics.joints import (
     Joint,
@@ -25,6 +26,7 @@ __all__ = [
     "Collider",
     "PhysicsSystem",
     "PymunkEngine",
+    "create_physics_engine",
     "CollisionSystem",
     "Joint",
     "JointSystem",
