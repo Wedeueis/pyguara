@@ -2109,6 +2109,7 @@ dependencies = [
  "symphonia",
  "wgpu",
  "winit",
+ "xkbcommon-dl",
 ]
 
 [[package]]

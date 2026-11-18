@@ -82,6 +82,12 @@ On Linux, gamepad support also needs udev's headers:
 sudo apt install libudev-dev pkg-config
 ```
 
+Under WSLg the window opens on X11, because WSLg's Wayland draws the
+window's frame as a garbage band. X11 keyboard input needs
+`sudo apt install libxkbcommon-x11-0`. Without it the window stays on
+Wayland and the log says so. `PYGUARA_WINDOW_SYSTEM=x11` or `wayland`
+chooses the window system on any Linux.
+
 ## A first scene
 
 ```python

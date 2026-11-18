@@ -82,6 +82,12 @@ ab_glyph_rasterizer = "0.1.10"
 # Linux: cpal links ALSA at load time there, so a machine without
 # `libasound.so.2` (a slim container, a server) could not import the
 # extension at all. See `rust/src/mixer.rs`.
+# winit's own loader for the keyboard libraries, which it panics without on
+# Linux. Asked first, so their absence is an error naming the package. The
+# version winit uses, so it is the same library handle. See `rust/src/window.rs`.
+[target.'cfg(target_os = "linux")'.dependencies]
+xkbcommon-dl = { version = "0.4", features = ["x11"] }
+
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 cpal = { version = "0.18", optional = true }
 
