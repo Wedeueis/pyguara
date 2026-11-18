@@ -1,8 +1,8 @@
 # Physics System
 
 PyGuara simulates physics with **Rapier**, in the native extension, behind
-the `IPhysicsEngine` protocol. **Pymunk** (Chipmunk2D), the engine before
-it, can still be chosen; see [Two engines](#two-engines).
+the `IPhysicsEngine` protocol. It replaced **pymunk** (Chipmunk2D); see
+[Coming from pymunk](#coming-from-pymunk).
 
 ## Components
 
@@ -31,75 +31,60 @@ The `PhysicsSystem` synchronizes the ECS `Transform` component with the physics 
 
 ### Substepping
 
-Neither engine runs continuous collision detection: in one solver step a
-body moves `velocity × dt` in a straight line and passes through anything
-thinner than that jump. `physics.substeps` (default **4**) splits each tick
-into that many solver steps to shorten the jump. Measured on Chipmunk
-against a 10px wall, 1/2/4 substeps stop a body up to roughly
-200/400/900 px/s. Four is cheap
-(~0.65 ms/update at 200 dynamic bodies) and the headroom matters for
-knockback and explosion-flung props; drop it to 2 only when simulating many
-hundreds of fast bodies, and let fast projectiles use `raycast` rather than
-leaning on the solver to catch them.
+The world runs no continuous collision detection, so in principle a body
+moving `velocity × dt` in one solver step can pass through anything thinner
+than that jump. `physics.substeps` (default **4**) splits each tick into
+that many solver steps to shorten it.
 
-### Body sleeping (pymunk)
+In practice Rapier keeps thin walls solid without them. Measured with
+`tests/integration/test_collision_robustness.py`'s `fire_at_wall` and **one**
+substep, an 8px box stops at a 10px wall at 20,000 px/s (333px a step), and
+a 1px box at a 1px wall. Only a circle of 1 or 2px fired into a wall as
+thin, at 20,000 px/s, came out just past it. Chipmunk tunnelled at 1,200
+px/s through that 10px wall with one substep. Fast projectiles should still
+use `raycast` rather than lean on the solver.
 
-Rapier sleeps bodies by its own rule; this setting is Chipmunk's.
+### The engine
 
-`physics.sleep_time_threshold` (default **0.5 s**) is how long a body must
-hold still before Chipmunk lets it *sleep* — drop out of the solver until
-something disturbs it. Without it (Chipmunk's own default) a room full of
-settled props and debris is simulated forever. A body wakes automatically the
-moment anything writes its state: a `position`, `rotation` or `velocity`
-assignment, an `apply_force` / `apply_impulse`, or a fresh collision. Set the
-threshold to `0` to disable sleeping entirely.
-
-Two consequences worth knowing:
-
-- A body resting on a **kinematic** platform never sleeps — a kinematic body
-  is never idle — so a moving-platform ride keeps its rider awake.
-- Reading a sleeping body's position is fine and cheap; it still appears in
-  every [spatial query](queries.md).
-
-### Two engines
-
-`physics.backend` chooses the engine: `rapier`, the default, a Rapier
-world in the native extension, or `pymunk`, which was the default before
-it. `PYGUARA_PHYSICS_BACKEND` overrides it, and bootstrap logs the one in
-use (`physics: rapier, 4 substeps`). Rapier covers bodies, circle and box
-colliders, materials, collision layers and groups, sensors, collision
-events, forces and impulses, every query, every joint type, one-way
-platforms and the native swept mover (`sweep_box`, `step_bodies`), all
-held to the same tests as pymunk
-(`tests/test_physics_rapier.py`, `tests/test_physics_rapier_joints.py`,
-`tests/test_physics_rapier_sweep.py`, and `tests/test_joint_system.py`
-and the platformer feel suite, which run on both).
+`physics.backend` names the engine, and `rapier` is the only one.
+Bootstrap logs it with the substep count (`physics: rapier, 4 substeps`).
+It covers bodies, circle and box colliders, materials, collision layers
+and groups, sensors, collision events, forces and impulses, every query,
+every joint type, one-way platforms and the native swept mover
+(`sweep_box`, `step_bodies`).
 
 A game that builds a physics world of its own -- a room's walls kept
 apart from the main world, say -- should make it with
-`pyguara.physics.create_physics_engine(config.physics)` rather than
-naming an engine class, so that world follows `physics.backend` too.
+`pyguara.physics.create_physics_engine(config.physics)`, so it is
+configured as the main one is.
 
-Refused rather than ignored: segment and polygon colliders, which pymunk
-refuses too, and a `max_force` on any joint but a motor, which Rapier can
-cap only on a motor. Both raise `NotImplementedError`.
+Refused rather than ignored: segment and polygon colliders, and a
+`max_force` on any joint but a motor, which Rapier can cap only on a
+motor. Both raise `NotImplementedError`.
 
-Where the two differ on purpose or for now:
+### Coming from pymunk
+
+pymunk was the engine until 0.8. `physics.backend = "pymunk"`, in a config
+file or as `PYGUARA_PHYSICS_BACKEND`, now stops the game at startup with
+`RetiredBackendError`. `PymunkEngine` is gone; `RapierEngine` or
+`create_physics_engine` replaces it. Chipmunk's two tunings,
+`physics.penetration_recovery` and `physics.sleep_time_threshold`, are gone
+with it, and a config file that still sets them loads with a warning naming
+each key. `Vector2` still subclasses `pymunk.Vec2d`, so the package itself
+is still installed.
+
+What a game notices:
 
 - **Collision events are reported after each solver step**, not during
   it. A pair whose `on_collision_begin` returns False is resolved for one
-  solver step before it stops being; pymunk stops at once.
-- **A ray is a line**, where pymunk's has a radius of one pixel.
+  solver step before it stops being; Chipmunk stopped at once.
+- **A ray is a line**, where Chipmunk's had a radius of one pixel.
 - **Results differ**: Rapier settles a stack differently, so a replay or a
-  golden frame with rigid bodies in it changes when a game switches.
-- `penetration_recovery` and `sleep_time_threshold` are Chipmunk's tuning
-  and do not apply.
-
-With a collision system attached, which every game started through
-`create_application` has, Rapier steps a pile of falling boxes in about a
-fifth of pymunk's time. Its swept mover keeps its speed with moving
-bodies in the world, where pymunk's static mirror gives way to Chipmunk;
-see [performance](../guides/performance.md).
+  golden frame with rigid bodies in it changed with the switch.
+- With a collision system attached, which every game started through
+  `create_application` has, Rapier steps a pile of falling boxes in about a
+  fifth of pymunk's time, and its swept mover keeps its speed with moving
+  bodies in the world; see [performance](../guides/performance.md).
 
 ## Collision Handling
 
@@ -116,7 +101,7 @@ def on_collision(self, event: OnCollisionBegin):
     print(f"Entities {event.entity_a} and {event.entity_b} collided!")
 ```
 
-The engine reports a contact pair in Chipmunk's own order and tells
+The engine reports a contact pair in its own order and tells
 `CollisionSystem` which side owns the sensor; the trigger events always come
 out with `trigger_entity` set to the sensor's entity and `other_entity` the
 body that entered it, regardless of that order.

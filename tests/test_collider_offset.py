@@ -1,9 +1,9 @@
 """`Collider.offset` moves the collider, everywhere it is consulted.
 
 The field is documented as "local offset from the RigidBody center" and was
-honoured in exactly two places: the pymunk CIRCLE branch, and
-`physics/debug_draw.py`. The pymunk BOX branch -- the default shape
-type -- dropped it, and so did every mover probe. The debug overlay
+honoured in exactly two places: the engine's CIRCLE shape, and
+`physics/debug_draw.py`. The BOX shape -- the default shape type --
+dropped it, and so did every mover probe. The debug overlay
 therefore drew a collider in one place while the simulation used another.
 
 Nothing in the engine, the demos or the tests had ever set a non-zero
@@ -17,7 +17,7 @@ import pytest
 
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.bounds import collider_bounds
 from pyguara.physics.components import Collider
 from pyguara.physics.types import (
@@ -55,16 +55,31 @@ def test_bounds_without_a_collider_uses_the_callers_default() -> None:
 
 
 # --------------------------------------------------------------------------
-# The pymunk backend
+# The physics backend
 # --------------------------------------------------------------------------
 @pytest.fixture
-def engine() -> PymunkEngine:
-    engine = PymunkEngine()
+def engine() -> RapierEngine:
+    engine = RapierEngine()
     engine.initialize(Vector2(0.0, 900.0))
     return engine
 
 
-def _shape_centre_y(engine: PymunkEngine, shape_type: ShapeType, offset: Vector2):
+def _extent(engine: RapierEngine, through: Vector2) -> tuple[float, ...]:
+    """`(left, top, right, bottom)` of what is at `through`, read by rays
+    fired at it from outside along both axes."""
+    far = 10_000.0
+    left = engine.raycast(Vector2(-far, through.y), through)
+    right = engine.raycast(Vector2(far, through.y), through)
+    top = engine.raycast(Vector2(through.x, -far), through)
+    bottom = engine.raycast(Vector2(through.x, far), through)
+    assert left and right and top and bottom, "nothing there to measure"
+    return (left.position.x, top.position.y, right.position.x, bottom.position.y)
+
+
+def _shape_centre_y(shape_type: ShapeType, offset: Vector2) -> float:
+    # A world of its own: the rays would find any other body at the spot.
+    engine = RapierEngine()
+    engine.initialize(Vector2(0.0, 0.0))
     handle = engine.create_body(
         entity_id=f"e-{shape_type.name}-{offset.y}",
         body_type=BodyType.DYNAMIC,
@@ -81,23 +96,21 @@ def _shape_centre_y(engine: PymunkEngine, shape_type: ShapeType, offset: Vector2
         collision_layer=CollisionLayer(),
         is_sensor=False,
     )
-    box = next(iter(handle._body.shapes)).bb
-    return (box.bottom + box.top) / 2.0
+    _, top, _, bottom = _extent(engine, Vector2(100.0, 100.0) + offset)
+    return (top + bottom) / 2.0
 
 
 @pytest.mark.parametrize("shape_type", [ShapeType.CIRCLE, ShapeType.BOX])
-def test_the_shape_is_built_at_the_offset(
-    engine: PymunkEngine, shape_type: ShapeType
-) -> None:
+def test_the_shape_is_built_at_the_offset(shape_type: ShapeType) -> None:
     """BOX used `Poly.create_box`, which always centres on the body origin
     and takes no transform, so the offset was silently discarded."""
-    without = _shape_centre_y(engine, shape_type, Vector2(0.0, 0.0))
-    with_offset = _shape_centre_y(engine, shape_type, OFFSET)
+    without = _shape_centre_y(shape_type, Vector2(0.0, 0.0))
+    with_offset = _shape_centre_y(shape_type, OFFSET)
 
     assert with_offset == pytest.approx(without + OFFSET.y, abs=0.01)
 
 
-def test_a_box_keeps_its_size_when_offset(engine: PymunkEngine) -> None:
+def test_a_box_keeps_its_size_when_offset(engine: RapierEngine) -> None:
     """Built from vertices now rather than `create_box`, so the dimensions
     are worth re-asserting."""
     handle = engine.create_body(
@@ -115,15 +128,15 @@ def test_a_box_keeps_its_size_when_offset(engine: PymunkEngine) -> None:
         collision_layer=CollisionLayer(),
         is_sensor=False,
     )
-    box = next(iter(handle._body.shapes)).bb
+    left, top, right, bottom = _extent(engine, OFFSET)
 
-    assert box.right - box.left == pytest.approx(32.0, abs=0.01)
-    assert box.top - box.bottom == pytest.approx(48.0, abs=0.01)
+    assert right - left == pytest.approx(32.0, abs=0.01)
+    assert bottom - top == pytest.approx(48.0, abs=0.01)
 
 
 @pytest.mark.parametrize("shape_type", [ShapeType.SEGMENT, ShapeType.POLYGON])
 def test_an_unimplemented_shape_raises_instead_of_vanishing(
-    engine: PymunkEngine, shape_type: ShapeType
+    engine: RapierEngine, shape_type: ShapeType
 ) -> None:
     """These are in `ShapeType` and unhandled. They used to fall through
     with `shape` still None, so `add_shape` returned None having attached
@@ -147,4 +160,4 @@ def test_an_unimplemented_shape_raises_instead_of_vanishing(
             is_sensor=False,
         )
 
-    assert len(list(handle._body.shapes)) == 0
+    assert engine.point_query(Vector2(0.0, 0.0)) == []

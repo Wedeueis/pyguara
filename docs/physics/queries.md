@@ -80,6 +80,5 @@ blocked = engine.overlap_box(doorway_centre, Vector2(16, 24), ignore_entity_id=c
 
 The queries read the world; they do not advance it, and they take no random
 input, so they are safe to call from anywhere in a frame and do not affect
-deterministic replay. `raycast` / `raycast_all` use a 1px-radius swept circle
-(Chipmunk has no zero-width ray), so a hit can register a pixel early against
-a shape the mathematical line would just miss.
+deterministic replay. `raycast` / `raycast_all` cast a line of zero width,
+so a hit lands exactly where the line meets the shape.

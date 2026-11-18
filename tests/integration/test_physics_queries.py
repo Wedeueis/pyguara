@@ -7,7 +7,7 @@ ruled out click-picking, explosion radii, melee arcs, piercing shots and
 `raycast_all`) plus the `mask` parameter added to `overlap_box`.
 
 Every query here is exercised against bodies built directly in a
-`PymunkEngine`, in a mix of positions, layers and shape counts -- not the
+`RapierEngine`, in a mix of positions, layers and shape counts -- not the
 single slow-body-at-rest that the rest of the physics suite reuses.
 """
 
@@ -16,7 +16,7 @@ from __future__ import annotations
 import pytest
 
 from pyguara.common.types import Rect, Vector2
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.types import (
     BodyType,
     CollisionLayer,
@@ -30,15 +30,15 @@ MAT = PhysicsMaterial()
 
 
 @pytest.fixture
-def engine() -> PymunkEngine:
+def engine() -> RapierEngine:
     """An initialised, gravity-free space."""
-    eng = PymunkEngine(substeps=1)
+    eng = RapierEngine(substeps=1)
     eng.initialize(Vector2(0, 0))
     return eng
 
 
 def box(
-    eng: PymunkEngine,
+    eng: RapierEngine,
     entity_id: str,
     centre: tuple[float, float],
     size: tuple[float, float] = (40.0, 40.0),
@@ -91,7 +91,7 @@ class TestPointQuery:
         assert engine.point_query(Vector2(100, 100), mask=0b10) == ["LAYER2"]
 
     def test_empty_space_is_tolerated(self):
-        assert PymunkEngine().point_query(Vector2(0, 0)) == []
+        assert RapierEngine().point_query(Vector2(0, 0)) == []
 
 
 class TestOverlapCircle:

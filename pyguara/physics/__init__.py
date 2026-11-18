@@ -1,6 +1,6 @@
 """Physics subsystem."""
 
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.engines import create_physics_engine
@@ -25,7 +25,7 @@ __all__ = [
     "RigidBody",
     "Collider",
     "PhysicsSystem",
-    "PymunkEngine",
+    "RapierEngine",
     "create_physics_engine",
     "CollisionSystem",
     "Joint",

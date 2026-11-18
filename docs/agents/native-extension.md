@@ -150,9 +150,8 @@ Studio's `project_overview` reports it.
 `PerformanceConfig.native_acceleration` and `PYGUARA_NO_NATIVE`, which
 chose between the two stores, are gone with the second store. A config
 file that still sets the former loads, with a warning naming the key.
-`PymunkEngine(accelerate=False)` remains: it makes Chipmunk answer box
-and ray queries instead of the static-solid mirror, which is a physics
-choice, not a store (ADR 0009).
+The physics engine is Rapier, in the extension, with no Python twin;
+the static-solid mirror ADR 0009 describes went with pymunk.
 
 Written outside the generated block above on purpose: `pyguara studio
 instructions` rewrites what is inside it, and an earlier version of this

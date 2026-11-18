@@ -1,13 +1,9 @@
 """What the character sweep costs.
 
 `CharacterMover` moves an entity one whole pixel at a time along each
-axis and tests every step. On the Python path each step calls
-`IPhysicsEngine.overlap_box`, which builds a fresh `pymunk.Body` and
-`pymunk.Poly`. So the cost grows with how fast things move, not how
-many there are.
-
-This module measures that path. ADR 0009 records the native sweep
-that replaces it for static solids.
+axis and tests every step, so the cost grows with how fast things move,
+not how many there are. The engine runs the sweep natively
+(`sweep_box`); this module guards how its cost grows.
 """
 
 from __future__ import annotations
@@ -20,7 +16,7 @@ from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.kits.platformer_movement.controller import PlatformerController
 from pyguara.kits.platformer_movement.system import PlatformerSystem
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.components import CharacterBody, Collider, RigidBody
 from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.types import BodyType, ShapeType
@@ -33,34 +29,11 @@ DT = 1.0 / 60.0
 GRAVITY = Vector2(0, 900)
 
 
-class _ProbeCounter:
-    """Counts `overlap_box` calls, and the CFFI objects they imply.
-
-    Counted rather than sampled: `_probe_shape` allocates exactly one
-    `pymunk.Body` and one `pymunk.Poly` per call, so the allocation figure
-    is the call count doubled -- no profiler needed, and no guessing.
-    """
-
-    def __init__(self, engine: PymunkEngine) -> None:
-        self.calls = 0
-        self._real = engine.overlap_box
-        engine.overlap_box = self._counted  # type: ignore[method-assign]
-
-    def _counted(self, *args: object, **kwargs: object) -> object:
-        self.calls += 1
-        return self._real(*args, **kwargs)
-
-    @property
-    def cffi_objects(self) -> int:
-        """One `Body` plus one `Poly` per probe."""
-        return self.calls * 2
-
-
 def _world(characters: int, speed: float) -> tuple[object, ...]:
     """A floor and `characters` movers, each running at `speed` px/s."""
     entities = EntityManager()
     dispatcher = EventDispatcher()
-    engine = PymunkEngine()
+    engine = RapierEngine()
     physics = PhysicsSystem(engine, entities, dispatcher, gravity=GRAVITY)
     platformer = PlatformerSystem(entities, engine, gravity=GRAVITY)
 
@@ -107,23 +80,6 @@ def test_probe_cost_grows_with_distance_not_worse_than_linearly() -> None:
         limit=8.0,
         what="CharacterMover sweep at 4x the speed",
     )
-
-
-@pytest.mark.performance
-def test_every_probed_pixel_costs_two_cffi_objects() -> None:
-    """Pins the mechanism the Rust milestone is meant to remove.
-
-    Not a timing: a count, so it means the same on every machine. If this
-    ever drops to zero the CFFI path is gone and this module has done its
-    job.
-    """
-    _, physics, platformer, engine = _world(1, speed=240.0)
-    counter = _ProbeCounter(engine)
-
-    _tick(physics, platformer, 30)
-
-    assert counter.calls > 0, "the sweep probed nothing; the world is wrong"
-    assert counter.cffi_objects == counter.calls * 2
 
 
 @pytest.mark.performance

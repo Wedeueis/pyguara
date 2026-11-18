@@ -24,7 +24,6 @@ from pyguara.kits.platformer_movement.controller import (
     PlatformerInput,
 )
 from pyguara.kits.platformer_movement.system import PlatformerSystem
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
 from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.components import CharacterBody, Collider, RigidBody
@@ -32,18 +31,6 @@ from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.types import BodyType, ShapeType
 
 pytestmark = pytest.mark.integration
-
-# Which engine `Platformer` builds; set per test by `_backend`.
-_ENGINE: type = PymunkEngine
-
-
-@pytest.fixture(
-    autouse=True, params=[PymunkEngine, RapierEngine], ids=["pymunk", "rapier"]
-)
-def _backend(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Run every scenario on both engines: the feel rests on the probe."""
-    monkeypatch.setitem(globals(), "_ENGINE", request.param)
-
 
 DT = 1.0 / 60.0
 PLAYER_HEIGHT = 40.0
@@ -58,7 +45,7 @@ class Platformer:
         """Build the world and drop a character into it."""
         self.entities = EntityManager()
         self.dispatcher = EventDispatcher()
-        engine = _ENGINE()
+        engine = RapierEngine()
         engine.set_collision_system(CollisionSystem(self.dispatcher))
         self.physics = PhysicsSystem(
             engine, self.entities, self.dispatcher, gravity=gravity

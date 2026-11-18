@@ -18,9 +18,8 @@ class Collider(BaseComponent):
         offset: Local offset from the RigidBody center.
         one_way: Solid from one side only. A character jumping from below
             passes through and then lands on top -- the drop-through platform
-            every 2D platformer has. Chipmunk has no notion of this; the
-            contact is rejected per step when the other body is on the
-            pass-through side.
+            every 2D platformer has. The engine rejects the contact each
+            step the other body is on the pass-through side.
         one_way_normal: Which side is solid, in world space. Defaults to
             `(0, -1)`: up the screen, i.e. a platform you land on from above.
             Ignored unless `one_way` is set.
@@ -72,13 +71,13 @@ class RigidBody(BaseComponent):
 
 @dataclass
 class CharacterBody(BaseComponent):
-    """A character moved by `CharacterMover`, not the Chipmunk solver.
+    """A character moved by `CharacterMover`, not the physics solver.
 
     Replaces `RigidBody` for a platformer character: there is no shape
     registered with the physics engine at all, so the character cannot
     detect its own collider (the self-detection bug class this audit found
     for ground rays becomes structurally impossible rather than guarded
-    against) and Chipmunk friction is never asked to carry or push it --
+    against) and solver friction is never asked to carry or push it --
     `SolidSystem`/`SolidMover` do that explicitly instead.
 
     Attributes:
@@ -127,7 +126,7 @@ class MovingSolid(BaseComponent):
     """Marks an entity whose motion should carry and push actors.
 
     A `MovingSolid` is still an ordinary `RigidBody`/`Collider` as far as
-    Chipmunk is concerned (so genuinely dynamic bodies -- debris, ragdolls
+    the physics engine is concerned (so genuinely dynamic bodies -- debris, ragdolls
     -- keep colliding with it normally); `SolidSystem` additionally moves
     any `CharacterBody` resting on or in the way of it by the same delta
     each tick it moves, using `SolidMover`.

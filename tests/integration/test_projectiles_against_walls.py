@@ -1,6 +1,6 @@
 """`ProjectileSystem` with real walls: a shot stops at one, and spares what is behind it.
 
-Uses a real `PymunkEngine` for `solids`, so the raycast the system relies on is
+Uses a real `RapierEngine` for `solids`, so the raycast the system relies on is
 the physics backend's own rather than a stand-in.
 """
 
@@ -16,7 +16,7 @@ from pyguara.events.dispatcher import EventDispatcher
 from pyguara.kits.action_combat import Health, Hurtbox
 from pyguara.kits.projectiles import ProjectileSystem
 from pyguara.kits.stats import DamageType
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.types import BodyType, ShapeType
@@ -30,7 +30,7 @@ DT = 1 / 60
 @pytest.mark.parametrize("behind", [True, False])
 def test_a_shot_hits_only_what_is_before_a_wall(behind: bool) -> None:
     walls = EntityManager()
-    engine = PymunkEngine()
+    engine = RapierEngine()
     engine.initialize(Vector2(0, 0))
     physics = PhysicsSystem(engine, walls, EventDispatcher())
     wall = walls.create_entity("wall")

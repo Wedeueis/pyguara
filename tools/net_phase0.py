@@ -57,7 +57,7 @@ from pyguara.net import (  # noqa: E402
     UInt16,
     Versions,
 )
-from pyguara.physics.backends.pymunk_impl import PymunkEngine  # noqa: E402
+from pyguara.physics.backends.rapier_impl import RapierEngine  # noqa: E402
 from pyguara.physics.character_mover import CharacterMover  # noqa: E402
 from pyguara.physics.components import Collider, RigidBody  # noqa: E402
 from pyguara.physics.physics_system import PhysicsSystem  # noqa: E402
@@ -216,7 +216,7 @@ def probe_notify() -> None:
     manager, flocking = build_horde(50)
     report("FlockingSystem", manager, lambda: flocking.update(DT))
 
-    engine = PymunkEngine()
+    engine = RapierEngine()
     engine.initialize(Vector2(0, 0))
     manager = EntityManager()
     for i in range(10):
@@ -227,7 +227,7 @@ def probe_notify() -> None:
     report("TopDownSystem", manager, lambda: topdown.update(DT))
     engine.cleanup()
 
-    engine = PymunkEngine()
+    engine = RapierEngine()
     engine.initialize(Vector2(0, 100))
     manager = EntityManager()
     physics = PhysicsSystem(engine, manager, EventDispatcher(), gravity=Vector2(0, 100))
@@ -249,7 +249,7 @@ class _ReplayWorld:
     """
 
     def __init__(self, enemy: str | None = None) -> None:
-        self.engine = PymunkEngine()
+        self.engine = RapierEngine()
         self.engine.initialize(Vector2(0, 0))
         self.manager = EntityManager()
         dispatcher = EventDispatcher()

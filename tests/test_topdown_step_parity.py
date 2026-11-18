@@ -1,6 +1,6 @@
 """Does `TopDownSystem`'s batched step move every body exactly as `step_body` does?
 
-The same walk runs in two worlds: one whose engine has no mirror, so
+The same walk runs in two worlds: one whose engine has no native step, so
 every body goes through `step_body`, and one that batches. Every
 position and remainder is compared after every tick.
 
@@ -23,15 +23,9 @@ from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.kits.topdown_movement.body import TopDownBody
 from pyguara.kits.topdown_movement.system import TopDownSystem
-from pyguara.native import native_module
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.components import Collider
 from pyguara.physics.types import BodyType, CollisionLayer, PhysicsMaterial, ShapeType
-
-pytestmark = pytest.mark.skipif(
-    native_module() is None or not hasattr(native_module(), "NativeSolids"),
-    reason="native extension not built; `make native`",
-)
 
 Box = tuple[float, float, float, float]
 
@@ -48,8 +42,7 @@ def _walls(stream: RandomStream, kind: str) -> list[Box]:
             for column in range(-6, 7)
             if stream.random() < 0.3
         ]
-    # Edges a skin's width off the pixel grid, where a probe touches exactly
-    # and the mirror has to decline.
+    # Edges a skin's width off the pixel grid, where a probe touches exactly.
     return [
         (column * 40 + 0.05, row * 40 - 0.05, 39.9, 39.9)
         for row in range(-4, 5)
@@ -58,8 +51,15 @@ def _walls(stream: RandomStream, kind: str) -> list[Box]:
     ]
 
 
-def _engine(walls: list[Box], accelerate: bool) -> PymunkEngine:
-    engine = PymunkEngine(accelerate=accelerate)
+class _LoopOnly(RapierEngine):
+    """The same engine, without the native step: `step_body` for everyone."""
+
+    sweep_box = None  # type: ignore[assignment]
+    step_bodies = None  # type: ignore[assignment]
+
+
+def _engine(walls: list[Box], accelerate: bool) -> RapierEngine:
+    engine = RapierEngine() if accelerate else _LoopOnly()
     engine.initialize(Vector2(0, 0))
     for number, (x, y, width, height) in enumerate(walls):
         body = engine.create_body(f"wall{number}", BodyType.STATIC, Vector2(x, y))
@@ -188,12 +188,12 @@ class TestTheBatchIsActuallyTaken:
 
         assert seen == [900, 0]
 
-    def test_a_touch_is_declined_and_still_ends_in_the_same_place(self) -> None:
+    def test_a_touch_is_answered_and_ends_in_the_same_place(self) -> None:
         # Pressed against a wall whose face lands exactly on a skinned probe
         # edge: a 60-wide body probes 29.95 either side of a whole-pixel
         # centre, and this wall's left face is at 69.95. At x = 40 the probe
-        # touches, the batch must decline, and the body must still stop
-        # where `step_body` stops it.
+        # touches; the batch answers it exactly, so nothing is declined, and
+        # the body stops where `step_body` stops it.
         walls = [(79.95, 0.0, 20.0, 400.0)]
         results = []
         seen: list[int] = []
@@ -213,7 +213,7 @@ class TestTheBatchIsActuallyTaken:
             results.append(_state(manager))
 
         assert results[1] == results[0]
-        assert seen[1] > 0
+        assert seen[0] > 0 and seen[1] == 0
 
 
 class TestWhatTheBatchLeavesAlone:
@@ -264,7 +264,7 @@ class TestWhatTheBatchLeavesAlone:
 
         assert entity.get_component(Transform).position == Vector2(0.0, 0.0)
 
-    def test_a_world_with_a_moving_solid_is_stepped_the_ordinary_way(self) -> None:
+    def test_a_world_with_a_moving_body_is_still_stepped_natively(self) -> None:
         engine = _engine([(60.0, 0.0, 20.0, 200.0)], True)
         crate = engine.create_body("crate", BodyType.DYNAMIC, Vector2(500.0, 500.0))
         engine.add_shape(
@@ -276,7 +276,7 @@ class TestWhatTheBatchLeavesAlone:
             CollisionLayer(),
             False,
         )
-        assert engine.step_bodies([], DT, 0.05) is None
+        assert engine.step_bodies([], DT, 0.05) == []
 
         manager = EntityManager()
         entity = manager.create_entity("walker")

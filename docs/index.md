@@ -60,7 +60,7 @@ uv run python games/guara_falcao/main.py     # a platformer
 ## Physics and AI
 
 - **[Simulation](physics/simulation.md)**: rigid bodies, colliders,
-  joints and triggers through pymunk.
+  joints and triggers on Rapier.
 - **[Spatial Queries](physics/queries.md)**: raycasts and overlaps.
 - **[Character Movement](physics/character-movement.md)**: the swept
   kinematic mover for players and NPCs.

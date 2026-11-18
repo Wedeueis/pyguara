@@ -357,7 +357,7 @@ step — the scene's `update()` has nothing to call by hand.
 
 ## 🏃 Part 4: Physical Simulation (`games/physics_integration`)
 
-For advanced simulation, PyGuara wraps the **Pymunk** rigid body library. Rather than calculating gravity manually, physical objects register `RigidBody` and `Collider` components. The `PhysicsSystem` automatically simulates rigid body calculations and mirrors the resulting coordinates back onto `Transform` components.
+For advanced simulation, PyGuara runs the **Rapier** rigid body engine, in its native extension. Rather than calculating gravity manually, physical objects register `RigidBody` and `Collider` components. The `PhysicsSystem` automatically simulates rigid body calculations and mirrors the resulting coordinates back onto `Transform` components.
 
 > For a **player or NPC**, use `CharacterBody` with `CharacterMover` instead of
 > a dynamic `RigidBody` — it gives crisp, non-bouncy movement with ground and

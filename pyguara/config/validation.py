@@ -292,16 +292,4 @@ class ConfigValidator:
                     "Use 4, or 1 to disable substepping.",
                 )
             )
-        if physics.sleep_time_threshold < 0.0:
-            issues.append(
-                ValidationIssue(
-                    ValidationSeverity.ERROR,
-                    "physics",
-                    "sleep_time_threshold",
-                    f"Sleep time threshold must be non-negative, got "
-                    f"{physics.sleep_time_threshold}. It is seconds of "
-                    f"stillness before a body may sleep.",
-                    "0.5 is a good default; 0 disables sleeping.",
-                )
-            )
         return issues

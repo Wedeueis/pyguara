@@ -23,7 +23,7 @@ from pyguara.kits.platformer_movement.controller import (
     PlatformerInput,
 )
 from pyguara.kits.platformer_movement.system import PlatformerSystem, apply_knockback
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.components import CharacterBody, Collider
 from pyguara.physics.physics_system import PhysicsSystem
@@ -40,7 +40,7 @@ class World:
         """Build the world and drop a character into it."""
         self.entities = EntityManager()
         self.dispatcher = EventDispatcher()
-        engine = PymunkEngine()
+        engine = RapierEngine()
         engine.set_collision_system(CollisionSystem(self.dispatcher))
         self.physics = PhysicsSystem(
             engine, self.entities, self.dispatcher, gravity=gravity

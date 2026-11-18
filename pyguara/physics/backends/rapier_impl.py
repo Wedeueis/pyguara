@@ -1,12 +1,11 @@
-"""The Rapier physics backend, the default.
+"""The physics engine: Rapier, in the native extension.
 
 `RapierEngine` keeps `IPhysicsEngine`'s contract over a Rapier world held
-in the native extension (`rust/src/physics.rs`). `physics.backend =
-"pymunk"` chooses Chipmunk instead.
+in the native extension (`rust/src/physics.rs`).
 
-Segment and polygon shapes, which the pymunk backend refuses too, and a
-`max_force` on a joint other than a motor raise `NotImplementedError`.
-Known differences from pymunk are in `docs/physics/simulation.md`.
+Segment and polygon shapes, and a `max_force` on a joint other than a
+motor, raise `NotImplementedError`. `docs/physics/simulation.md` has what
+else to know.
 """
 
 from __future__ import annotations
@@ -128,7 +127,7 @@ class RapierEngine:
 
         Args:
             substeps: Solver steps per `update()`, each of `delta_time /
-                substeps`, as the pymunk backend splits a tick.
+                substeps`.
 
         Raises:
             ValueError: If `substeps` is below 1.
@@ -201,8 +200,8 @@ class RapierEngine:
 
         Events are reported after the step, not during it. A pair whose
         `on_collision_begin` returns False stops being resolved from the
-        next solver step, where pymunk stops at once; it is still reported
-        while it overlaps, as pymunk reports it.
+        next solver step, not at once; it is still reported while it
+        overlaps.
         """
         if self._native is None:
             return
@@ -267,7 +266,7 @@ class RapierEngine:
         """Create and register a new physics body.
 
         `mass` holds only until a collider with density is attached, which
-        replaces it with the collider's own mass, as Chipmunk does.
+        replaces it with the collider's own mass.
 
         Raises:
             RuntimeError: If the engine has not been initialized.
@@ -328,12 +327,11 @@ class RapierEngine:
         """Attach a circle or box collider, solid from every side or one.
 
         A one-way collider drops each solver step's contacts whose normal
-        does not leave its solid face, as the pymunk backend does.
+        does not leave its solid face.
 
         Raises:
             TypeError: If the handle is not one of this backend's bodies.
-            NotImplementedError: For a segment or polygon shape, as the
-                pymunk backend refuses them too.
+            NotImplementedError: For a segment or polygon shape.
         """
         if not isinstance(body, RapierBody):
             raise TypeError(
@@ -640,7 +638,7 @@ class RapierEngine:
         max_force: float,
         collide_connected: bool,
     ) -> Any:
-        """Join two bodies, as the pymunk backend maps each joint type.
+        """Join two bodies with the constraint `joint_type` names.
 
         `PIN` is a rod at the anchors' current distance; `DISTANCE` is a
         stiff spring when its limits are equal and distance limits when
@@ -661,8 +659,7 @@ class RapierEngine:
         if max_force > 0 and joint_type is not JointType.MOTOR:
             raise NotImplementedError(
                 f"The Rapier backend can limit the force of a MOTOR joint only, "
-                f"not a {joint_type.name} joint; leave max_force at 0 or use "
-                f'physics.backend = "pymunk".'
+                f"not a {joint_type.name} joint; leave max_force at 0."
             )
         handle = self._world().create_joint(
             _JOINT_KINDS[joint_type],

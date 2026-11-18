@@ -65,7 +65,7 @@ class ColliderDebugRenderer:
 
             # Through `collider_bounds`, so this overlay and the simulation
             # cannot disagree about where a collider is. They used to: this
-            # applied `collider.offset` and the pymunk BOX branch and every
+            # applied `collider.offset` and the engine's BOX shape and every
             # mover probe did not, so the outline was drawn somewhere the
             # physics had nothing. The default is unreachable -- the query
             # above requires a `Collider`.

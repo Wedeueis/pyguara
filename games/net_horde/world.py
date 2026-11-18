@@ -30,7 +30,7 @@ from pyguara.net import (
     ReplicationSchema,
     UInt8,
 )
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.character_mover import CharacterMover
 from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.physics_system import PhysicsSystem
@@ -145,10 +145,10 @@ def velocity_of(command: Move) -> Vector2:
     return direction * PLAYER_SPEED
 
 
-def make_solids() -> tuple[PymunkEngine, CharacterMover]:
+def make_solids() -> tuple[RapierEngine, CharacterMover]:
     """Return this machine's own copy of the walls, and a mover against them."""
     solids = EntityManager()
-    engine = PymunkEngine()
+    engine = RapierEngine()
     engine.initialize(Vector2(0, 0))
     physics = PhysicsSystem(engine, solids, EventDispatcher())
     for x, y, width, height in WALLS:

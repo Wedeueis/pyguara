@@ -40,7 +40,7 @@ and `TRANSIENT` (one per request).
 
 ```python
 container = DIContainer()
-container.register_singleton(IPhysicsEngine, PymunkEngine)
+container.register_singleton(IPhysicsEngine, RapierEngine)
 app = container.get(Application)   # dependencies injected recursively
 ```
 

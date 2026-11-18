@@ -3,7 +3,7 @@
 One function, because four places were each deriving it and three of them
 derived it differently. `Collider.offset` is documented as a "local offset
 from the RigidBody center", and `physics/debug_draw.py` applied it while
-the pymunk BOX branch and every mover probe did not -- so the debug overlay
+the physics engine's BOX shape and every mover probe did not -- so the debug overlay
 drew a collider in one place and the simulation used another.
 
 Callers pass their own default half-extents: a platformer character, a
