@@ -142,6 +142,24 @@ class Renderable(Protocol):
         ...
 
     @property
+    def flip_x(self) -> bool:
+        """Mirror the image left to right, inside the same box.
+
+        Returns:
+            bool: True to mirror.
+        """
+        ...
+
+    @property
+    def flip_y(self) -> bool:
+        """Mirror the image top to bottom, inside the same box.
+
+        Returns:
+            bool: True to mirror.
+        """
+        ...
+
+    @property
     def material(self) -> Any:
         """Optional material for custom rendering.
 

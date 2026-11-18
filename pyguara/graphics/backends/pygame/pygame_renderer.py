@@ -168,17 +168,24 @@ class PygameBackend:
                 surf = surf.subsurface(_to_area(region, surf.get_rect()))
 
             if batch.transforms_enabled:
+                scale_x, scale_y = (
+                    batch.scales[i] if i < len(batch.scales) else (1.0, 1.0)
+                )
+                # A negative scale is a flip, done before the turn, as in
+                # `draw_texture`: a mirrored sprite then turns the way its
+                # rotation says.
+                if scale_x < 0 or scale_y < 0:
+                    surf = pygame.transform.flip(surf, scale_x < 0, scale_y < 0)
+
                 # Apply rotation if needed
                 if i < len(batch.rotations) and batch.rotations[i] != 0.0:
                     surf = pygame.transform.rotate(surf, -batch.rotations[i])
 
                 # Apply scale if needed
-                if i < len(batch.scales):
-                    scale_x, scale_y = batch.scales[i]
-                    if scale_x != 1.0 or scale_y != 1.0:
-                        new_width = int(surf.get_width() * scale_x)
-                        new_height = int(surf.get_height() * scale_y)
-                        surf = pygame.transform.scale(surf, (new_width, new_height))
+                if abs(scale_x) != 1.0 or abs(scale_y) != 1.0:
+                    new_width = int(surf.get_width() * abs(scale_x))
+                    new_height = int(surf.get_height() * abs(scale_y))
+                    surf = pygame.transform.scale(surf, (new_width, new_height))
 
             if batch.colors_enabled and i < len(batch.colors):
                 rgba = batch.colors[i]

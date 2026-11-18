@@ -66,6 +66,8 @@ class Geometry:
         self._texture: Texture | None = None
         self.rotation: float = 0.0
         self.scale: Vector2 = Vector2(1, 1)
+        self.flip_x = False
+        self.flip_y = False
         self._dirty = True
         self.material: Any = None
         # Renderable's draw-time tint -- distinct from a subclass's own fill

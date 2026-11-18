@@ -1312,15 +1312,17 @@ impl NativeGpu {
             drawn_width = (width * scale_x).trunc();
             drawn_height = (height * scale_y).trunc();
         }
+        // The box is the drawn size whichever way it faces: a negative scale
+        // only flips the image inside it, below, where the UVs swap.
         let (box_width, box_height) = if turn != 0.0 {
             let radians = turn.to_radians();
             let (cos, sin) = (radians.cos().abs(), radians.sin().abs());
             (
-                (width * cos + height * sin) * (drawn_width / width),
-                (width * sin + height * cos) * (drawn_height / height),
+                (width * cos + height * sin) * (drawn_width.abs() / width),
+                (width * sin + height * cos) * (drawn_height.abs() / height),
             )
         } else {
-            (drawn_width, drawn_height)
+            (drawn_width.abs(), drawn_height.abs())
         };
         let (red, green, blue, alpha) = color;
 

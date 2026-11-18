@@ -50,6 +50,15 @@ class RenderSystem:
         # to come from where the sprite is actually drawn.
         depth = world_position.y + item.sort_offset if item.y_sort else item.z_index
 
+        # A flip is a negative scale on that axis, which every backend
+        # draws as a mirror inside the same box.
+        scale = item.scale
+        if item.flip_x or item.flip_y:
+            scale = Vector2(
+                -scale.x if item.flip_x else scale.x,
+                -scale.y if item.flip_y else scale.y,
+            )
+
         self._queue.push(
             RenderCommand(
                 texture=item.texture,
@@ -58,7 +67,7 @@ class RenderSystem:
                 z_index=depth,
                 sort_group=item.sort_group,
                 rotation=item.rotation,
-                scale=item.scale,
+                scale=scale,
                 material=item.material,
                 color=item.color,
             )

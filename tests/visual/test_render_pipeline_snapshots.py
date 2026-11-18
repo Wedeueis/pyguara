@@ -77,6 +77,8 @@ class Sprite:
         self.y_sort = y_sort
         self.sort_offset = sort_offset
         self.sort_group = sort_group
+        self.flip_x = False
+        self.flip_y = False
 
 
 def _f(value: float) -> str:

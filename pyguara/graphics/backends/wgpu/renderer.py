@@ -364,11 +364,13 @@ def sprites_one_by_one(frame: GpuFrame, batch: RenderBatch) -> None:
                 radians = math.radians(turn)
                 cos, sin = abs(math.cos(radians)), abs(math.sin(radians))
                 # pygame turns first and scales the turned box; the
-                # box that bounds the result is what `dest` anchors.
-                box_width = (width * cos + height * sin) * (drawn_width / width)
-                box_height = (width * sin + height * cos) * (drawn_height / height)
+                # box that bounds the result is what `dest` anchors. Its
+                # size ignores the sign: a negative scale flips the image
+                # inside the box, not the box.
+                box_width = (width * cos + height * sin) * (abs(drawn_width) / width)
+                box_height = (width * sin + height * cos) * (abs(drawn_height) / height)
             else:
-                box_width, box_height = drawn_width, drawn_height
+                box_width, box_height = abs(drawn_width), abs(drawn_height)
         red, green, blue, alpha = 255, 255, 255, 255
         if tinted and index < len(batch.colors):
             red, green, blue, alpha = batch.colors[index]
