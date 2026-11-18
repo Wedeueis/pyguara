@@ -8,6 +8,8 @@ regardless of frame rate variations.
 
 from __future__ import annotations
 
+import dataclasses
+import math
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
 
@@ -21,6 +23,7 @@ from pyguara.dev.asset_reload import AssetReloadWatcher
 from pyguara.di.container import DIContainer
 from pyguara.di.exceptions import ServiceNotFoundException
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.events.input import MouseButtonEvent, MouseMotionEvent
 from pyguara.events.lifecycle import ApplicationStartEvent, QuitEvent
 from pyguara.events.resources import ResourceReloaded
 from pyguara.events.window import WindowResizeEvent
@@ -799,9 +802,45 @@ class Application:
             # While a replay drives the game, real input is swallowed rather
             # than dispatched, so both runs see exactly the same events.
             if self._replay_player is None:
-                self._input_manager.process_event(event)
+                self._input_manager.process_event(self._in_game_pixels(event))
 
         self._end_replay_frame(frame_time)
+
+    def _in_game_pixels(self, event: object) -> object:
+        """Move a mouse event from window pixels into the game's own.
+
+        With a letterbox the game is drawn at its render size and scaled
+        into part of the window, and its UI is laid out in render pixels.
+        The editor, which fills the window, is handed the event before this.
+        A cursor over a bar lands outside the game rather than on its edge.
+
+        Args:
+            event: Any engine event; only mouse buttons and motion change.
+
+        Returns:
+            The event, or a copy with its position in render pixels.
+        """
+        graph = self._render_graph
+        if graph is None or not isinstance(event, (MouseButtonEvent, MouseMotionEvent)):
+            return event
+        x, y, width, height = graph.screen_rect
+        render_width = graph.fbo_manager.width
+        render_height = graph.fbo_manager.height
+        if (x, y, width, height) == (0, 0, render_width, render_height):
+            return event
+        scale_x = render_width / width
+        scale_y = render_height / height
+        game_x = math.floor((event.x - x) * scale_x)
+        game_y = math.floor((event.y - y) * scale_y)
+        if isinstance(event, MouseMotionEvent):
+            return dataclasses.replace(
+                event,
+                x=game_x,
+                y=game_y,
+                rel_x=round(event.rel_x * scale_x),
+                rel_y=round(event.rel_y * scale_y),
+            )
+        return dataclasses.replace(event, x=game_x, y=game_y)
 
     def _resize_render_output(self, width: int, height: int) -> None:
         """Point everything that draws at the new window size.
@@ -975,6 +1014,13 @@ class Application:
         budget_ms = 1000.0 / self._target_fps if self._target_fps > 0 else None
         draw_frame_profile(self._frame_profiler, self._ui_renderer, budget_ms)
 
+    def _render_ui(self) -> None:
+        """Draw the game's UI, the overlays and the profiler, and present it."""
+        self._ui_manager.render(self._ui_renderer)
+        self._render_overlays()
+        self._render_frame_profile()
+        self._ui_renderer.present()
+
     def _render_direct(self, alpha: float) -> None:
         """Draw straight to the window, for backends with no render graph.
 
@@ -1023,18 +1069,29 @@ class Application:
         # light/composite/post-process (whichever exist) and finally
         # `"final"`, which blits the result to the screen. A pass that
         # declared `after_ui` is held back; see below.
+        #
+        # The UI is drawn just before `"final"`, into the buffer it blits:
+        # past lighting and post-processing, and at the render size, so a
+        # letterbox scales and places it exactly as it does the world.
+        # Drawn to the screen instead, it stayed in window pixels while the
+        # world around it was scaled.
+        from pyguara.graphics.pipeline.passes.final_pass import FinalPass
+
+        final = self._render_graph.get_pass("final")
+        ui_drawn = False
         for render_pass in self._render_graph.passes:
-            if not render_pass.enabled:
+            if not render_pass.enabled or render_pass.after_ui:
                 continue
-            if render_pass.after_ui:
-                continue
+            if render_pass is final and isinstance(final, FinalPass):
+                self._render_graph.fbo_manager.get_or_create(
+                    final.input_fbo_name
+                ).bind()
+                self._render_ui()
+                ui_drawn = True
             render_pass.execute(self._render_graph)
 
-        # Render UI on top (directly to screen)
-        self._ui_manager.render(self._ui_renderer)
-        self._render_overlays()
-        self._render_frame_profile()
-        self._ui_renderer.present()
+        if not ui_drawn:
+            self._render_ui()
 
         # Passes that must sit on top of everything the game drew, the
         # game's own UI included. An editor overlay registered as an
