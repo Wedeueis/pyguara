@@ -525,8 +525,8 @@ class TestVector2GameMath:
     reimplemented subsets of (#64).
 
     Several of the ones that issue listed as missing were already there
-    under pymunk names -- `project` is `projection()`, `angle_to` is
-    `get_angle_between()`, and `angle`/`perpendicular` are inherited. Only
+    under other names -- `project` is `projection()`, `angle_to` is
+    `get_angle_between()`, and `angle`/`perpendicular` exist. Only
     the genuinely absent ones are added, so there is one spelling of each
     rather than two.
     """
@@ -536,7 +536,7 @@ class TestVector2GameMath:
         assert round(clamped.length, 6) == 1.0
 
     def test_clamp_magnitude_leaves_a_short_vector_alone(self) -> None:
-        """The difference from pymunk's inherited `scale_to_length()`, which
+        """The difference from `scale_to_length()`, which
         scales both ways and would *lengthen* this one. A speed cap wants
         only the shortening half."""
         assert Vector2(3, 4).clamp_magnitude(10) == Vector2(3, 4)
@@ -573,7 +573,7 @@ class TestVector2GameMath:
 
     def test_projection_and_reject_decompose_the_vector(self) -> None:
         """The property that makes `reject` worth having: together with
-        pymunk's inherited `projection()` it splits a vector into "along"
+        `projection()` it splits a vector into "along"
         and "across" a direction, which is how sliding along a wall works."""
         v, axis = Vector2(3, 4), Vector2(1, 0)
         along, across = v.projection(axis), v.reject(axis)
@@ -593,7 +593,7 @@ class TestVector2GameMath:
         assert Vector2(13, 27).snapped(0) == Vector2(13, 27)
 
     def test_from_angle_degrees_takes_degrees(self) -> None:
-        """pymunk's inherited `from_polar()` takes radians, which is the
+        """`from_polar()` takes radians, which is the
         easy mistake: `from_polar(1, 90)` is 90 radians, not a quarter
         turn."""
         quarter = Vector2.from_angle_degrees(90)

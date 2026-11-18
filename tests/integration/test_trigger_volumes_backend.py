@@ -1,7 +1,7 @@
-"""Trigger volumes, end to end through the real pymunk backend.
+"""Trigger volumes, end to end through the real physics engine.
 
 ``tests/test_trigger_volumes.py`` dispatches ``OnTriggerEnter`` and
-``OnTriggerExit`` by hand and never touches pymunk. These drive the
+``OnTriggerExit`` by hand and never touches the engine. These drive the
 whole stack the way ``application/bootstrap.py`` wires it, and cover
 two things that only show there: Chipmunk's contact-pair order is
 arbitrary, so the sensor may be either entity; and a ``TriggerVolume``

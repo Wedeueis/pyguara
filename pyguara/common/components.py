@@ -98,7 +98,7 @@ class Transform(StrictComponent):
         """
         super().__init__()
 
-        # `is None`, not `or`: pymunk's Vec2d is falsy at (0, 0), so `scale or
+        # `is None`, not `or`: a zero Vector2 is falsy, so `scale or
         # default` silently rewrote an explicitly requested zero scale to (1, 1).
         self._local_position = position if position is not None else Vector2(0.0, 0.0)
         self._local_rotation = rotation

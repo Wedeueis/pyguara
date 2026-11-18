@@ -1,7 +1,6 @@
 """Steering behaviors for autonomous movement."""
 
 import math
-from typing import cast
 
 from pyguara.common.components import Transform
 from pyguara.common.random import RandomStream
@@ -26,7 +25,7 @@ class SteeringBehavior:
         direction = target - transform.position
         if direction.length < 0.001:
             return Vector2(0, 0)
-        desired = cast(Vector2, direction.normalized() * max_speed)
+        desired = direction.normalized() * max_speed
         return desired - current_velocity
 
     @staticmethod
@@ -61,7 +60,7 @@ class SteeringBehavior:
             angle = rng.uniform(0, 2 * math.pi)
             direction = Vector2(math.cos(angle), math.sin(angle))
         else:
-            direction = cast(Vector2, direction.normalized())
+            direction = direction.normalized()
 
         desired = direction * max_speed
         return desired - current_velocity
@@ -95,7 +94,7 @@ class SteeringBehavior:
         else:
             target_speed = max_speed
 
-        desired = cast(Vector2, direction.normalized() * target_speed)
+        desired = direction.normalized() * target_speed
         return desired - current_velocity
 
     @staticmethod
@@ -144,9 +143,7 @@ class SteeringBehavior:
             wander_target = wander_target + jitter
             # Re-project onto circle
             if wander_target.length > 0.001:
-                wander_target = cast(
-                    Vector2, wander_target.normalized() * wander_radius
-                )
+                wander_target = wander_target.normalized() * wander_radius
 
         # Calculate world position of wander target
         if current_velocity.length > 0.001:
@@ -160,9 +157,7 @@ class SteeringBehavior:
         target_world = circle_center + wander_target
 
         # Seek toward wander target
-        desired = cast(
-            Vector2, (target_world - transform.position).normalized() * max_speed
-        )
+        desired = (target_world - transform.position).normalized() * max_speed
         steering = desired - current_velocity
 
         return steering, wander_target
@@ -299,7 +294,7 @@ class SteeringBehavior:
             1.0 / len(neighbor_velocities)
         )
         if average.length > max_speed:
-            average = cast(Vector2, average.normalized() * max_speed)
+            average = average.normalized() * max_speed
         return average - current_velocity
 
     @staticmethod
@@ -346,8 +341,8 @@ class SteeringBehavior:
                 push = push + Vector2(1, 0) * max_speed
                 continue
             weight = 1.0 - (distance / separation_radius)
-            push = push + cast(Vector2, offset.normalized() * (weight * max_speed))
+            push = push + offset.normalized() * (weight * max_speed)
 
         if push.length > max_speed:
-            push = cast(Vector2, push.normalized() * max_speed)
+            push = push.normalized() * max_speed
         return push

@@ -22,6 +22,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 
+use crate::vector::Point;
+
 /// Samples kept per remote, as `replication._HISTORY`.
 const DEFAULT_HISTORY: usize = 16;
 
@@ -238,7 +240,7 @@ impl NativeInterpolator {
     }
 
     /// Write one component's values through its writer: a vector field as
-    /// an `(x, y)` tuple, every other field as a float.
+    /// a `Vector2`, every other field as a float.
     fn call(
         &self,
         py: Python<'_>,
@@ -258,8 +260,9 @@ impl NativeInterpolator {
         let mut lane = 0usize;
         for field in fields {
             match field {
-                Field::Vector { .. } => arguments
-                    .push(PyTuple::new(py, [lanes[lane], lanes[lane + 1]])?.into_any().unbind()),
+                Field::Vector { .. } => arguments.push(
+                    Point::of(lanes[lane], lanes[lane + 1]).into_pyobject(py)?.into_any().unbind(),
+                ),
                 _ => arguments.push(lanes[lane].into_pyobject(py)?.into_any().unbind()),
             }
             lane += field.lanes();

@@ -38,6 +38,8 @@ use pyo3::exceptions::{PyBufferError, PyKeyError, PyTypeError, PyValueError};
 use pyo3::ffi;
 use pyo3::prelude::*;
 
+use crate::vector::{Pair, Point, Vector2};
+
 /// "No row" in a sparse array.
 const NO_ROW: u32 = u32::MAX;
 /// A tombstoned row's owner.
@@ -776,38 +778,14 @@ impl RowView {
 pub struct FieldAccessor {
     table: usize,
     column: usize,
-    /// For a two-column field, the tuple subclass a read returns.
-    pair: Option<Py<pyo3::types::PyType>>,
-}
-
-/// Build `class(first, second)` for a tuple subclass, through `tuple`'s
-/// own constructor rather than the subclass's.
-///
-/// `Vector2` subclasses `pymunk.Vec2d`, a `NamedTuple` whose `__new__` is
-/// Python: constructing one costs about 210 ns, which would be most of a
-/// read. This is `tuple.__new__(Vector2, (x, y))`, the spelling
-/// `FlockingSystem` already uses for the same reason, reached without a
-/// Python call. It runs `tuple`'s real allocator, so whatever a given
-/// CPython keeps in a tuple header is initialised by the code that owns
-/// it.
-fn build_pair<'py>(
-    class: &Bound<'py, pyo3::types::PyType>,
-    first: f64,
-    second: f64,
-) -> PyResult<Bound<'py, PyAny>> {
-    let python = class.py();
-    let arguments = ((first, second),).into_pyobject(python)?;
-    unsafe {
-        let slot = ffi::PyType_GetSlot(&raw mut ffi::PyTuple_Type, ffi::Py_tp_new);
-        let construct: ffi::newfunc = std::mem::transmute(slot);
-        let raw = construct(class.as_type_ptr(), arguments.as_ptr(), std::ptr::null_mut());
-        Bound::from_owned_ptr_or_err(python, raw)
-    }
+    /// Whether this is a two-column field, read as a `Vector2`.
+    vector: bool,
 }
 
 #[pymethods]
 impl FieldAccessor {
-    /// Bind to one field. `pair` is the class a two-column field reads as.
+    /// Bind to one field. `pair` is the class a two-column field reads as,
+    /// which can only be `Vector2`.
     #[new]
     #[pyo3(signature = (table, column, pair = None))]
     fn new(
@@ -816,17 +794,14 @@ impl FieldAccessor {
         pair: Option<Bound<'_, pyo3::types::PyType>>,
     ) -> PyResult<Self> {
         if let Some(class) = &pair {
-            if !class.is_subclass_of::<pyo3::types::PyTuple>()? {
-                return Err(PyTypeError::new_err(
-                    "a two-column field must read as a tuple subclass",
-                ));
+            if !class.is(&class.py().get_type::<Vector2>()) {
+                return Err(PyTypeError::new_err(format!(
+                    "a two-column field reads as Vector2, not {}",
+                    class.name()?
+                )));
             }
         }
-        Ok(Self {
-            table,
-            column,
-            pair: pair.map(Bound::unbind),
-        })
+        Ok(Self { table, column, vector: pair.is_some() })
     }
 
     fn __get__<'py>(
@@ -844,14 +819,14 @@ impl FieldAccessor {
         let world = view.world.bind(python).borrow();
         let row = world.locate(this.table, view.entity)?;
         let held = &world.tables[this.table];
-        match &this.pair {
-            None => held.columns[this.column].get(python, row),
-            Some(class) => match (&held.columns[this.column], &held.columns[this.column + 1]) {
+        if !this.vector {
+            return held.columns[this.column].get(python, row);
+        }
+        match (&held.columns[this.column], &held.columns[this.column + 1]) {
                 (Column::F64(first), Column::F64(second)) => {
-                    build_pair(class.bind(python), first[row], second[row])
+                    Ok(Point::of(first[row], second[row]).into_pyobject(python)?.into_any())
                 }
                 _ => Err(PyTypeError::new_err("a pair field needs two f8 columns")),
-            },
         }
     }
 
@@ -859,13 +834,10 @@ impl FieldAccessor {
         let python = instance.py();
         let view = instance.downcast::<RowView>()?.borrow();
         let mut world = view.world.bind(python).borrow_mut();
-        match &self.pair {
-            None => world.set(self.table, view.entity, self.column, value),
-            Some(_) => {
-                let first: f64 = value.get_item(0)?.extract()?;
-                let second: f64 = value.get_item(1)?.extract()?;
-                world.set_pair(self.table, view.entity, self.column, first, second)
-            }
+        if !self.vector {
+            return world.set(self.table, view.entity, self.column, value);
         }
+        let Pair(first, second) = value.extract()?;
+        world.set_pair(self.table, view.entity, self.column, first, second)
     }
 }

@@ -1,4 +1,4 @@
-"""Spatial queries against a real pymunk space.
+"""Spatial queries against a real physics world.
 
 `raycast` and `overlap_box` were the only queries the engine exposed, which
 ruled out click-picking, explosion radii, melee arcs, piercing shots and

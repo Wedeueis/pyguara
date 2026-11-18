@@ -1,7 +1,7 @@
 //! A Rapier world behind `RapierEngine` (`pyguara/physics/backends/rapier_impl.py`).
 //!
-//! The second physics backend of roadmap item 6e, built to the contract the
-//! pymunk one keeps, in pixels and seconds. Bodies and colliders carry an
+//! The engine's physics, built to the contract `IPhysicsEngine` documents,
+//! in pixels and seconds. Bodies and colliders carry an
 //! owner slot that Python maps to an entity id, so nothing here knows what
 //! an entity is.
 //!
@@ -100,7 +100,7 @@ impl PhysicsHooks for Filter<'_> {
         self.allows(context).then_some(SolverFlags::COMPUTE_RIGID_IMPULSES)
     }
 
-    /// The pymunk backend's one-way rule, every solver step: a contact
+    /// The one-way rule, every solver step: a contact
     /// whose normal does not point from the platform out of its solid face
     /// is dropped for that step. The normal, not a velocity, because a
     /// body at the top of a jump has none while it still overlaps.
@@ -831,7 +831,7 @@ impl NativePhysicsWorld {
         Self::distinct(found.into_iter())
     }
 
-    /// Join two bodies, as the pymunk backend's `create_joint` does.
+    /// Join two bodies, as `IPhysicsEngine.create_joint` describes.
     ///
     /// Args:
     ///     kind: 0 pin (a rod at the anchors' current distance), 1 distance

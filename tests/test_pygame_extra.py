@@ -132,4 +132,4 @@ class TestBuildHiddenImports:
         )
         hidden = self._hidden(tmp_path)
         assert "pygame" not in hidden
-        assert "pymunk" in hidden
+        assert "numpy" in hidden

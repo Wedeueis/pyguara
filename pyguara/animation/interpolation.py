@@ -47,8 +47,9 @@ def decompose(value: Any) -> float | Components:
         return float(value)
     if isinstance(value, Color):
         return (float(value.r), float(value.g), float(value.b), float(value.a))
+    if isinstance(value, Vector2):
+        return (value.x, value.y)
     if isinstance(value, tuple | list):
-        # Vector2 is a tuple subclass, so it lands here.
         return tuple(float(component) for component in value)
     raise TypeError(
         f"Cannot interpolate a {type(value).__name__}. Supported: numbers, "

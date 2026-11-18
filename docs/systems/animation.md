@@ -150,8 +150,8 @@ tween_property(entity, "transform.rotation", to=3.14, duration=1.0)
 ```
 
 The write **replaces** the final attribute rather than mutating it, which is
-the only approach that works for a value type: `Vector2` wraps an immutable
-`pymunk.Vec2d`, and `Color`'s channels are clamped on construction.
+the only approach that works for a value type: `Vector2` is immutable, and
+`Color`'s channels are clamped on construction.
 
 A path that does not resolve raises `PropertyPathError` **at the call**, not
 later. A tween that quietly does nothing is worse to debug than one that

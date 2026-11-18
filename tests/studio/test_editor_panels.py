@@ -355,8 +355,8 @@ class TestInspectorPanel:
         selection: Selection,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Vector2 subclasses pymunk's immutable Vec2d, so an edit cannot
-        assign to .x/.y -- it has to build a new one."""
+        """Vector2 is immutable, so an edit cannot assign to .x/.y -- it has
+        to build a new one."""
         entity = world.get_entity("root")
         assert entity is not None
         entity.add_component(Spec())

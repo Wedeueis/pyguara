@@ -70,8 +70,8 @@ file or as `PYGUARA_PHYSICS_BACKEND`, now stops the game at startup with
 `create_physics_engine` replaces it. Chipmunk's two tunings,
 `physics.penetration_recovery` and `physics.sleep_time_threshold`, are gone
 with it, and a config file that still sets them loads with a warning naming
-each key. `Vector2` still subclasses `pymunk.Vec2d`, so the package itself
-is still installed.
+each key. The `pymunk` package is no longer a dependency: `Vector2` is the
+engine's own, in the native extension.
 
 What a game notices:
 

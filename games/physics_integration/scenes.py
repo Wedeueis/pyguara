@@ -1,6 +1,6 @@
 """Module 5: Physics Scene.
 
-Demonstrates physics simulation with Pymunk backend.
+Demonstrates physics simulation on the engine's Rapier backend.
 """
 
 from games.physics_integration.components import BoxSprite

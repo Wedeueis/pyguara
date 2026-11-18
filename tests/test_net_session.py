@@ -5,9 +5,6 @@ from __future__ import annotations
 import contextlib
 import random
 import secrets
-import subprocess
-import sys
-from pathlib import Path
 
 import pytest
 
@@ -444,33 +441,3 @@ def test_an_extension_older_than_networking_also_names_make_native(
 
     with pytest.raises(RuntimeError, match="make native"):
         load_core()
-
-
-def test_no_extension_import_is_fine_and_starting_a_session_explains(
-    tmp_path: Path,
-) -> None:
-    """A single-player game on an uncovered platform must be unaffected."""
-    script = """
-import sys
-sys.modules["pyguara.pyguara_core_rs"] = None
-import pyguara.native as native
-native._candidate_paths = lambda: []
-import pyguara.net
-assert "pyguara.pyguara_core_rs" not in {
-    name for name, module in sys.modules.items() if module is not None
-}
-try:
-    pyguara.net.UdpTransport.host(b"k" * 32, 0)
-except RuntimeError as error:
-    print("REFUSED", "networked multiplayer" in str(error))
-"""
-    result = subprocess.run(
-        [sys.executable, "-c", script],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert "REFUSED True" in result.stdout

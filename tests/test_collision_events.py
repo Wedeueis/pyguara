@@ -4,7 +4,7 @@ The backend hands ``CollisionSystem`` a contact pair in Chipmunk's own,
 arbitrary order plus ``sensor_entity_id`` -- which of the two owns the sensor
 shape, or None for a solid collision. These tests drive that contract
 directly; ``test_trigger_volumes.py`` covers the end-to-end path through the
-real pymunk backend.
+real physics engine.
 """
 
 from pyguara.common.types import Vector2

@@ -12,6 +12,7 @@ and never asks about the extension.
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -144,3 +145,31 @@ class TestTheReport:
         """A config or environment variable naming it does nothing now."""
         for name in ("NativeAcceleration", "configure", "in_use", "resolved"):
             assert not hasattr(native, name), name
+
+
+def test_importing_the_engine_without_the_extension_says_how_to_build_it() -> None:
+    """`Vector2` lives in the extension, so the first import needs it.
+
+    That import is the earliest point anything can fail, so the error
+    there has to be the one that names the fix.
+    """
+    script = """
+import sys
+sys.modules["pyguara.pyguara_core_rs"] = None
+import pyguara.native as native
+native._candidate_paths = lambda: []
+try:
+    import pyguara.common.types
+except RuntimeError as error:
+    print("REFUSED", "Vector2" in str(error), "make native" in str(error))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "REFUSED True True" in result.stdout

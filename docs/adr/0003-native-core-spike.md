@@ -495,6 +495,7 @@ smuggled in as a consequence of a maths optimisation. **D stays rejected.**
 - Pool and probe figures in `docs/guides/performance.md`.
 - `tools/preflight_pymunk_vector.py` — finding 1, re-runnable against a
   future pymunk rather than trusted from a document written against 7.2.0.
+  Deleted with pymunk itself (roadmap 6f); it is in git history.
 - `tools/count_vector_ops.py` — the `Vector2` frame-traffic measurement that
   decides Marco 1.
 - `Cargo.toml`, `rust/src/` — the Marco 3 pools, standalone so `uv sync`

@@ -60,7 +60,7 @@ def _configure(config: GameConfig) -> None:
 def configure_game_container() -> DIContainer:
     """Build the engine container, then this demo's render chain.
 
-    Nothing here touches pymunk: movement is a hand-rolled AABB/grid
+    Nothing here touches the physics engine: movement is a hand-rolled AABB/grid
     stepper against `CaveLayout` (see `systems.py`'s `PlayerController`)
     for tight platformer feel, and no entity in this demo carries a
     `RigidBody`. The engine registers an `IPhysicsEngine` regardless --
