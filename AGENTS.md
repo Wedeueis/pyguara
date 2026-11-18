@@ -13,7 +13,7 @@ points to under `docs/`.
 
 PyGuara is a code-first 2D game engine for Python 3.12+, with a Rust
 extension for the platform layer and the hot paths. **Alpha, version
-0.7.0**: it runs a real game (Reclaimer), and its APIs still change.
+0.8.0**: it runs a real game (Reclaimer), and its APIs still change.
 
 The rebuilt renderer, platform layer and networking were developed in a
 temporary fork, `pyguara-next`, merged back on 2026-11-14 (#404) and

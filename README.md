@@ -8,7 +8,7 @@ that ships inside the package.
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![License](https://img.shields.io/github/license/Wedeueis/pyguara)](LICENSE)
 
-> **Status: alpha, 0.7.0.** It runs a real game in development, and its
+> **Status: alpha, 0.8.0.** It runs a real game in development, and its
 > APIs still change between versions. It is not on PyPI yet.
 
 ## What it is
@@ -61,8 +61,6 @@ python -m my_game
 
 `pyguara new` writes a package with one scene, an entry point, a
 `pyproject.toml`, an assets folder and an `AGENTS.md` for coding agents.
-It is newer than 0.7.0, the release on PyPI, so until the next release it
-needs the engine installed from source.
 
 ### From source
 

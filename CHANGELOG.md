@@ -596,6 +596,7 @@ issues rather than fixed in place — #16, #19, #28, #37, #40, #43, #46, #49,
 
 ---
 
+[0.8.0]: https://github.com/wedeueis/pyguara/compare/v0.7.0-alpha...v0.8.0-alpha
 [0.7.0]: https://github.com/wedeueis/pyguara/compare/v0.6.0-alpha...v0.7.0-alpha
 [0.6.0]: https://github.com/wedeueis/pyguara/compare/v0.5.0-alpha...v0.6.0-alpha
 [0.5.0]: https://github.com/wedeueis/pyguara/compare/v0.4.0-alpha...v0.5.0-alpha
