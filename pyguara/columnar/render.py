@@ -7,8 +7,8 @@ same arithmetic as the object path, without a `RenderCommand` or a
 `RenderBatch` in between.
 
 A texture is the id `GpuFrame.image()` returns, and a colour is four
-0-255 channels. Atlas regions and materials are not columns; a sprite
-needing either stays in the object ECS.
+0-255 channels. Atlas regions, materials and flips are not columns; a
+sprite needing any of them stays in the object ECS.
 """
 
 from __future__ import annotations

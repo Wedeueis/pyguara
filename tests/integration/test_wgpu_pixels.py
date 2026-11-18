@@ -388,6 +388,25 @@ class TestSprites:
 
         assert _differing(reference, actual) == 0
 
+    @pytest.mark.parametrize("turn", [0.0, 90.0])
+    @pytest.mark.parametrize("scale", [(-1, 1), (1, -1), (-2, 2), (-1, -1)])
+    def test_a_flipped_sprite_in_a_batch_lands_where_pygame_puts_it(
+        self, wgpu: Any, scale: tuple[int, int], turn: float
+    ) -> None:
+        """A batch's destination is the top-left of the sprite's box, flipped or not."""
+        batch = RenderBatch(
+            texture=_checker(),
+            destinations=[(40.0, 30.0)],
+            rotations=[turn],
+            scales=[(float(scale[0]), float(scale[1]))],
+            transforms_enabled=True,
+        )
+
+        reference, actual = _frames(wgpu, lambda r: r.render_batch(batch))
+
+        assert _drawn(reference) > 0
+        assert _differing(reference, actual) == 0
+
     @pytest.mark.parametrize("turn", [90.0, 180.0, 270.0])
     def test_quarter_turns_go_the_same_way(self, wgpu: Any, turn: float) -> None:
         # Not exact: pygame's `rotate` resamples. But a turn the wrong way
