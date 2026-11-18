@@ -1,6 +1,8 @@
 # ADR 0009: A native mirror of static solids, and what running Reclaimer on the fork showed
 
-**Status:** Accepted, in this fork.
+**Status:** Superseded (2026-11-18). The mirror lived in `PymunkEngine`, and
+went with it when pymunk was retired; Rapier answers the same queries
+natively, moving bodies included (roadmap 6e).
 **Date:** 2026-11-10
 
 ## Context

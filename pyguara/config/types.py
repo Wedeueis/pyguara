@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 
 
 class RetiredBackendError(RuntimeError):
-    """A configuration names a rendering backend the engine no longer has.
+    """A configuration names a backend the engine no longer has.
 
     Not a `ValueError` on purpose: an unknown enum value in a config file
     falls back to the default with a warning, and a failed load is logged
@@ -138,13 +138,26 @@ class InputConfig:
 class PhysicsBackend(Enum):
     """Which engine simulates physics.
 
-    RAPIER: The default. Rapier, in the native extension.
-    PYMUNK: Chipmunk through pymunk, the engine before Rapier. It differs
-        where `docs/physics/simulation.md` says.
+    RAPIER: Rapier, in the native extension; the only one.
+
+    Asking for `pymunk`, which is retired, raises `RetiredBackendError`.
     """
 
-    PYMUNK = "pymunk"
     RAPIER = "rapier"
+
+    @classmethod
+    def _missing_(cls, value: object) -> PhysicsBackend | None:
+        """Refuse the retired pymunk backend by name, loudly.
+
+        Raises:
+            RetiredBackendError: If the value is `pymunk`.
+        """
+        if isinstance(value, str) and value.strip().lower() == "pymunk":
+            raise RetiredBackendError(
+                "physics.backend is 'pymunk', which was retired: physics runs "
+                "on 'rapier'. Remove the setting, or set it to 'rapier'."
+            )
+        return None
 
 
 @dataclass
@@ -166,27 +179,12 @@ class PhysicsConfig:
     gravity_x: float = 0.0
     gravity_y: float = 0.0
 
-    # Solver steps per physics tick. Chipmunk has no continuous collision
+    # Solver steps per physics tick. The world runs no continuous collision
     # detection, so a body jumps velocity/tick pixels and passes through
-    # anything thinner. Against a 10px wall, 1/2/4 substeps stop a
-    # body up to roughly 200/400/900 px/s. 4 is the default: its cost is
-    # modest at the body counts a roguelike scene reaches, and the headroom
-    # matters for knockback and explosion-flung props. Drop to 2 only with
-    # many hundreds of fast bodies. 1 disables substepping.
+    # anything thinner; more substeps stop faster bodies, and the speeds are
+    # in docs/physics/simulation.md. 4 is the default, for knockback and
+    # explosion-flung props. 1 disables substepping.
     substeps: int = 4
-
-    # Fraction of any remaining collider overlap resolved per 1/60s.
-    # Chipmunk's own default of 0.1 loses to gravity: a character that lands
-    # inside the floor climbs out at a fraction of a pixel per tick and looks
-    # stuck in the ground for seconds.
-    penetration_recovery: float = 0.3
-
-    # Seconds a body must be still before Chipmunk lets it sleep and stop
-    # consuming solver time. Chipmunk's own default never sleeps anything, so
-    # a room full of settled props and debris is simulated forever. Any
-    # direct state write (position, velocity, impulse) wakes a body. 0
-    # disables sleeping.
-    sleep_time_threshold: float = 0.5
 
     @property
     def fixed_dt(self) -> float:

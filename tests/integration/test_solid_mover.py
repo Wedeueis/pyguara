@@ -22,7 +22,7 @@ from pyguara.kits.platformer_movement.controller import (
     PlatformerInput,
 )
 from pyguara.kits.platformer_movement.system import PlatformerSystem
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.components import (
     CharacterBody,
@@ -50,7 +50,7 @@ class World:
         """Create an empty world."""
         self.entities = EntityManager()
         self.dispatcher = EventDispatcher()
-        self.engine = PymunkEngine()
+        self.engine = RapierEngine()
         self.engine.set_collision_system(CollisionSystem(self.dispatcher))
         self.physics = PhysicsSystem(
             self.engine, self.entities, self.dispatcher, gravity=Vector2(0, 0)

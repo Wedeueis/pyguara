@@ -30,7 +30,7 @@ web, mobile or console target.
 | **Rendering** | A GPU renderer on [wgpu](https://wgpu.rs) (DX12, Metal, Vulkan, GL): sprite batching, a render graph, 2D lighting, post-processing, sprite materials in WGSL. A software renderer on pygame-ce is kept as the reference the GPU one is tested against |
 | **Platform** | Window and input on winit, gamepads on gilrs, image decoding and hinted text in Rust. The wgpu path runs without pygame |
 | **Audio** | A native mixer: buses, pitch, sample-exact loop regions, streamed music with fades |
-| **Physics** | Rigid bodies, joints, triggers and queries through pymunk, plus a swept character mover |
+| **Physics** | Rigid bodies, joints, triggers and queries on Rapier, in the native extension, plus a swept character mover |
 | **Gameplay** | State machines, behaviour trees, steering, flocking, A*, flow fields and navmesh. Tweens, animation state machines, coroutines. Tilemaps from Tiled and LDtk. Prefabs, save files, replays |
 | **UI** | A layout engine, a widget set, a declarative builder, themes, rich text |
 | **Kits** | Building blocks to copy and change: action combat, top-down and platformer movement, projectiles, loot, progression, procedural generation |

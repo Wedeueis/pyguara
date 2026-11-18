@@ -20,7 +20,7 @@ from pyguara.physics.protocols import IPhysicsEngine
 
 # The probe box is shrunk by this much on each side before every overlap
 # query. Without it, a character resting exactly flush against a surface
-# would read as overlapping it -- Chipmunk's `shape_query` counts an exact
+# would read as overlapping it -- an overlap query may count an exact
 # touch as an overlap -- and the very next whole-pixel step in the same
 # direction would report blocked a pixel early. SKIN is applied only to the
 # query box, never to the position a character actually occupies, so it

@@ -46,7 +46,7 @@ from pyguara.net import (
     UInt16,
     Versions,
 )
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.character_mover import CharacterMover
 from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.physics_system import PhysicsSystem
@@ -105,9 +105,9 @@ def state_schema() -> ReplicationSchema:
     return schema
 
 
-def build_world() -> tuple[EntityManager, PymunkEngine]:
+def build_world() -> tuple[EntityManager, RapierEngine]:
     world = EntityManager()
-    engine = PymunkEngine()
+    engine = RapierEngine()
     engine.initialize(Vector2(0, 0))
     physics = PhysicsSystem(engine, world, EventDispatcher())
     for x, y, w, h in WALLS:

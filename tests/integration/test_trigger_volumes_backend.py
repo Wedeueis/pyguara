@@ -16,7 +16,7 @@ from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.physics_system import PhysicsSystem
@@ -35,7 +35,7 @@ class World:
     def __init__(self, gravity: Vector2 = Vector2(0, 60)) -> None:
         self.entities = EntityManager()
         self.dispatcher = EventDispatcher()
-        self.engine = PymunkEngine()
+        self.engine = RapierEngine()
         self.engine.set_collision_system(CollisionSystem(self.dispatcher))
         self.physics = PhysicsSystem(
             self.engine, self.entities, self.dispatcher, gravity=gravity

@@ -135,11 +135,11 @@ class TestSet:
             session,
             operation="set",
             section="physics",
-            setting="penetration_recovery",
+            setting="max_frame_time",
             value=0.016,
         )
         assert result.ok, result.error
-        assert manager.config.physics.penetration_recovery == 0.016
+        assert manager.config.physics.max_frame_time == 0.016
 
     def test_an_enum_takes_a_member_name(self, ops, session, manager) -> None:
         result = call(

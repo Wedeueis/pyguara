@@ -1,9 +1,9 @@
-"""The Rapier backend keeps the contract the pymunk one does.
+"""The Rapier backend keeps `IPhysicsEngine`'s contract.
 
-Every behaviour here runs against both engines, so where pymunk's answer is
-the contract the Rapier one is held to it. Numbers differ between the two
-solvers, so positions are compared to a pixel or two and the assertions are
-about behaviour: what rests where, what is hit, what is reported.
+Written while pymunk was the reference and run against both engines until
+pymunk was retired, so the answers here are the contract. Positions are
+compared to a pixel or two and the assertions are about behaviour: what
+rests where, what is hit, what is reported.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ from typing import Any
 import pytest
 
 from pyguara.common.types import Rect, Vector2
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
 from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.types import (
     BodyType,
@@ -65,9 +64,9 @@ class _Recorder:
         return [kind for kind, a, b, _ in self.events if (a, b) == tuple(sorted(pair))]
 
 
-@pytest.fixture(params=["pymunk", "rapier"])
-def engine(request: pytest.FixtureRequest) -> Any:
-    built: Any = PymunkEngine() if request.param == "pymunk" else RapierEngine()
+@pytest.fixture
+def engine() -> Any:
+    built: Any = RapierEngine()
     built.initialize(Vector2(0, 980))
     yield built
     built.cleanup()
@@ -460,19 +459,29 @@ def test_rapier_is_the_default(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -
         app.shutdown()
 
 
-def test_pymunk_can_still_be_chosen(
+def test_pymunk_is_refused_by_name(
     tmp_path: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from pyguara.application.bootstrap import create_headless_application
-    from pyguara.physics.protocols import IPhysicsEngine
+    """It was retired. A game asking for it stops at startup, saying what
+    to use, rather than quietly running on Rapier."""
+    import json
 
+    from pyguara.application.bootstrap import create_headless_application
+    from pyguara.config.manager import ConfigManager
+    from pyguara.config.types import GameConfig, PhysicsBackend, RetiredBackendError
+
+    with pytest.raises(RetiredBackendError, match="'rapier'"):
+        PhysicsBackend(" PyMunk ")
+    data = GameConfig().to_dict()
+    data["physics"]["backend"] = "pymunk"
+    path = tmp_path / "c.json"
+    path.write_text(json.dumps(data))
+    with pytest.raises(RetiredBackendError):
+        ConfigManager(file_path=path).load()
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PYGUARA_PHYSICS_BACKEND", "pymunk")
-    app = create_headless_application()
-    try:
-        assert isinstance(app.container.get(IPhysicsEngine), PymunkEngine)
-    finally:
-        app.shutdown()
+    with pytest.raises(RetiredBackendError):
+        create_headless_application()
 
 
 def test_the_config_chooses_rapier(
@@ -498,8 +507,7 @@ def test_the_config_chooses_rapier(
 
 class TestCreatePhysicsEngine:
     """One place builds the configured engine, so a game's own world -- a
-    room's walls -- follows `physics.backend` as bootstrap's does. Reclaimer
-    built its walls on `PymunkEngine()` by name and never saw Rapier."""
+    room's walls -- is tuned as bootstrap's is."""
 
     def test_rapier_is_built_with_the_substeps(self) -> None:
         from pyguara.config.types import PhysicsBackend, PhysicsConfig
@@ -511,21 +519,6 @@ class TestCreatePhysicsEngine:
 
         assert isinstance(engine, RapierEngine)
         assert engine._substeps == 3
-
-    def test_pymunk_is_built_with_chipmunks_tunings(self) -> None:
-        from pyguara.config.types import PhysicsConfig
-        from pyguara.physics import create_physics_engine
-
-        engine = create_physics_engine(
-            PhysicsConfig(
-                substeps=2, penetration_recovery=0.5, sleep_time_threshold=1.5
-            )
-        )
-
-        assert isinstance(engine, PymunkEngine)
-        assert engine._substeps == 2
-        assert engine._penetration_recovery == 0.5
-        assert engine._sleep_time_threshold == 1.5
 
     def test_each_call_is_a_new_world(self) -> None:
         from pyguara.config.types import PhysicsConfig

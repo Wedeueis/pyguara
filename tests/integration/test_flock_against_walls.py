@@ -14,7 +14,7 @@ from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.kits.topdown_movement import TopDownBody, TopDownSystem
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.types import BodyType, ShapeType
@@ -28,7 +28,7 @@ DT = 1 / 60
 @pytest.mark.parametrize("integrate", [True, False])
 def test_a_flock_moved_by_a_collider_stops_at_a_wall(integrate: bool) -> None:
     world = EntityManager()
-    engine = PymunkEngine()
+    engine = RapierEngine()
     engine.initialize(Vector2(0, 0))
     physics = PhysicsSystem(engine, world, EventDispatcher())
     wall = world.create_entity("wall")

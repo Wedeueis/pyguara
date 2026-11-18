@@ -9,7 +9,7 @@ from pyguara.kits.platformer_movement.controller import (
     PlatformerState,
 )
 from pyguara.kits.platformer_movement.system import PlatformerSystem
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.components import CharacterBody, Collider
 from pyguara.physics.types import ShapeType
 
@@ -120,7 +120,7 @@ class TestPlatformerSystem:
     def setup_method(self):
         """Set up test environment."""
         self.manager = EntityManager()
-        self.physics_engine = PymunkEngine()
+        self.physics_engine = RapierEngine()
         self.physics_engine.initialize(Vector2(0, 980))  # Gravity
         self.platformer_system = PlatformerSystem(
             self.manager, self.physics_engine, gravity=Vector2(0, 980)

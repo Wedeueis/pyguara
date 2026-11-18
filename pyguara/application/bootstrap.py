@@ -592,14 +592,14 @@ def _setup_container(
     # Physics Engine
     physics_config = config_manager.config.physics
     physics_engine = create_physics_engine(physics_config)
-    container.register_instance(IPhysicsEngine, physics_engine)
+    container.register_instance(IPhysicsEngine, physics_engine)  # type: ignore[type-abstract]
     logger.info(
         "physics: %s, %d substeps",
         physics_config.backend.value,
         physics_config.substeps,
     )
 
-    # Collision System (bridges pymunk callbacks to PyGuara events)
+    # Collision System (bridges the engine's collision reports to events)
     collision_system = CollisionSystem(event_dispatcher)
     container.register_instance(CollisionSystem, collision_system)
 

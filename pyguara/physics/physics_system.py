@@ -12,7 +12,7 @@ from pyguara.physics.types import BodyType
 
 
 class PhysicsSystem:
-    """The bridge between the ECS world and the Physics Backend (Pymunk).
+    """The bridge between the ECS world and the physics engine.
 
     It synchronizes the state of ECS 'Transform' components with the
     underlying physics simulation bodies.

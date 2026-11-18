@@ -4,21 +4,16 @@
 functions and the backend's ``create_joint``. None of that connects a
 ``Joint`` *component* to the simulation: before ``JointSystem`` existed,
 adding one to an entity did nothing at all -- a pin-jointed body just
-free-fell. These tests drive the component through each real backend.
+free-fell. These tests drive the component through the real backend.
 """
 
 from __future__ import annotations
-
-from typing import Any
-
-import pytest
 
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.events import EntityDestroyed
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
 from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.joint_system import JointSystem
@@ -28,25 +23,15 @@ from pyguara.physics.types import BodyType, ShapeType
 
 DT = 1.0 / 60.0
 
+
 # Which engine `World` builds; set per test by `_backend`.
-_ENGINE: Any = PymunkEngine
-
-
-@pytest.fixture(
-    autouse=True, params=[PymunkEngine, RapierEngine], ids=["pymunk", "rapier"]
-)
-def _backend(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Run every test against both engines."""
-    monkeypatch.setitem(globals(), "_ENGINE", request.param)
-
-
 class World:
     """ECS world with PhysicsSystem + JointSystem, wired like a scene."""
 
     def __init__(self, gravity: Vector2 = Vector2(0, 900)) -> None:
         self.entities = EntityManager()
         self.dispatcher = EventDispatcher()
-        self.engine = _ENGINE()
+        self.engine = RapierEngine()
         self.physics = PhysicsSystem(
             self.engine, self.entities, self.dispatcher, gravity=gravity
         )
@@ -70,9 +55,7 @@ class World:
 
     @property
     def constraint_count(self) -> int:
-        if isinstance(self.engine, RapierEngine):
-            return int(self.engine._world().joint_count())
-        return len(self.engine.space.constraints)
+        return int(self.engine._world().joint_count())
 
 
 def test_pin_joint_holds_body_at_rest_length():

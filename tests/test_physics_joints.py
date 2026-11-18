@@ -1,9 +1,11 @@
 """Tests for physics joint system."""
 
+import pytest
+
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.joints import (
     Joint,
@@ -92,12 +94,12 @@ class TestJointComponent:
         assert joint.anchor_b == Vector2.zero()
 
 
-class TestPymunkJointCreation:
-    """Test joint creation in pymunk backend."""
+class TestJointCreation:
+    """Test joint creation in the physics backend."""
 
     def setup_method(self):
         """Set up physics engine and entities for testing."""
-        self.engine = PymunkEngine()
+        self.engine = RapierEngine()
         self.engine.initialize(Vector2(0, 0))  # No gravity for simpler tests
 
         self.manager = EntityManager()
@@ -233,44 +235,23 @@ class TestPymunkJointCreation:
 
         assert joint_handle is not None
 
-    def test_joint_with_max_force(self):
-        """Joints should support max force limits."""
-        joint_handle = self.engine.create_joint(
-            body_a=self.body_a,
-            body_b=self.body_b,
-            joint_type=JointType.PIN,
-            anchor_a=Vector2.zero(),
-            anchor_b=Vector2.zero(),
-            min_distance=0.0,
-            max_distance=0.0,
-            stiffness=0.0,
-            damping=0.0,
-            max_force=1000.0,
-            collide_connected=False,
-        )
-
-        assert joint_handle is not None
-        assert joint_handle.max_force == 1000.0
-
-    def test_joint_collide_connected(self):
-        """Joints should support collide_connected flag."""
-        joint_handle = self.engine.create_joint(
-            body_a=self.body_a,
-            body_b=self.body_b,
-            joint_type=JointType.PIN,
-            anchor_a=Vector2.zero(),
-            anchor_b=Vector2.zero(),
-            min_distance=0.0,
-            max_distance=0.0,
-            stiffness=0.0,
-            damping=0.0,
-            max_force=0.0,
-            collide_connected=True,
-        )
-
-        assert joint_handle is not None
-        # Pymunk uses 1/0 instead of True/False
-        assert joint_handle.collide_bodies == 1
+    def test_max_force_is_refused_on_a_pin(self):
+        """Rapier can cap the force of a motor only; a capped pin would
+        quietly be an uncapped one, so it raises instead."""
+        with pytest.raises(NotImplementedError, match="MOTOR"):
+            self.engine.create_joint(
+                body_a=self.body_a,
+                body_b=self.body_b,
+                joint_type=JointType.PIN,
+                anchor_a=Vector2.zero(),
+                anchor_b=Vector2.zero(),
+                min_distance=0.0,
+                max_distance=0.0,
+                stiffness=0.0,
+                damping=0.0,
+                max_force=1000.0,
+                collide_connected=False,
+            )
 
     def test_destroy_joint(self):
         """Engine should destroy joints."""
@@ -291,10 +272,11 @@ class TestPymunkJointCreation:
         # Should not raise
         self.engine.destroy_joint(joint_handle)
 
-    def test_destroy_none_joint(self):
-        """destroy_joint should handle None gracefully."""
-        # Should not raise
-        self.engine.destroy_joint(None)
+    def test_destroying_none_is_refused(self):
+        """`JointSystem` never passes None; anything else that does has
+        lost a handle, and saying so beats doing nothing."""
+        with pytest.raises(TypeError, match="RapierJoint"):
+            self.engine.destroy_joint(None)
 
 
 class TestJointTypes:

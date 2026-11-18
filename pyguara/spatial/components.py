@@ -12,7 +12,7 @@ class SpatialTracked(StrictComponent):
     """Marks an entity for `SpatialIndexSystem` to track by world position.
 
     No physics body is required -- this is for gameplay entities a spatial
-    query needs to find that have no pymunk shape at all (a pooled bullet,
+    query needs to find that have no physics collider at all (a pooled bullet,
     an AI perception target, an RTS-selectable unit).
 
     Attributes:

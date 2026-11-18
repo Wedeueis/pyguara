@@ -6,7 +6,7 @@ no attributes, no registration DSL.
 
 ```python
 container = DIContainer()
-container.register_singleton(IPhysicsEngine, PymunkEngine)
+container.register_singleton(IPhysicsEngine, RapierEngine)
 container.register_transient(IProjectile, Bullet)
 
 engine = container.get(IPhysicsEngine)
@@ -138,12 +138,12 @@ Classes may carry their own registration metadata:
 
 ```python
 @singleton(IPhysicsEngine)
-class PymunkEngine: ...
+class RapierEngine: ...
 
 @scoped(ILevelCache)
 class LevelCache: ...
 
-auto_register(container, PymunkEngine, LevelCache)
+auto_register(container, RapierEngine, LevelCache)
 ```
 
 ## Error strategy

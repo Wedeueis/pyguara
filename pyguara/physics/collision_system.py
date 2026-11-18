@@ -1,14 +1,14 @@
 """Collision callback routing system.
 
-This module provides the CollisionSystem, which bridges pymunk's collision
-handlers to PyGuara's event system. It translates low-level physics callbacks
+This module provides the CollisionSystem, which bridges the physics engine's
+collision reports to PyGuara's event system. It translates low-level physics callbacks
 into high-level game events that can be subscribed to by game systems.
 
 The CollisionSystem is registered as a singleton in the DI container and
 automatically wired to the physics engine during application bootstrap.
 
 Architecture:
-    Pymunk Callbacks → CollisionSystem → EventDispatcher → Game Systems
+    Physics engine → CollisionSystem → EventDispatcher → Game Systems
 
 Example:
     # Collision system is automatically registered during bootstrap
@@ -37,7 +37,7 @@ from pyguara.physics.events import (
 
 
 class CollisionSystem:
-    """Bridges pymunk collision handlers to PyGuara event system.
+    """Bridges the physics engine's collision reports to the event system.
 
     The CollisionSystem maintains state about active collisions and triggers,
     ensuring that events are dispatched correctly and consistently. It's
@@ -71,8 +71,8 @@ class CollisionSystem:
     ) -> tuple[str, str]:
         """Return ``(trigger_entity, other_entity)`` with the sensor first.
 
-        The backend reports a contact pair in an arbitrary order -- Chipmunk
-        decides which shape is A -- and only it knows which of the two shapes
+        The backend reports a contact pair in an arbitrary order -- the
+        engine decides which shape is A -- and only it knows which of the two shapes
         is the sensor. Without reordering here, the trigger volume and the
         body that entered it are swapped for roughly half of all pairs, and
         ``TriggerSystem`` then silently drops every event whose nominal

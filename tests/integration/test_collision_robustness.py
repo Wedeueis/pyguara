@@ -1,9 +1,9 @@
 """Collision and motion behaviour a 2D engine must get right.
 
-These go through EntityManager -> PhysicsSystem -> PymunkEngine, wired the
+These go through EntityManager -> PhysicsSystem -> RapierEngine, wired the
 way `application/bootstrap.py` wires it, because that is where the behaviour
 a game actually sees is decided. Testing the backend alone would miss the
-wiring, and testing pymunk alone would test pymunk.
+wiring.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from pyguara.common.types import Vector2
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.events import OnCollisionBegin
@@ -34,7 +34,7 @@ class World:
         """Build the world, optionally overriding the engine's substep count."""
         self.entities = EntityManager()
         self.dispatcher = EventDispatcher()
-        engine = PymunkEngine() if substeps is None else PymunkEngine(substeps)
+        engine = RapierEngine() if substeps is None else RapierEngine(substeps)
         engine.set_collision_system(CollisionSystem(self.dispatcher))
         self.system = PhysicsSystem(
             engine, self.entities, self.dispatcher, gravity=gravity
@@ -102,21 +102,21 @@ def test_a_fast_body_does_not_pass_through_a_thin_wall(speed: float) -> None:
     assert fire_at_wall(speed, wall_thickness=10.0, substeps=None) < 400.0
 
 
-def test_substepping_is_what_stops_it() -> None:
-    """Pin the mechanism, not just the symptom.
+def test_one_step_a_tick_already_stops_a_fast_body() -> None:
+    """Pin what the solver does without substeps.
 
-    One step per tick tunnels at a speed four substeps catch. If this ever
-    stops holding, the fix above is being carried by something else and the
-    substep count is no longer doing the work its cost is paying for.
+    Rapier stops this body at the wall at 20000 px/s -- 333px a step
+    against a 10px wall -- in one step a tick, where Chipmunk tunnelled at
+    1200. Substeps are not what keeps a thin wall solid; if this fails,
+    something now depends on them that did not.
     """
-    assert fire_at_wall(1200.0, wall_thickness=10.0, substeps=1) > 400.0
-    assert fire_at_wall(1200.0, wall_thickness=10.0, substeps=4) < 400.0
+    assert fire_at_wall(20000.0, wall_thickness=10.0, substeps=1) < 400.0
 
 
 def test_substeps_must_be_positive() -> None:
     """Zero substeps would freeze the simulation rather than fail loudly."""
-    with pytest.raises(ValueError, match="substeps must be positive"):
-        PymunkEngine(0)
+    with pytest.raises(ValueError, match="substeps must be at least 1"):
+        RapierEngine(0)
 
 
 def test_a_dropped_box_comes_to_rest_on_the_ground() -> None:

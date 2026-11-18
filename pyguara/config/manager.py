@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import json
 import os
@@ -819,6 +820,10 @@ class ConfigManager:
             for member in target_type:
                 if str(member.value).lower() == raw.lower():
                     return member
+            # Asked by value too, so an enum that refuses a retired value
+            # by name (`_missing_` raising) is heard rather than ignored.
+            with contextlib.suppress(ValueError):
+                target_type(raw)
             valid = ", ".join(member.name for member in target_type)
             self._log(
                 ValidationSeverity.WARNING,

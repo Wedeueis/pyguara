@@ -8,7 +8,7 @@ tick to keep the hash current.
 
 The physics-backed equivalent -- `point_query`, `region_query`,
 `overlap_circle`, etc. on `IPhysicsEngine` -- already covers entities that
-do have a pymunk shape; this module exists for the ones that don't.
+do have a physics collider; this module exists for the ones that don't.
 """
 
 from pyguara.common.spatial import SpatialHash

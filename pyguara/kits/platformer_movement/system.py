@@ -3,7 +3,7 @@
 The PlatformerSystem updates PlatformerController components each frame,
 handling ground detection, movement, jumping, and wall mechanics.
 
-Movement is driven by `CharacterMover`, not the Chipmunk solver: a character
+Movement is driven by `CharacterMover`, not the physics solver: a character
 has no `RigidBody`/shape registered with the physics engine at all, only a
 `CharacterBody` (velocity, ground state, knockback) and a `Collider` used
 purely as a source of dimensions. Gravity is integrated here manually, since

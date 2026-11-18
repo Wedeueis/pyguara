@@ -1,9 +1,8 @@
-"""Rapier's joints behave as the pymunk backend's do.
+"""Rapier's joints keep the meaning each joint type has.
 
-Each behaviour runs against both engines. The pymunk backend maps the joint
-types onto Chipmunk constraints (`PIN` is a rod, `SLIDER` a pair of
-distance limits), and the Rapier backend reproduces that mapping, so what
-is held here is that mapping's behaviour, to a pixel or a degree.
+The joint types map onto constraints as they did on Chipmunk (`PIN` is a
+rod, `SLIDER` a pair of distance limits), and what is held here is that
+mapping's behaviour, to a pixel or a degree.
 """
 
 from __future__ import annotations
@@ -13,7 +12,6 @@ from typing import Any
 import pytest
 
 from pyguara.common.types import Vector2
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
 from pyguara.physics.backends.rapier_impl import RapierEngine
 from pyguara.physics.types import (
     BodyType,
@@ -28,9 +26,9 @@ SOLID = PhysicsMaterial(friction=0.5, restitution=0.0, density=1.0)
 ORIGIN = Vector2(0, 0)
 
 
-@pytest.fixture(params=["pymunk", "rapier"])
-def engine(request: pytest.FixtureRequest) -> Any:
-    built: Any = PymunkEngine() if request.param == "pymunk" else RapierEngine()
+@pytest.fixture
+def engine() -> Any:
+    built: Any = RapierEngine()
     built.initialize(Vector2(0, 980))
     yield built
     built.cleanup()
