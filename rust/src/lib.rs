@@ -107,6 +107,8 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<steam::NativeSteam>()?;
     module.add_function(wrap_pyfunction!(steam::steam_library_name, module)?)?;
     module.add_function(wrap_pyfunction!(window::keycode_table, module)?)?;
+    module.add_function(wrap_pyfunction!(window::x11_keyboard_available, module)?)?;
+    module.add_function(wrap_pyfunction!(window::window_system, module)?)?;
     module.add_function(wrap_pyfunction!(imaging::decode_image, module)?)?;
     module.add_function(wrap_pyfunction!(imaging::decode_image_bytes, module)?)?;
     module.add_function(wrap_pyfunction!(imaging::premultiply_rgba, module)?)?;

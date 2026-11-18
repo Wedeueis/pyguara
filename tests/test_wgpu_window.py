@@ -9,6 +9,7 @@ window, and skips where there is no window system to open it on.
 from __future__ import annotations
 
 import signal
+import sys
 from typing import Any
 
 import pytest
@@ -26,7 +27,12 @@ from pyguara.events.input import (
 from pyguara.events.lifecycle import QuitEvent
 from pyguara.events.window import WindowResizeEvent
 from pyguara.graphics.backends.wgpu import window as window_module
-from pyguara.graphics.backends.wgpu.window import WgpuWindow, translate, wants_offscreen
+from pyguara.graphics.backends.wgpu.window import (
+    WgpuWindow,
+    pick_window_system,
+    translate,
+    wants_offscreen,
+)
 from pyguara.input import keys
 
 try:
@@ -36,6 +42,9 @@ except RuntimeError:
 needs_extension = pytest.mark.skipif(extension is None, reason="extension not built")
 
 SHIFT, CTRL, ALT = 0x0003, 0x00C0, 0x0300
+
+# What a WSLg session sets: a Wayland socket, an X server, and the distro.
+_WSLG = {"WSL_DISTRO_NAME": "Ubuntu", "WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"}
 
 
 def same(actual: object, expected: object) -> bool:
@@ -133,6 +142,33 @@ class TestOffscreen:
         assert wants_offscreen() is expected
 
 
+class TestPickWindowSystem:
+    def test_the_variable_decides(self) -> None:
+        for name in ("x11", "wayland", " X11 "):
+            environ = {**_WSLG, "PYGUARA_WINDOW_SYSTEM": name}
+            assert pick_window_system(environ, False) == (name.strip().lower(), None)
+
+    def test_a_misspelt_variable_raises(self) -> None:
+        with pytest.raises(ValueError, match="PYGUARA_WINDOW_SYSTEM"):
+            pick_window_system({"PYGUARA_WINDOW_SYSTEM": "xorg"}, True)
+
+    def test_wslg_gets_x11(self) -> None:
+        assert pick_window_system(_WSLG, True) == ("x11", None)
+
+    def test_wslg_without_the_library_keeps_wayland_and_warns(self) -> None:
+        system, warning = pick_window_system(_WSLG, False)
+
+        assert system is None
+        assert warning is not None and "libxkbcommon-x11-0" in warning
+
+    def test_elsewhere_winit_chooses(self) -> None:
+        """Native Linux keeps Wayland, whose compositors draw the frame."""
+        desktop = {"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"}
+        assert pick_window_system(desktop, True) == (None, None)
+        x11_only = {**_WSLG, "WAYLAND_DISPLAY": ""}
+        assert pick_window_system(x11_only, True) == (None, None)
+
+
 class _Recorder:
     """Stands in for `NativeWindow`, recording how it was opened."""
 
@@ -155,6 +191,15 @@ class _Recorder:
 
 class _Extension:
     NativeWindow = _Recorder
+    x11_ready = True
+
+    @staticmethod
+    def x11_keyboard_available() -> bool:
+        return _Extension.x11_ready
+
+    @staticmethod
+    def window_system() -> str:
+        return "x11"
 
 
 class _Gpu:
@@ -170,7 +215,11 @@ class _Frame:
 @pytest.fixture
 def recorded(monkeypatch: pytest.MonkeyPatch) -> type[_Recorder]:
     monkeypatch.delenv("PYGUARA_WINDOW", raising=False)
+    monkeypatch.delenv("PYGUARA_WINDOW_SYSTEM", raising=False)
+    monkeypatch.delenv("WSL_DISTRO_NAME", raising=False)
+    monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(native, "require_extension", lambda _why: _Extension)
+    _Extension.x11_ready = True
     monkeypatch.setattr(window_module, "GpuFrame", _Frame)
     _Recorder.opened = []
     return _Recorder
@@ -186,7 +235,49 @@ class TestOpen:
 
         (args, kwargs) = recorded.opened[0]
         assert args == ("t", 320, 200)
-        assert kwargs == {"fullscreen": True, "resizable": True, "borderless": True}
+        assert kwargs == {
+            "fullscreen": True,
+            "resizable": True,
+            "borderless": True,
+            "window_system": None,
+        }
+
+    def test_under_wslg_an_x11_window_is_asked_for(
+        self, monkeypatch: pytest.MonkeyPatch, recorded: type[_Recorder]
+    ) -> None:
+        """Reported as a garbage band round the window: WSLg's Wayland
+        draws winit's own frame badly, and its X11 does not."""
+        for name, value in _WSLG.items():
+            monkeypatch.setenv(name, value)
+
+        WgpuWindow().open(WindowConfig())
+
+        assert recorded.opened[0][1]["window_system"] == "x11"
+
+    def test_without_the_x11_keyboard_library_it_says_which(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        recorded: type[_Recorder],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        for name, value in _WSLG.items():
+            monkeypatch.setenv(name, value)
+        _Extension.x11_ready = False
+
+        WgpuWindow().open(WindowConfig())
+
+        assert recorded.opened[0][1]["window_system"] is None
+        assert "libxkbcommon-x11-0" in caplog.text
+
+    def test_off_linux_nothing_is_asked_for(
+        self, monkeypatch: pytest.MonkeyPatch, recorded: type[_Recorder]
+    ) -> None:
+        monkeypatch.setenv("PYGUARA_WINDOW_SYSTEM", "x11")
+        monkeypatch.setattr(sys, "platform", "win32")
+
+        WgpuWindow().open(WindowConfig())
+
+        assert recorded.opened[0][1]["window_system"] is None
 
     def test_a_window_that_cannot_open_falls_back_offscreen(
         self, monkeypatch: pytest.MonkeyPatch, recorded: type[_Recorder]
@@ -324,6 +415,18 @@ def test_a_real_window_opens_presents_and_reopens() -> None:
     finally:
         second.close()
     assert list(second.pump()) == []
+
+
+@needs_extension
+class TestTheExtensionsWindowSystem:
+    def test_the_keyboard_library_check_answers(self) -> None:
+        assert isinstance(extension.x11_keyboard_available(), bool)
+
+    def test_a_misspelt_window_system_is_refused(self) -> None:
+        """Before the loop is touched, so it is refused whether or not a
+        window was opened earlier in the process."""
+        with pytest.raises(ValueError, match="'x11' or 'wayland'"):
+            extension.NativeWindow("pyguara test", 8, 8, window_system="xorg")
 
 
 class TestCloseReleasesTheSurfaceFirst:

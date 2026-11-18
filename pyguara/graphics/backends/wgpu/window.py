@@ -7,15 +7,16 @@ handle. Nothing here imports pygame.
 Under `PYGUARA_WINDOW=offscreen`, or when no window can be opened, the
 frame is rendered into the device's own target and nothing is shown; a
 capture reads it back with `read_pixels()`. `frame.gpu.has_surface`
-says which path is in use.
+says which path is in use. `pick_window_system` chooses X11 or Wayland.
 """
 
 from __future__ import annotations
 
 import os
 import signal
+import sys
 import threading
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from types import FrameType
 from typing import Any
 
@@ -49,6 +50,43 @@ def wants_offscreen() -> bool:
     alive that says the opposite of what is going on.
     """
     return os.environ.get("PYGUARA_WINDOW", "").lower() == "offscreen"
+
+
+def pick_window_system(
+    environ: Mapping[str, str], x11_keyboard: bool
+) -> tuple[str | None, str | None]:
+    """Return the Linux window system to ask for, and a warning, if any.
+
+    `PYGUARA_WINDOW_SYSTEM` decides when set. Otherwise winit chooses,
+    Wayland first, except under WSLg, whose Wayland draws winit's
+    client-side frame as garbage: there X11 is asked for, when its keyboard
+    library is installed, and the warning names it when it is not.
+
+    Raises:
+        ValueError: `PYGUARA_WINDOW_SYSTEM` names neither.
+    """
+    requested = environ.get("PYGUARA_WINDOW_SYSTEM", "").strip().lower()
+    if requested in ("x11", "wayland"):
+        return requested, None
+    if requested:
+        raise ValueError(
+            f"PYGUARA_WINDOW_SYSTEM must be 'x11' or 'wayland', not {requested!r}"
+        )
+    wslg = bool(
+        environ.get("WSL_DISTRO_NAME")
+        and environ.get("WAYLAND_DISPLAY")
+        and environ.get("DISPLAY")
+    )
+    if not wslg:
+        return None, None
+    if x11_keyboard:
+        return "x11", None
+    return None, (
+        "WSLg's Wayland draws this window's frame as garbage, and the X11 "
+        "window that avoids it needs libxkbcommon-x11 (sudo apt install "
+        "libxkbcommon-x11-0). Set PYGUARA_WINDOW_SYSTEM=wayland to keep "
+        "Wayland without this warning."
+    )
 
 
 def _modifiers(mods: int) -> set[int]:
@@ -148,6 +186,13 @@ class WgpuWindow:
         handles = None
         if not wants_offscreen():
             extension = native.require_extension("The wgpu window")
+            window_system = None
+            if sys.platform.startswith("linux"):
+                window_system, warning = pick_window_system(
+                    os.environ, extension.x11_keyboard_available()
+                )
+                if warning is not None:
+                    logger.warning(warning)
             try:
                 self._window = extension.NativeWindow(
                     config.title,
@@ -158,10 +203,12 @@ class WgpuWindow:
                     # Only useful with `resizable`: a borderless window the
                     # user cannot drag an edge of is one they cannot size.
                     borderless=getattr(config, "borderless", False),
+                    window_system=window_system,
                 )
             except RuntimeError as error:
                 logger.warning(f"No window could be opened ({error}); offscreen.")
             if self._window is not None:
+                logger.info(f"window system: {extension.window_system()}")
                 # The OS need not grant the size asked for -- fullscreen
                 # takes the monitor's -- so the device is sized by what it got.
                 width, height = self._window.size

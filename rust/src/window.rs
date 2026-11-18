@@ -22,6 +22,13 @@
 //! opened it was not, so a 1280x720 window is 1280x720 pixels, as before --
 //! on a 150% display it looks smaller than the pygame window did, which the
 //! OS used to stretch.
+//!
+//! **On Linux the window system can be chosen**, X11 or Wayland, by the
+//! first window opened; the loop keeps it. The Python side decides (WSLg's
+//! Wayland draws winit's client-side frame as garbage, so it picks X11
+//! there). Keyboard input on either needs `libxkbcommon`, and on X11
+//! `libxkbcommon-x11` too, which winit loads by `dlopen` and panics without:
+//! they are checked first, so a missing one is an error naming the package.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -309,17 +316,116 @@ thread_local! {
     static PLATFORM: RefCell<Option<Platform>> = const { RefCell::new(None) };
 }
 
-fn with_platform<T>(work: impl FnOnce(&mut Platform) -> PyResult<T>) -> PyResult<T> {
+/// Make the event loop, on `window_system` if one is named.
+///
+/// winit marks a loop as made before it opens the platform, so one that
+/// panics halfway leaves no second attempt: the libraries it would panic
+/// without are checked here first.
+fn make_event_loop(window_system: Option<&str>) -> PyResult<EventLoop<()>> {
+    #[allow(unused_mut)]
+    let mut builder = EventLoop::builder();
+    #[cfg(target_os = "linux")]
+    {
+        use winit::platform::wayland::EventLoopBuilderExtWayland;
+        use winit::platform::x11::EventLoopBuilderExtX11;
+
+        let present = |name: &str| std::env::var(name).is_ok_and(|value| !value.is_empty());
+        // winit's own order when none is named: Wayland, then X11.
+        let x11 = match window_system {
+            Some("x11") => Some(true),
+            Some("wayland") => Some(false),
+            Some(other) => {
+                return Err(PyValueError::new_err(format!(
+                    "window_system must be 'x11' or 'wayland', not {other:?}"
+                )))
+            }
+            None if present("WAYLAND_DISPLAY") || present("WAYLAND_SOCKET") => Some(false),
+            None if present("DISPLAY") => Some(true),
+            // No display at all: winit says so in its own error.
+            None => None,
+        };
+        if x11.is_some() && xkbcommon_dl::xkbcommon_option().is_none() {
+            return Err(PyRuntimeError::new_err(
+                "keyboard input needs libxkbcommon, which could not be loaded \
+                 (Debian/Ubuntu: sudo apt install libxkbcommon0)",
+            ));
+        }
+        if x11 == Some(true) && xkbcommon_dl::x11::xkbcommon_x11_option().is_none() {
+            return Err(PyRuntimeError::new_err(
+                "an X11 window needs libxkbcommon-x11, which could not be loaded \
+                 (Debian/Ubuntu: sudo apt install libxkbcommon-x11-0)",
+            ));
+        }
+        match window_system {
+            Some("x11") => {
+                builder.with_x11();
+            }
+            Some(_) => {
+                builder.with_wayland();
+            }
+            None => {}
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    if let Some(named) = window_system {
+        return Err(PyValueError::new_err(format!(
+            "window_system {named:?} is Linux's choice; this platform has one window system"
+        )));
+    }
+    builder
+        .build()
+        .map_err(|error| PyRuntimeError::new_err(format!("no window system is available: {error}")))
+}
+
+fn with_platform<T>(window_system: Option<&str>, work: impl FnOnce(&mut Platform) -> PyResult<T>) -> PyResult<T> {
     PLATFORM.with(|cell| {
         let mut slot = cell.borrow_mut();
         if slot.is_none() {
-            let event_loop = EventLoop::new().map_err(|error| {
-                PyRuntimeError::new_err(format!("no window system is available: {error}"))
-            })?;
+            let event_loop = make_event_loop(window_system)?;
             *slot = Some(Platform { event_loop, app: App::default() });
         }
         work(slot.as_mut().expect("made above"))
     })
+}
+
+/// Whether an X11 window could take keyboard input here.
+///
+/// Both xkbcommon libraries load. Always False off Linux.
+#[pyfunction]
+pub fn x11_keyboard_available() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        xkbcommon_dl::xkbcommon_option().is_some() && xkbcommon_dl::x11::xkbcommon_x11_option().is_some()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
+}
+
+/// The window system the event loop runs on, or None before the first window.
+///
+/// `"x11"` or `"wayland"` on Linux, the platform's name elsewhere.
+#[pyfunction]
+pub fn window_system() -> Option<&'static str> {
+    PLATFORM.with(|cell| cell.borrow().as_ref().map(running_system))
+}
+
+fn running_system(platform: &Platform) -> &'static str {
+    #[cfg(target_os = "linux")]
+    {
+        use winit::platform::wayland::EventLoopExtWayland;
+        if platform.event_loop.is_wayland() {
+            "wayland"
+        } else {
+            "x11"
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = platform;
+        std::env::consts::OS
+    }
 }
 
 /// A desktop window, with its input.
@@ -352,8 +458,12 @@ impl NativeWindow {
     ///     fullscreen: Cover the monitor the window opens on, borderless.
     ///     resizable: Let the user size it.
     ///     borderless: No OS title bar or frame.
+    ///     window_system: `"x11"` or `"wayland"`, on Linux, or None for
+    ///         winit's choice. The first window's choice is kept, and a
+    ///         later window naming the other raises.
     #[new]
-    #[pyo3(signature = (title, width, height, fullscreen=false, resizable=false, borderless=false))]
+    #[pyo3(signature = (title, width, height, fullscreen=false, resizable=false, borderless=false, window_system=None))]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         title: &str,
         width: u32,
@@ -361,6 +471,7 @@ impl NativeWindow {
         fullscreen: bool,
         resizable: bool,
         borderless: bool,
+        window_system: Option<&str>,
     ) -> PyResult<Self> {
         if width == 0 || height == 0 {
             return Err(PyValueError::new_err(format!("a window cannot be {width}x{height}")));
@@ -371,7 +482,23 @@ impl NativeWindow {
             .with_resizable(resizable)
             .with_decorations(!borderless)
             .with_fullscreen(fullscreen.then_some(Fullscreen::Borderless(None)));
-        with_platform(|platform| {
+        if let Some(named) = window_system {
+            if named != "x11" && named != "wayland" {
+                return Err(PyValueError::new_err(format!(
+                    "window_system must be 'x11' or 'wayland', not {named:?}"
+                )));
+            }
+        }
+        with_platform(window_system, |platform| {
+            // The loop outlives windows and keeps the system it was made on.
+            if let Some(named) = window_system {
+                let running = running_system(platform);
+                if running != named {
+                    return Err(PyRuntimeError::new_err(format!(
+                        "asked for {named}, but this process's windows are on {running}"
+                    )));
+                }
+            }
             platform.app.request = Some(attributes);
             platform.app.created = None;
             // Some platforms only hand out an active loop after a pump or two.
@@ -407,7 +534,7 @@ impl NativeWindow {
         let mut events = std::mem::take(&mut self.queued);
         if self.window.is_some() {
             let id = self.id;
-            with_platform(|platform| {
+            with_platform(None, |platform| {
                 platform.pump();
                 if let Some(inbox) = platform.app.inboxes.get_mut(&id) {
                     events.append(&mut inbox.events);
@@ -525,7 +652,7 @@ impl NativeWindow {
     fn close(&mut self) {
         if self.window.take().is_some() {
             let id = self.id;
-            let _ = with_platform(|platform| {
+            let _ = with_platform(None, |platform| {
                 platform.app.inboxes.remove(&id);
                 // Let the window system see the window go.
                 platform.pump();
