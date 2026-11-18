@@ -1143,6 +1143,24 @@ larger than the 39.9 ms "CPU frame" above because that one stops at the
 batches, and this one includes the scene's component reads and the hand-over
 to `NativeGpu.sprites`.
 
+**What it is worth today: nothing measured.** No demo and not Reclaimer draws
+sprites through `Scene.render`, so this path is not on any of their frames.
+`tools/frame_probe.py` runs each demo headlessly, uncapped, under the
+`FrameProfiler`. Means over 300 frames after a 60-frame warm-up, in
+milliseconds, WSL2 on the GL adapter:
+
+| Demo | Work | Fixed | Update | Render | Sprites through `Scene.render` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| net_horde | 16.18 | 2.34 | 0.07 | 13.70 | 0 |
+| guara_falcao | 35.51 | 0.07 | 0.15 | 35.21 | 0 |
+| tamandua_murundus | 44.62 | 0.31 | 1.18 | 43.00 | 0 |
+| true_coral | 46.07 | 0.14 | 0.37 | 45.47 | 0 |
+| vinagre_matilha | 13.41 | 0.44 | 0.17 | 12.71 | 0 |
+
+The render phase is native GPU work (`end_frame`, `present`, fullscreen
+effects), not Python. Wiring columns into `EntityManager` is postponed until
+a game draws thousands of sprites this way; see ADR 0008.
+
 ---
 
 ## Rendering, GL side

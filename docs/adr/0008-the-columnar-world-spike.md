@@ -181,6 +181,20 @@ that `NativeGpu.sprites` now calls the shared per-sprite function, and the
 pixel and snapshot suites pass. Criterion 2, flocking over columns, is not
 built.
 
+## Wiring it into the ECS: postponed
+
+Measured before building (2026-11-18), with `tools/frame_probe.py`: no
+demo and not Reclaimer draws sprites through `Scene.render`. Each overrides
+`render` and draws by hand, and Reclaimer draws rectangles and shapes. Their
+frame time is native GPU work, not Python: update and fixed update are under
+2.5 ms in every demo. A per-entity read through a held view costs 177 ns
+against 50 ns for `Transform.position`.
+
+So columns in `EntityManager` would make no current game faster and would
+make per-entity reads 3.5x slower. Postponed by the user's call, until a game
+draws thousands of sprites through `Scene.render`; that game is then
+measured before and after.
+
 ## Decisions taken in this increment
 
 Recorded with their alternatives in `.claude/decision-log.md`: sparse
