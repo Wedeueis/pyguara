@@ -21,20 +21,6 @@ from pyguara.studio.commands.entity import EntitySnapshot, copy_component
 
 logger = get_logger(__name__)
 
-HANDLE_FIELDS: tuple[str, ...] = ("_body_handle",)
-"""Fields holding a live engine object, cleared on the way into a copy.
-
-A `RigidBody` carries the physics backend's body. Copying it is wrong
-twice over -- the backend still owns the original, and a restored copy
-would point at a body that was removed with the entity. Cleared, the
-physics system builds a fresh one, which is exactly what it does for an
-entity it has not seen: `if rb._body_handle is None: _create_physics_entity`.
-
-Auditing the demo found two components holding anything handle-like and
-only this one holding an engine object, so the list is short on purpose
-rather than by oversight.
-"""
-
 
 @dataclass
 class WorldSnapshot:
@@ -68,7 +54,7 @@ class WorldSnapshot:
             EntitySnapshot(
                 entity_id=entity_id,
                 components=[
-                    _without_handles(copy_component(component))
+                    copy_component(component)
                     for component in _own_components(world, entity_id)
                 ],
                 tags=set(world.get_entity(entity_id).tags),  # type: ignore[union-attr]
@@ -98,7 +84,7 @@ class WorldSnapshot:
             entity = world.create_entity(snapshot.entity_id)
             entity.tags.update(snapshot.tags)
             for component in snapshot.components:
-                entity.add_component(_without_handles(copy_component(component)))
+                entity.add_component(copy_component(component))
 
         for snapshot in self.entities:
             if snapshot.parent_id is not None:
@@ -130,24 +116,6 @@ def _own_components(world: EntityManager, entity_id: str) -> list[Component]:
     if entity is None:  # pragma: no cover - the caller just listed it
         return []
     return [c for c in entity.get_all_components() if not isinstance(c, ChildOf)]
-
-
-def _without_handles(component: Component) -> Component:
-    """Clear any live engine handle on a copied component.
-
-    Args:
-        component: The copy.
-
-    Returns:
-        The same component, with its handles cleared.
-    """
-    for name in HANDLE_FIELDS:
-        if hasattr(component, name):
-            try:
-                setattr(component, name, None)
-            except Exception as exc:  # pragma: no cover - a frozen component
-                logger.debug(f"Could not clear {name}: {exc}")
-    return component
 
 
 def _parents_first(world: EntityManager) -> list[str]:
