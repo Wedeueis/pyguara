@@ -430,6 +430,36 @@ class TestWhatRapierDoesNotDoYet:
             RapierEngine().create_body("x", BodyType.DYNAMIC, Vector2(0, 0))
 
 
+def test_rapier_is_the_default(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    from pyguara.application.bootstrap import create_headless_application
+    from pyguara.config.types import PhysicsBackend, PhysicsConfig
+    from pyguara.physics.protocols import IPhysicsEngine
+
+    assert PhysicsConfig().backend is PhysicsBackend.RAPIER
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PYGUARA_PHYSICS_BACKEND", raising=False)
+    app = create_headless_application()
+    try:
+        assert isinstance(app.container.get(IPhysicsEngine), RapierEngine)
+    finally:
+        app.shutdown()
+
+
+def test_pymunk_can_still_be_chosen(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pyguara.application.bootstrap import create_headless_application
+    from pyguara.physics.protocols import IPhysicsEngine
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PYGUARA_PHYSICS_BACKEND", "pymunk")
+    app = create_headless_application()
+    try:
+        assert isinstance(app.container.get(IPhysicsEngine), PymunkEngine)
+    finally:
+        app.shutdown()
+
+
 def test_the_config_chooses_rapier(
     tmp_path: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:

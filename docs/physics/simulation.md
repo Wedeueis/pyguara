@@ -1,11 +1,13 @@
 # Physics System
 
-PyGuara integrates **Pymunk** (Chipmunk2D) for physics simulation, abstracted behind the `IPhysicsEngine` protocol.
+PyGuara simulates physics with **Rapier**, in the native extension, behind
+the `IPhysicsEngine` protocol. **Pymunk** (Chipmunk2D), the engine before
+it, can still be chosen; see [Two engines](#two-engines).
 
 ## Components
 
 ### RigidBody
-Represents a physical object simulated by Chipmunk.
+Represents a physical object the physics engine simulates.
 - **Dynamic**: Affected by forces and gravity.
 - **Static**: Immovable (walls, ground).
 - **Kinematic**: Moved by code but affects dynamic bodies (platforms).
@@ -22,24 +24,27 @@ Defines the collision shape and properties.
 
 ## PhysicsSystem
 
-The `PhysicsSystem` synchronizes the ECS `Transform` component with the Pymunk body simulation.
-- **Pre-Step**: Updates Pymunk bodies if ECS transforms changed (Kinematic/Manual).
+The `PhysicsSystem` synchronizes the ECS `Transform` component with the physics engine's bodies.
+- **Pre-Step**: Updates the engine's bodies if ECS transforms changed (Kinematic/Manual).
 - **Step**: Advances simulation (`dt`).
-- **Post-Step**: Updates ECS transforms from Pymunk bodies (Dynamic).
+- **Post-Step**: Updates ECS transforms from the engine's bodies (Dynamic).
 
 ### Substepping
 
-Chipmunk has no continuous collision detection: in one solver step a body
-moves `velocity × dt` in a straight line and passes through anything thinner
-than that jump. `physics.substeps` (default **4**) splits each tick into that
-many solver steps to shorten the jump — measured against a 10px wall,
-1/2/4 substeps stop a body up to roughly 200/400/900 px/s. Four is cheap
+Neither engine runs continuous collision detection: in one solver step a
+body moves `velocity × dt` in a straight line and passes through anything
+thinner than that jump. `physics.substeps` (default **4**) splits each tick
+into that many solver steps to shorten the jump. Measured on Chipmunk
+against a 10px wall, 1/2/4 substeps stop a body up to roughly
+200/400/900 px/s. Four is cheap
 (~0.65 ms/update at 200 dynamic bodies) and the headroom matters for
 knockback and explosion-flung props; drop it to 2 only when simulating many
 hundreds of fast bodies, and let fast projectiles use `raycast` rather than
 leaning on the solver to catch them.
 
-### Body sleeping
+### Body sleeping (pymunk)
+
+Rapier sleeps bodies by its own rule; this setting is Chipmunk's.
 
 `physics.sleep_time_threshold` (default **0.5 s**) is how long a body must
 hold still before Chipmunk lets it *sleep* — drop out of the solver until
@@ -58,13 +63,14 @@ Two consequences worth knowing:
 
 ### Two engines
 
-`physics.backend` chooses the engine: `pymunk`, the default, or `rapier`,
-a Rapier world in the native extension. Rapier is the engine's future
-(roadmap 6e) and becomes the default once it does everything pymunk does.
-Today it covers bodies, circle and box colliders, materials, collision
-layers and groups, sensors, collision events, forces and impulses, every
-query, every joint type, one-way platforms and the native swept mover
-(`sweep_box`, `step_bodies`), all held to the same tests as pymunk
+`physics.backend` chooses the engine: `rapier`, the default, a Rapier
+world in the native extension, or `pymunk`, which was the default before
+it. `PYGUARA_PHYSICS_BACKEND` overrides it, and bootstrap logs the one in
+use (`physics: rapier, 4 substeps`). Rapier covers bodies, circle and box
+colliders, materials, collision layers and groups, sensors, collision
+events, forces and impulses, every query, every joint type, one-way
+platforms and the native swept mover (`sweep_box`, `step_bodies`), all
+held to the same tests as pymunk
 (`tests/test_physics_rapier.py`, `tests/test_physics_rapier_joints.py`,
 `tests/test_physics_rapier_sweep.py`, and `tests/test_joint_system.py`
 and the platformer feel suite, which run on both).

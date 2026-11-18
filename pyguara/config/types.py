@@ -138,10 +138,9 @@ class InputConfig:
 class PhysicsBackend(Enum):
     """Which engine simulates physics.
 
-    PYMUNK: The default. Chipmunk through pymunk.
-    RAPIER: Rapier, in the native extension. Joints, one-way platforms and
-        segment and polygon shapes are not supported yet; see
-        `docs/physics/simulation.md`.
+    RAPIER: The default. Rapier, in the native extension.
+    PYMUNK: Chipmunk through pymunk, the engine before Rapier. It differs
+        where `docs/physics/simulation.md` says.
     """
 
     PYMUNK = "pymunk"
@@ -160,8 +159,8 @@ class PhysicsConfig:
     # If a frame takes longer than this, we clamp the accumulator
     max_frame_time: float = 0.25
 
-    backend: PhysicsBackend = PhysicsBackend.PYMUNK
-    """Which engine simulates physics. Pymunk until Rapier matches it."""
+    backend: PhysicsBackend = PhysicsBackend.RAPIER
+    """Which engine simulates physics."""
 
     # Gravity for platformers (pixels/second^2). Use (0,0) for top-down.
     gravity_x: float = 0.0
