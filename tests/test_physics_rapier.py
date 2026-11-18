@@ -235,6 +235,21 @@ class TestQueries:
         )
         assert engine.overlap_box_all(Vector2(0, 0), Vector2(30, 30)) == ["twin"]
 
+    def test_a_ray_through_a_two_shape_body_hits_it_once(self, engine: Any) -> None:
+        """At its nearest shape. Rapier answered once per collider, so a
+        piercing ray counted a two-part body twice."""
+        body = engine.create_body("twin", BodyType.STATIC, Vector2(200, 100))
+        for dx in (-30, 30):
+            engine.add_shape(
+                body, ShapeType.BOX, [20, 40], Vector2(dx, 0), SOLID, EVERYTHING, False
+            )
+        _box(engine, "behind", Vector2(400, 100), kind=BodyType.STATIC)
+
+        hits = engine.raycast_all(Vector2(0, 100), Vector2(500, 100))
+
+        assert [hit.entity_id for hit in hits] == ["twin", "behind"]
+        assert hits[0].position.x == pytest.approx(160.0, abs=1.5)
+
     def test_a_point_query_puts_the_deepest_shape_first(self, engine: Any) -> None:
         _box(engine, "big", Vector2(0, 0), (100, 100), BodyType.STATIC)
         _box(engine, "small", Vector2(40, 0), (10, 10), BodyType.STATIC)

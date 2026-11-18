@@ -393,7 +393,10 @@ class RapierEngine:
         mask: int = _FULL_MASK,
         ignore_entity_id: int | str | None = None,
     ) -> list[RaycastHit]:
-        """Return every solid hit along a segment, nearest first."""
+        """Return every body a segment hits, nearest first, once each.
+
+        A body with several shapes is hit where its nearest shape is.
+        """
         if self._native is None:
             return []
         rows = self._native.raycast_all(
@@ -405,7 +408,12 @@ class RapierEngine:
             self._slot_of(ignore_entity_id),
         )
         hits = []
+        seen: set[int] = set()
         for x, y, normal_x, normal_y, slot in rows:
+            # One row per collider, nearest first: a body's first is its hit.
+            if slot in seen:
+                continue
+            seen.add(slot)
             point = Vector2(x, y)
             hits.append(
                 RaycastHit(
