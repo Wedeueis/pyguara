@@ -1043,3 +1043,195 @@ edit this file; see `docs/agents/branching.md`.
 - **Alternatives:** each game calls `set_case_language` on a locale change; `install_translator` does it at startup and on every change.
 - **Chose:** the engine. Every game with a translator needs it, and leaving it out gives a plausible wrong answer: English casing that looks right until a Turkish player sees it.
 - **Tags:** i18n, text
+
+## Waiting for the GPU on close lives in `detach_window()` (#452)
+- **Context:** an offscreen wgpu process could exit while a driver thread still rendered, and segfault under a software driver (#436).
+- **Alternatives:** a new `wait_idle()`; a wait in `Drop`; the existing `detach_window()`.
+- **Chose:** `detach_window()`. `close()` already calls it on every path, and `Drop` runs at garbage collection in no defined order. `NativeGpu.idle` was added so a test can observe the wait.
+- **Tags:** wgpu, shutdown
+
+## `Application.quit()` and a closed-window check, both (#453)
+- **Context:** game code had no sanctioned way to end the loop, and closing the window inside a frame crashed that frame's render.
+- **Alternatives:** only `quit()`; only tolerating a closed window.
+- **Chose:** both. `quit()` is the sanctioned way, and the check keeps games that already call `Window.close()` from crashing. `quit()` dispatches `QuitEvent`, so a game saves in one handler however the player left.
+- **Tags:** application, lifecycle
+
+## A scene's name and dispatcher become optional, not removed (#454)
+- **Context:** `pyguara.run(MyScene)` needs to build a scene without the caller passing a dispatcher; ADR 0010 proposes the constructor stop taking one.
+- **Alternatives:** remove the parameters, breaking every scene in `games/` and Reclaimer; make them optional.
+- **Chose:** optional, the same entry point with no break. `run()` has a `setup` hook, because almost every demo registers something between wiring and the first frame. `pyguara.run` imports on call, so the root package stays light.
+- **Tags:** api, entry point, scenes
+
+## Demos keep the documented script form (#455)
+- **Context:** the roadmap asked for demos to run as modules once `sys.path.append` was gone.
+- **Alternatives:** change twenty documented commands to `python -m`; keep `python games/<demo>/main.py`.
+- **Chose:** keep it. The editable install makes both forms work, and changing the commands buys nothing.
+- **Tags:** demos, docs
+
+## `pyguara new` templates are string constants, with no generated config (#456)
+- **Context:** scaffolding a project that runs.
+- **Alternatives:** package data or a scaffolding library; string constants in `pyguara/cli/new.py`. A generated `game_config.json`, or a `configure` hook.
+- **Chose:** constants (nothing to declare in the wheel, no dependency) and the hook, because a generated config would pin every default of the engine version that wrote it. A non-empty target directory is refused rather than overwritten or merged.
+- **Tags:** cli, scaffolding
+
+## The API reference is generated at build time (#457)
+- **Context:** publishing an API reference from the docstrings.
+- **Alternatives:** commit the generated pages (431 files); generate them on each build.
+- **Chose:** generate. Committed pages would drift on every change. `mkdocs-gen-files` and `mkdocs-literate-nav` are pinned below the releases that depend on the `properdocs` fork of MkDocs; moving to the fork is a separate decision. Eight packages gained `__init__.py` rather than being left out of the reference.
+- **Tags:** docs, ci
+
+## A capture cut inside a frame drops the partial frame (#458)
+- **Context:** SDL's disk audio driver can be closed partway through a frame, and the reader raised on the odd tail.
+- **Alternatives:** raise; drop the tail.
+- **Chose:** drop it. The stream ends wherever the last write did, so the tail is not data, and raising made a test fail on timing.
+- **Tags:** tooling, audio
+
+## The frame profiler marks phases in the frame loop (#461)
+- **Context:** a profiler that works in a shipped build.
+- **Alternatives:** a step hook; a development tool; marks in `Application.step()`.
+- **Chose:** marks in the loop, the only place with all six phase boundaries. `wait` is a phase of its own, so the phases add up to the frame and 5 ms of work doesn't look like 16. The overlay holds one summary for 15 frames: cheaper, and readable.
+- **Tags:** profiling, application
+
+## Aseprite frame durations are a field on the clip (#462)
+- **Context:** importing tags whose frames have different durations.
+- **Alternatives:** duplicate frames at a common tick; a `frame_durations` field. A resource loader, or a function.
+- **Chose:** the field (83 ms and 117 ms share only a 1 ms tick) and a function, since `.json` already belongs to `JsonLoader`. A ping-pong tag with a repeat count is refused: the engine has no mode for it, and either approximation would play something the artist didn't draw.
+- **Tags:** animation, import
+
+## A config edit in Studio is an `EditCommand` on the scene's stack (#463)
+- **Context:** making engine configuration editable from Studio.
+- **Alternatives:** a second history for config; the scene's stack.
+- **Chose:** the scene's stack, for one history, journal and approval mode. The cost is a play-mode refusal and losing the entry on a scene switch. It is one `config` operation with three verbs, classed `write_disk`, because the operation surface is budgeted. Saving keeps the undo history. Whether `None` is allowed is judged by the declaration, in `ConfigManager`, so a game's own options menu gets the same answer.
+- **Tags:** studio, config
+
+## Saving under a profile writes the values underneath (#464)
+- **Context:** `ConfigManager.save()` wrote an active profile's overrides into the file.
+- **Alternatives:** write the base wholesale (drops a direct assignment, which the docs allow); refuse to save under a profile (stops a mid-run options save); write live values with only profile-owned settings swapped for the base.
+- **Chose:** the last.
+- **Tags:** config
+
+## The resource browser is its own operation (#465)
+- **Context:** listing, previewing and spawning from assets in Studio.
+- **Alternatives:** fold the verbs into `scene` or `project_overview`; a new `resources` operation, raising the cap to 25.
+- **Chose:** a new operation. Neither existing one is about assets, and a verb an agent has to guess the home of costs more than one more tool. Spawn refuses a whole file when one component can't be built, and skips keys that aren't components. Preview loads data files only. The panel caches its listing for 30 frames.
+- **Tags:** studio, resources
+
+## The tone-loop capture waits for four idle polls (#466)
+- **Context:** the capture ended a lap early on Windows.
+- **Alternatives:** a longer fixed drain (tried, aimed at the wrong cause); waiting for the file to reach its size (not reliably readable while open on Windows); consecutive idle polls.
+- **Chose:** four consecutive idle polls.
+- **Tags:** tooling, audio, windows
+
+## pygame as an extra: no fallback, and a fixed headless input backend (#467)
+- **Context:** making `pygame-ce` optional.
+- **Alternatives:** use pygame's input when importable; always the null backend. Fall back to wgpu when pygame is missing; raise.
+- **Chose:** always the null backend in headless applications, since a backend that depends on what is installed makes a test pass on one machine and fail on another; and raise before the import, since the engine never switches renderer on its own. `dev` lists `pygame-ce` directly, not a self-referencing extra.
+- **Tags:** packaging, pygame
+
+## A Rust-only subsystem keeps golden vectors and a Python reference (#468, #470, #471, #475, #476)
+- **Context:** retiring the Python twin of each native subsystem (ADR 0011, Decision 3).
+- **Alternatives:** golden vectors only; the Python reference only; both.
+- **Chose:** both. The reference keeps two independent witnesses, and the vectors still stand if the reference and the Rust are ever changed together. Tests fail, not skip, without the extension, since a skip is a green run that tested nothing. `accelerate=` is removed, not accepted and ignored, which would report a store not in force. Flocking goldens compare exactly (the solver is reproducible); the pools compare to 0.001 (exact would fail where `cos` differs in the last bit; the old parity's 0.05 would pass a real slip). `Particle` is removed rather than exported unused. The pools leave the idle-to-full ratio guard, since compacting a 2.7 us pool is no longer a question. Order-independence tests use the reference `SpatialHash`, the one that can falsify the claim; complexity guards measure the shipped index.
+- **Tags:** native, testing, adr-0011
+
+## `SpatialHash` writes go to a pending list (#473)
+- **Context:** the native index rebuilt its grid on every write.
+- **Alternatives:** a fully incremental grid with per-cell lists (O(1) inserts, but loses the flat layout the sweep path is fast for); a pending list scanned by queries.
+- **Chose:** the pending list, flushed past `max(16, sqrt(2n))` entries, which balances scanning against rebuilding. `remove` leaves the grid alone; a reused slot is marked pending so its old entry can't answer for the new key.
+- **Tags:** spatial, performance
+
+## A steer-only flock steers by the positions it was given (#474)
+- **Context:** the native store advanced positions internally under `integrate=False`, then discarded them.
+- **Alternatives:** keep the native behaviour; match the Python path.
+- **Chose:** the Python path's. `integrate=False` means something else moves the agents, so within a tick nobody has moved.
+- **Tags:** ai, flocking
+
+## Console logging resolves stdout when it emits (#477)
+- **Context:** a logger created before `studio ops` reserved stdout wrote into the protocol stream.
+- **Alternatives:** re-point existing handlers inside the Studio command; resolve stdout at emit time.
+- **Chose:** at emit time. Any caller that redirects stdout gets the same behaviour, and there is no list of loggers to keep in step.
+- **Tags:** logging, studio
+
+## `native_acceleration` is removed, not left at `required` (#478)
+- **Context:** ADR 0011 said the switch "ends as `required`".
+- **Alternatives:** an enum with one legal value; keep the old values and ignore them; remove it.
+- **Chose:** remove it. A setting that can only be one thing is noise, and ignoring old values would be a plausible wrong value; old config files load with the unknown-key warning. The Python-store CI job went with it.
+- **Tags:** native, config, adr-0011
+
+## Only all-interpolating components blend natively on a guest (#479)
+- **Context:** moving replication's interpolation beside the transport.
+- **Alternatives:** every component; only those whose every field interpolates.
+- **Chose:** the latter. Discrete fields are Python objects that change only when a snapshot does. Rust calls a generated writer per component (straight-line attribute writes, `setattr` for a name that isn't an identifier), and remotes are keyed by a client-side handle, not the network id.
+- **Tags:** networking, performance
+
+## Batched primitives reuse the per-primitive drawing (#480)
+- **Context:** drawing arrays of rectangles, circles and lines in one call.
+- **Alternatives:** the shape shader; new native entry points over the per-primitive drawing.
+- **Chose:** the per-primitive drawing, so pixels match drawing them one at a time. A row truncates as `Rect` does.
+- **Tags:** graphics, wgpu
+
+## Pymunk rays: first hit, every hit only when needed (#482)
+- **Context:** `raycast` hit sensors, and a moved static body stayed at its old place for queries.
+- **Alternatives:** collect every hit always (14x slower on long rays); first hit, then all hits only when needed. Reindex on step; reindex on every position or rotation set.
+- **Chose:** first hit, and reindex on every set (0.5 us, for queries correct before the next step). The pymunk engine was retired in the same release (#494).
+- **Tags:** physics, pymunk
+
+## Rapier reproduces Chipmunk where the contract depends on it (#483, #484, #485, #486)
+- **Context:** adding Rapier beside pymunk, held to the same tests.
+- **Alternatives:** follow Rapier's own conventions; reproduce the pymunk backend's behaviour wherever games depend on it.
+- **Chose:** reproduce it, each case covered by a test run on both engines: joints follow the pymunk backend's mapping, not the enum's descriptions; one-way platforms use the same normal test, in Rapier's contact-modification hook, every solver step; the native sweep calls the same query as `overlap_box`, so it's exact by construction. Events are reported after each substep, with the one-step difference documented. `rapier2d-f64` at 100 pixels per unit. `max_force` is refused where Rapier can't honour it.
+- **Tags:** physics, rapier, parity
+
+## A letterboxed game draws its UI into the final pass's input (#488)
+- **Context:** UI and mouse ignored the letterbox when the window was resized.
+- **Alternatives:** a native screen viewport for the UI; draw the UI into the buffer the final pass scales.
+- **Chose:** the buffer: no Rust change, and scissors, polygons and text stay in render pixels. The cost is UI scaled bilinearly with the world. The mouse is mapped from the graph's own letterbox, after the editor's first refusal and before `InputManager`, so replays record game pixels.
+- **Tags:** graphics, ui, input
+
+## The window system is chosen in Python, forced in Rust (#489)
+- **Context:** WSLg's Wayland drew a garbage band round winit's window.
+- **Alternatives:** decide in Rust; decide in Python and have Rust only force a backend and check libraries.
+- **Chose:** Python, where the policy can be unit-tested and logged. WSLg is detected from `WSL_DISTRO_NAME`, `WAYLAND_DISPLAY` and `DISPLAY`. A missing `libxkbcommon-x11` under WSLg falls back to Wayland with a warning; an explicit `x11` without it is an error.
+- **Tags:** window, linux, wsl
+
+## `create_physics_engine` takes `PhysicsConfig` and returns the engine uninitialised (#490)
+- **Context:** letting a game's own physics worlds follow `physics.backend`.
+- **Alternatives:** take the whole config or the `ConfigManager`; take the one section it reads.
+- **Chose:** `PhysicsConfig`, returning the engine uninitialised so the caller calls `initialize(gravity)`, as bootstrap and Reclaimer already did.
+- **Tags:** physics, api
+
+## A copied component skips engine handles through the deepcopy memo (#491)
+- **Context:** Studio's Play and duplicate copied a Rapier body handle.
+- **Alternatives:** a `__deepcopy__` on each backend's body type; exclude handles through the deepcopy memo.
+- **Chose:** the memo: one place covers both copy paths and any backend's handle type.
+- **Tags:** studio, physics
+
+## Pymunk retired in the same release as the Rapier default (#492, #494, #495)
+- **Context:** ADR 0011 said pymunk would be retired a release after Rapier became the default.
+- **Alternatives:** keep pymunk selectable for a release; retire it in the same one.
+- **Chose:** the same release (the user's call, 2026-11-18, by merging #494; ADR 0011 amended in #495), because Reclaimer pins a commit rather than a release. `pymunk` is refused by name (`RetiredBackendError`), not mapped to Rapier. The default stays at 4 substeps: lowering it needs its own measurements.
+- **Tags:** physics, adr-0011, release
+
+## `Vector2` keeps a tuple's equality and hash (#496)
+- **Context:** replacing the `pymunk.Vec2d` subclass with a native type.
+- **Alternatives:** a plain value type that compares unequal to tuples; one that equals and hashes as `(x, y)`.
+- **Chose:** keep tuple equality and hash: an unequal tuple would make `v == (0, 0)` a silently wrong False. Squares are `x * x` everywhere, which moves pymunk's `**` methods by at most one bit. Components are stored as `f64` and as Python floats, chosen over PyO3 getters and `double` members after measuring all three. An infinite angle, or NaN in `snapped`, raises as Python's `math` and `round` did. The wheel matrix's skipped platforms stay skipped; that is a separate decision.
+- **Tags:** vector2, native, compatibility
+
+## Columnar extraction pushes into `NativeGpu` directly (#498)
+- **Context:** drawing a columnar world's sprites in one native call (ADR 0008, increment 2).
+- **Alternatives:** return instance bytes to Python; push into the GPU's instance list from Rust.
+- **Chose:** push directly: both live in one crate, and a return trip is the crossing the design removes. One per-sprite function serves both paths, so they can't drift. Everything is validated before anything is pushed. A NaN depth raises, since Python leaves NaN keys in an arbitrary order and Rust's sort can panic on them. No atlas regions, materials or parenting yet.
+- **Tags:** columnar world, graphics, adr-0008
+
+## Wiring columns into `EntityManager` is postponed (#499)
+- **Context:** the next step of 6g was a core change: `EntityManager` storing some components in columns.
+- **Alternatives:** build it as an opt-in foundation; postpone until a consumer exists.
+- **Chose:** postpone (the user's call, 2026-11-18). Measured first: no demo and not Reclaimer draws sprites through `Scene.render`, frame time is native GPU work, and per-entity view reads are 3.5x slower than `Transform.position`. Resume when a game draws thousands of sprites that way, measuring it before and after.
+- **Tags:** columnar world, ecs, measurement
+
+## A sprite flip is a negative scale set in `submit` (#500)
+- **Context:** `Sprite.flip_x` and `flip_y` were read by nothing.
+- **Alternatives:** a flip flag through every backend; a negative scale; read the flags with `getattr` and a default.
+- **Chose:** a negative scale, which the backends already agreed means a mirror, with the flip done before the turn, as `draw_texture` does. `Renderable` declares both fields strictly, so an unflipped sprite pays two attribute reads. `ColumnarSprite` has no flip yet.
+- **Tags:** graphics, sprites
