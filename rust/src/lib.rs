@@ -59,6 +59,7 @@
 use pyo3::prelude::*;
 
 mod audio;
+mod extract;
 mod flocking;
 mod flowfield;
 mod gamepad;
@@ -89,6 +90,7 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<flocking::NativeFlockingSolver>()?;
     module.add_class::<flowfield::NativeFlowField>()?;
     module.add_class::<gpu::NativeGpu>()?;
+    module.add_class::<extract::SpriteExtraction>()?;
     module.add_class::<particles::NativeParticlePool>()?;
     module.add_class::<physics::NativePhysicsWorld>()?;
     module.add_class::<replica::NativeInterpolator>()?;

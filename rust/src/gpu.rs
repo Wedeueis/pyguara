@@ -1272,6 +1272,89 @@ impl NativeGpu {
         self.instances.push(instance);
     }
 
+    /// An uploaded image's width and height, or `KeyError`.
+    pub(crate) fn image_size(&self, texture: u32) -> PyResult<(u32, u32)> {
+        self.images
+            .get(&texture)
+            .map(|image| (image.width, image.height))
+            .ok_or_else(|| PyKeyError::new_err(format!("no texture {texture}")))
+    }
+
+    /// One sprite, placed as the pygame backend places it.
+    ///
+    /// `destination` is the top-left corner of the sprite's box, which for
+    /// a turned sprite is the box that bounds it. `region` is texels, or
+    /// None for the whole image of `size`; `turn` is degrees; `scale` is
+    /// None for none. The arithmetic is the Python loop's, in `f64`, in
+    /// the same order, narrowed to `f32` exactly where `quad`'s arguments
+    /// were, so every caller draws the same instance for the same sprite.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn push_sprite(
+        &mut self,
+        texture: u32,
+        size: (u32, u32),
+        destination: (f64, f64),
+        region: Option<(f64, f64, f64, f64)>,
+        turn: f64,
+        scale: Option<(f64, f64)>,
+        color: (u8, u8, u8, u8),
+    ) {
+        let (full_width, full_height) = size;
+        let (texture_width, texture_height) = (full_width as f32, full_height as f32);
+        let (x, y) = destination;
+        // Python's `int(region.x)`: truncation toward zero.
+        let (source_x, source_y, width, height) = match region {
+            Some((rx, ry, rw, rh)) => (rx.trunc(), ry.trunc(), rw.trunc(), rh.trunc()),
+            None => (0.0, 0.0, f64::from(full_width), f64::from(full_height)),
+        };
+        let (mut drawn_width, mut drawn_height) = (width, height);
+        if let Some((scale_x, scale_y)) = scale {
+            drawn_width = (width * scale_x).trunc();
+            drawn_height = (height * scale_y).trunc();
+        }
+        let (box_width, box_height) = if turn != 0.0 {
+            let radians = turn.to_radians();
+            let (cos, sin) = (radians.cos().abs(), radians.sin().abs());
+            (
+                (width * cos + height * sin) * (drawn_width / width),
+                (width * sin + height * cos) * (drawn_height / height),
+            )
+        } else {
+            (drawn_width, drawn_height)
+        };
+        let (red, green, blue, alpha) = color;
+
+        // From here on, `quad` with the arguments the loop passed it.
+        let half_width = (drawn_width / 2.0) as f32;
+        let half_height = (drawn_height / 2.0) as f32;
+        let (source_x, source_y) = (source_x as f32, source_y as f32);
+        let (source_width, source_height) = (width as f32, height as f32);
+        let mut uv_low = [source_x / texture_width, source_y / texture_height];
+        let mut uv_high = [
+            (source_x + source_width) / texture_width,
+            (source_y + source_height) / texture_height,
+        ];
+        if half_width < 0.0 {
+            std::mem::swap(&mut uv_low[0], &mut uv_high[0]);
+        }
+        if half_height < 0.0 {
+            std::mem::swap(&mut uv_low[1], &mut uv_high[1]);
+        }
+        let radians = (turn as f32).to_radians();
+        self.push(
+            texture,
+            Instance {
+                center: [(x + box_width / 2.0) as f32, (y + box_height / 2.0) as f32],
+                half: [half_width.abs(), half_height.abs()],
+                turn: [radians.cos(), radians.sin()],
+                uv_low,
+                uv_high,
+                color: [unit(red), unit(green), unit(blue), unit(alpha)],
+                params: [KIND_QUAD, 0.0, 0.0, 0.0],
+            },
+        );
+    }
+
     fn target_size(&self, id: u32) -> (u32, u32) {
         self.targets.get(&id).map_or((0, 0), |target| (target.width, target.height))
     }
@@ -2508,11 +2591,7 @@ impl NativeGpu {
         scales: Option<Vec<(f64, f64)>>,
         colors: Option<Vec<(u8, u8, u8, u8)>>,
     ) -> PyResult<()> {
-        let Some(image) = self.images.get(&texture) else {
-            return Err(PyKeyError::new_err(format!("no texture {texture}")));
-        };
-        let (full_width, full_height) = (image.width, image.height);
-        let (texture_width, texture_height) = (full_width as f32, full_height as f32);
+        let size = self.image_size(texture)?;
         let regions = regions.unwrap_or_default();
         let rotations = rotations.unwrap_or_default();
         let scales = scales.unwrap_or_default();
@@ -2520,60 +2599,26 @@ impl NativeGpu {
         self.instances.reserve(destinations.len());
 
         for (index, (x, y)) in destinations.into_iter().enumerate() {
-            // Python's `int(region.x)`: truncation toward zero.
-            let (source_x, source_y, width, height) = match regions.get(index).copied().flatten() {
-                Some((rx, ry, rw, rh)) => (rx.trunc(), ry.trunc(), rw.trunc(), rh.trunc()),
-                None => (0.0, 0.0, f64::from(full_width), f64::from(full_height)),
-            };
-            let turn = rotations.get(index).copied().unwrap_or(0.0);
-            let (mut drawn_width, mut drawn_height) = (width, height);
-            if let Some(&(scale_x, scale_y)) = scales.get(index) {
-                drawn_width = (width * scale_x).trunc();
-                drawn_height = (height * scale_y).trunc();
-            }
-            let (box_width, box_height) = if turn != 0.0 {
-                let radians = turn.to_radians();
-                let (cos, sin) = (radians.cos().abs(), radians.sin().abs());
-                (
-                    (width * cos + height * sin) * (drawn_width / width),
-                    (width * sin + height * cos) * (drawn_height / height),
-                )
-            } else {
-                (drawn_width, drawn_height)
-            };
-            let (red, green, blue, alpha) = colors.get(index).copied().unwrap_or((255, 255, 255, 255));
-
-            // From here on, `quad` with the arguments the loop passed it.
-            let half_width = (drawn_width / 2.0) as f32;
-            let half_height = (drawn_height / 2.0) as f32;
-            let (source_x, source_y) = (source_x as f32, source_y as f32);
-            let (source_width, source_height) = (width as f32, height as f32);
-            let mut uv_low = [source_x / texture_width, source_y / texture_height];
-            let mut uv_high = [
-                (source_x + source_width) / texture_width,
-                (source_y + source_height) / texture_height,
-            ];
-            if half_width < 0.0 {
-                std::mem::swap(&mut uv_low[0], &mut uv_high[0]);
-            }
-            if half_height < 0.0 {
-                std::mem::swap(&mut uv_low[1], &mut uv_high[1]);
-            }
-            let radians = (turn as f32).to_radians();
-            self.push(
+            self.push_sprite(
                 texture,
-                Instance {
-                    center: [(x + box_width / 2.0) as f32, (y + box_height / 2.0) as f32],
-                    half: [half_width.abs(), half_height.abs()],
-                    turn: [radians.cos(), radians.sin()],
-                    uv_low,
-                    uv_high,
-                    color: [unit(red), unit(green), unit(blue), unit(alpha)],
-                    params: [KIND_QUAD, 0.0, 0.0, 0.0],
-                },
+                size,
+                (x, y),
+                regions.get(index).copied().flatten(),
+                rotations.get(index).copied().unwrap_or(0.0),
+                scales.get(index).copied(),
+                colors.get(index).copied().unwrap_or((255, 255, 255, 255)),
             );
         }
         Ok(())
+    }
+
+    /// Instance bytes of the frame being built, in draw order.
+    ///
+    /// Seven `vec2`/`vec4` fields per instance, as the sprite shader reads
+    /// them. For comparing two ways of building the same frame without
+    /// rendering it.
+    fn pending_instance_bytes<'py>(&self, python: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(python, bytemuck::cast_slice(&self.instances))
     }
 
     /// Render the frame's steps in order, and start a new frame.
