@@ -70,9 +70,8 @@ class FinalPass(BaseRenderPass):
         With a letterbox, the whole window is cleared first: the bars are
         the part no pass ever writes, and would otherwise show whatever was
         there -- the previous frame, smeared, or uninitialised memory. The
-        letterbox stays the screen's viewport afterwards on purpose: the
-        game's own UI composites after the graph runs and belongs inside
-        the same frame.
+        game's UI is already in the input buffer, drawn there by the
+        application, so the letterbox scales it with the world.
 
         Args:
             graph: The RenderGraph providing access to framebuffers.
