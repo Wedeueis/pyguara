@@ -384,15 +384,27 @@ class DuplicateEntity(EditCommand):
         return copies
 
 
+HANDLE_FIELDS: tuple[str, ...] = ("_body_handle",)
+"""Fields holding a live engine object, which a copy gets as None.
+
+A `RigidBody` carries the physics backend's body. Copying it is wrong
+twice over -- the backend still owns the original, and the copy would
+point at a body that is not its own. As None, the physics system builds
+the copy a fresh one, as it does for any entity it has not seen. Not
+copied at all, since a native world cannot be.
+"""
+
+
 def copy_component(component: Component) -> Component:
     """Return an independent copy of `component`.
 
     Deep, because a component holds mutable values (a `Vector2`, a list of
     points) that two entities must not share.
 
-    The owning entity is not copied: the copy's back-reference is None,
-    and `add_component` sets it. A `Resource` is shared, not copied, since
-    `Resource.__deepcopy__` returns itself.
+    The owning entity and any engine handle (`HANDLE_FIELDS`) are not
+    copied: both are None on the copy, and `add_component` sets the
+    entity. A `Resource` is shared, since `Resource.__deepcopy__` returns
+    itself.
 
     Args:
         component: The component to copy.
@@ -402,6 +414,10 @@ def copy_component(component: Component) -> Component:
     """
     owner = getattr(component, "entity", None)
     memo: dict[int, Any] = {id(owner): None} if owner is not None else {}
+    for name in HANDLE_FIELDS:
+        handle = getattr(component, name, None)
+        if handle is not None:
+            memo[id(handle)] = None
     duplicate = copy.deepcopy(component, memo)
     if hasattr(duplicate, "entity"):
         duplicate.entity = None

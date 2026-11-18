@@ -39,6 +39,13 @@ class WithHandle(BaseComponent):
     _body_handle: object | None = None
 
 
+class _Uncopyable:
+    """A live engine object that refuses to be copied, as Rapier's does."""
+
+    def __reduce_ex__(self, protocol: object) -> object:
+        raise TypeError("cannot pickle a native world")
+
+
 @pytest.fixture
 def world() -> EntityManager:
     """A world with a hierarchy, tags, a disabled entity and oddities."""
@@ -118,6 +125,33 @@ class TestCapture:
         restored = world.get_entity("body").get_component(WithHandle)
         assert restored.mass == 3.0
         assert restored._body_handle is None
+
+    def test_a_handle_that_cannot_be_copied_is_not_copied(self) -> None:
+        """Rapier's body refers to a native world that cannot be pickled,
+        and Play failed copying it -- only to throw the copy away."""
+        world = EntityManager()
+        world.create_entity("body").add_component(
+            WithHandle(mass=1.0, _body_handle=_Uncopyable())
+        )
+
+        snapshot = WorldSnapshot.capture(world)
+
+        (component,) = snapshot.entities[0].components
+        assert component._body_handle is None  # type: ignore[attr-defined]
+
+    def test_a_duplicated_component_has_no_body(self) -> None:
+        """Duplicating an entity copies its components the same way. With
+        the handle copied, the physics system took the duplicate for one
+        it had already built and never gave it a body."""
+        from pyguara.studio.commands.entity import copy_component
+
+        original = WithHandle(mass=2.0, _body_handle=_Uncopyable())
+
+        duplicate = copy_component(original)
+
+        assert duplicate.mass == 2.0  # type: ignore[attr-defined]
+        assert duplicate._body_handle is None  # type: ignore[attr-defined]
+        assert original._body_handle is not None
 
 
 @pytest.mark.unit
