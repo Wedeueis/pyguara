@@ -34,7 +34,6 @@ keywords = ["game-engine", "action-rpg", "2d", "event-driven", "data-driven"]
 dependencies = [
     "dataclasses-json>=0.6.0",
     "click>=8.1.7",
-    "pymunk>=7.2.0",
     "pillow>=12.1.0",
     "msgpack>=1.1.2",
     "numpy>=1.26.0",
@@ -340,8 +339,7 @@ convention = "google"
 "pyguara/studio/ops/builtin.py" = ["DOC501"]
 
 [tool.ruff.lint.flake8-bugbear]
-# Vector2 subclasses pymunk.Vec2d, which is a NamedTuple: instances are
-# immutable and hashable, so sharing one as a default argument is safe. Without
+# Vector2 is immutable and hashable, so sharing one as a default argument is safe. Without
 # this, B008 flags every `scale: Vector2 = Vector2(1, 1)` in the renderer
 # protocols and drowns out the one default that is genuinely mutable.
 extend-immutable-calls = [
@@ -410,10 +408,6 @@ no_implicit_optional = true
 
 [[tool.mypy.overrides]]
 module = "pygame.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "pymunk.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

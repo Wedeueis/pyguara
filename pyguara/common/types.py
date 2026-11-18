@@ -1,8 +1,8 @@
 """Foundational value types for the PyGuara engine.
 
 `Vector2`, `Color` and `Rect` are the primitives every other subsystem shares.
-`Vector2` subclasses `pymunk.Vec2d`, so it passes into the physics
-backend without conversion. `Color` and `Rect` are plain dataclasses;
+`Vector2` is implemented in the native extension; the class body here is
+its signature for type checkers. `Color` and `Rect` are plain dataclasses;
 no rendering backend is imported here.
 
 Y increases downwards, matching SDL and the engine's default gravity,
@@ -13,379 +13,281 @@ follows that.
 from __future__ import annotations
 
 import colorsys
-import math
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
-import pymunk
-
-Coordinate = tuple[float, float] | list[float] | pymunk.Vec2d
-"""Anything accepted where a 2D coordinate is expected."""
-
-# `tuple.__new__`, which is all `NamedTuple.__new__` does, bound once.
-# `Vector2(x, y)` reaches it through a generated Python `__new__`, which is
-# most of what constructing one costs: 210 ns against 110 ns measured.
-_new_vector = tuple.__new__
+from pyguara.native import require_extension
 
 _CHANNEL_MIN = 0
 _CHANNEL_MAX = 255
 
+if TYPE_CHECKING:
 
-class Vector2(pymunk.Vec2d):
-    """An immutable 2D vector for positions, velocities and directions.
+    class Vector2:
+        """An immutable 2D vector for positions, velocities and directions.
 
-    Subclasses `pymunk.Vec2d` for C-optimised math, overriding the operators
-    and transforms so they return `Vector2` rather than `Vec2d`, and renaming
-    Pymunk-specific spellings so they do not leak into game code.
+        Implemented in Rust. Components are always floats. It unpacks,
+        indexes and has a length of 2 like the `(x, y)` tuple it equals and
+        hashes as. Every method returns a new vector.
 
-    Being a `NamedTuple` subclass, a `Vector2` is immutable and hashable:
-    every method here returns a new vector rather than mutating in place.
-
-    Attributes:
-        x: The X component.
-        y: The Y component, increasing downwards.
-    """
-
-    @property
-    def length(self) -> float:
-        """The length of the vector.
-
-        Overrides `pymunk.Vec2d.length` to compute `sqrt(x * x + y * y)`
-        instead of using `**`. The two differ in the last bit for a small
-        share of inputs, and this spelling is the one native code can
-        reproduce exactly. See ADR 0004, Decision 5.
+        Attributes:
+            x: The X component.
+            y: The Y component, increasing downwards.
         """
-        return math.sqrt(self.x * self.x + self.y * self.y)
-
-    @property
-    def magnitude(self) -> float:
-        """The length of the vector."""
-        return float(self.length)
-
-    @property
-    def sqr_magnitude(self) -> float:
-        """The squared length of the vector.
-
-        Avoids the square root in `magnitude`, so prefer it when comparing
-        distances rather than needing a real one.
-        """
-        return float(self.x * self.x + self.y * self.y)
-
-    # The operators below each have a fast path for the operand types game
-    # code actually passes -- another `Vector2`, or a plain `float` or
-    # `int` -- and fall through to `pymunk.Vec2d` for everything else.
-    #
-    # The fast paths do the same floating-point operations in the same
-    # order as the code they shortcut, so results are bit-identical; what
-    # they skip is `Vec2d`'s `isinstance(other, numbers.Real)` check, which
-    # goes through an abstract base class, and a second vector built only
-    # to be converted. In a 200-enemy room these operators were a quarter
-    # of the frame. `tests/test_vector2_fast_paths.py` holds each one
-    # against the long way round, on values and on types.
-    #
-    # `type(x) is float`, not `isinstance`: a `bool`, a `Fraction` or a
-    # NumPy scalar takes the long way, and so behaves exactly as before.
-
-    def __add__(self, other: Any) -> Vector2:
-        """Add another vector or coordinate pair."""
-        if type(other) is Vector2:
-            return _new_vector(Vector2, (self[0] + other[0], self[1] + other[1]))
-        if hasattr(other, "x") and hasattr(other, "y"):
-            return Vector2(self.x + other.x, self.y + other.y)
-        v = super().__add__(other)
-        return Vector2(v.x, v.y)
-
-    def __sub__(self, other: Any) -> Vector2:
-        """Subtract another vector or coordinate pair."""
-        if type(other) is Vector2:
-            return _new_vector(Vector2, (self[0] - other[0], self[1] - other[1]))
-        if hasattr(other, "x") and hasattr(other, "y"):
-            return Vector2(self.x - other.x, self.y - other.y)
-        v = super().__sub__(other)
-        return Vector2(v.x, v.y)
-
-    def __mul__(self, other: float) -> Vector2:  # type: ignore[override]
-        """Scale by a scalar."""
-        kind = type(other)
-        if kind is float or kind is int:
-            return _new_vector(Vector2, (self[0] * other, self[1] * other))
-        # Overrides tuple.__mul__, which would repeat the tuple for an int.
-        v = super().__mul__(other)
-        return Vector2(v.x, v.y)
-
-    def __rmul__(self, other: float) -> Vector2:  # type: ignore[override]
-        """Scale by a scalar, with the scalar on the left."""
-        kind = type(other)
-        if kind is float or kind is int:
-            return _new_vector(Vector2, (self[0] * other, self[1] * other))
-        v = super().__rmul__(other)
-        return Vector2(v.x, v.y)
-
-    def __truediv__(self, other: float) -> Vector2:
-        """Divide by a scalar.
-
-        Raises:
-            ZeroDivisionError: If `other` is zero.
-        """
-        kind = type(other)
-        if kind is float or kind is int:
-            return _new_vector(Vector2, (self[0] / other, self[1] / other))
-        v = super().__truediv__(other)
-        return Vector2(v.x, v.y)
-
-    def __neg__(self) -> Vector2:
-        """Return the vector pointing the opposite way."""
-        return _new_vector(Vector2, (-self[0], -self[1]))
-
-    def dot(self, other: Any) -> float:
-        """Return the dot product with another vector or coordinate pair.
-
-        Args:
-            other: Any object with `x` and `y`, or a coordinate pair. Typed
-                loosely to stay substitutable for `pymunk.Vec2d.dot`.
-
-        Returns:
-            The scalar dot product.
-        """
-        return float(super().dot(other))
-
-    def cross(self, other: Any) -> float:
-        """Return the 2D cross product (determinant) with another vector.
-
-        Args:
-            other: Any object with `x` and `y`, or a coordinate pair.
-
-        Returns:
-            The scalar cross product.
-        """
-        return float(super().cross(other))
-
-    def normalize(self) -> Vector2:
-        """Return a unit vector in the same direction.
-
-        Returns:
-            The normalised vector, or a zero vector if this one has no length.
-        """
-        x, y = self
-        if type(x) is float and type(y) is float:
-            # `Vec2d.normalized` spelled out: this class's `length`, then
-            # a division of each component by it.
-            length = math.sqrt(x * x + y * y)
-            if length != 0:
-                return _new_vector(Vector2, (x / length, y / length))
-            return _new_vector(Vector2, (0.0, 0.0))
-        v = super().normalized()
-        return Vector2(v.x, v.y)
-
-    def rotated(self, angle_radians: float) -> Vector2:
-        """Return this vector rotated by an angle in radians.
-
-        Args:
-            angle_radians: Rotation angle in radians.
-
-        Returns:
-            The rotated vector.
-        """
-        v = super().rotated(angle_radians)
-        return Vector2(v.x, v.y)
-
-    def rotate_degrees(self, angle_degrees: float) -> Vector2:
-        """Return this vector rotated by an angle in degrees.
-
-        Args:
-            angle_degrees: Rotation angle in degrees.
-
-        Returns:
-            The rotated vector.
-        """
-        return self.rotated(math.radians(angle_degrees))
-
-    def distance_to(self, other: Vector2) -> float:
-        """Return the distance to another point.
-
-        Args:
-            other: The target point.
-
-        Returns:
-            The straight-line distance.
-        """
-        return float(self.get_distance(other))
-
-    def lerp(self, target: Vector2, t: float) -> Vector2:
-        """Linearly interpolate towards a target.
-
-        `t` is not clamped, so values outside 0..1 extrapolate.
-
-        Args:
-            target: The end point.
-            t: Interpolation factor, 0.0 at self and 1.0 at target.
-
-        Returns:
-            The interpolated point.
-        """
-        return Vector2(
-            self.x + (target.x - self.x) * t,
-            self.y + (target.y - self.y) * t,
-        )
-
-    def clamp_magnitude(self, max_length: float) -> Vector2:
-        """Return this vector shortened to at most `max_length`.
-
-        Distinct from pymunk's inherited `scale_to_length()`, which scales
-        in *both* directions and would lengthen a short vector. A speed cap
-        wants only the shortening half.
-
-        Args:
-            max_length: The longest the result may be. Non-positive gives
-                the zero vector.
-
-        Returns:
-            This vector if already short enough, otherwise one of
-            `max_length` pointing the same way.
-        """
-        if max_length <= 0:
-            return Vector2.zero()
-        length = self.length
-        if length <= max_length or length == 0:
-            return Vector2(self.x, self.y)
-        scale = max_length / length
-        return Vector2(self.x * scale, self.y * scale)
-
-    def move_towards(self, target: Vector2, max_distance: float) -> Vector2:
-        """Return a point stepped towards `target`, never overshooting.
-
-        What frame-rate-independent chasing wants, as opposed to `lerp()`,
-        which eases in and never quite arrives.
-
-        Args:
-            target: Where to move towards.
-            max_distance: The furthest to travel this step. Non-positive
-                leaves the point where it is.
-
-        Returns:
-            `target` if it is within reach, otherwise a point
-            `max_distance` along the way.
-        """
-        if max_distance <= 0:
-            return Vector2(self.x, self.y)
-        delta = Vector2(target.x - self.x, target.y - self.y)
-        distance = delta.length
-        if distance <= max_distance or distance == 0:
-            return Vector2(target.x, target.y)
-        scale = max_distance / distance
-        return Vector2(self.x + delta.x * scale, self.y + delta.y * scale)
-
-    def reflect(self, normal: Vector2) -> Vector2:
-        """Return this vector mirrored about a surface `normal`.
-
-        The normal is normalised internally, so a caller passing a surface
-        direction of any length gets the right answer rather than a
-        silently scaled one. A zero-length normal has no plane to mirror
-        about, so the vector comes back unchanged.
-
-        Args:
-            normal: The surface normal; any non-zero length.
-
-        Returns:
-            The reflected vector.
-        """
-        length = normal.length
-        if length == 0:
-            return Vector2(self.x, self.y)
-        nx, ny = normal.x / length, normal.y / length
-        dot = self.x * nx + self.y * ny
-        return Vector2(self.x - 2.0 * dot * nx, self.y - 2.0 * dot * ny)
-
-    def reject(self, other: Vector2) -> Vector2:
-        """Return the component of this vector perpendicular to `other`.
-
-        The complement of pymunk's inherited `projection()`: together they
-        split a vector into "along" and "across" a direction, which is how
-        a slide-along-a-wall response is built.
-
-        Args:
-            other: The direction to reject from.
-
-        Returns:
-            This vector minus its projection onto `other`.
-        """
-        projected = self.projection(other)
-        return Vector2(self.x - projected.x, self.y - projected.y)
-
-    def snapped(self, grid: float | Vector2) -> Vector2:
-        """Return this point rounded to the nearest multiple of `grid`.
-
-        Args:
-            grid: Cell size, uniform as a float or per-axis as a vector. A
-                zero component leaves that axis alone rather than dividing
-                by zero.
-
-        Returns:
-            The snapped point.
-        """
-        step_x, step_y = (grid.x, grid.y) if isinstance(grid, Vector2) else (grid, grid)
-        return Vector2(
-            self.x if step_x == 0 else round(self.x / step_x) * step_x,
-            self.y if step_y == 0 else round(self.y / step_y) * step_y,
-        )
-
-    @staticmethod
-    def from_angle_degrees(degrees: float, length: float = 1.0) -> Vector2:
-        """Return a vector at `degrees`, measured anticlockwise from +X.
-
-        The inherited `from_polar()` takes radians.
-
-        Args:
-            degrees: The angle in degrees.
-            length: The resulting magnitude.
-
-        Returns:
-            The vector.
-        """
-        radians = math.radians(degrees)
-        return Vector2(math.cos(radians) * length, math.sin(radians) * length)
-
-    def to_tuple(self) -> tuple[float, float]:
-        """Return the components as a plain float tuple."""
-        return (self.x, self.y)
-
-    def to_int_tuple(self) -> tuple[int, int]:
-        """Return the components truncated to a plain int tuple.
-
-        Truncates towards zero, matching how pygame treats float coordinates.
-        """
-        return (int(self.x), int(self.y))
-
-    @staticmethod
-    def zero() -> Vector2:
-        """Return `(0, 0)`."""
-        return Vector2(0, 0)
-
-    @staticmethod
-    def one() -> Vector2:
-        """Return `(1, 1)`."""
-        return Vector2(1, 1)
-
-    @staticmethod
-    def up() -> Vector2:
-        """Return `(0, -1)`. Y increases downwards, so up is negative."""
-        return Vector2(0, -1)
-
-    @staticmethod
-    def down() -> Vector2:
-        """Return `(0, 1)`. Y increases downwards, so down is positive."""
-        return Vector2(0, 1)
-
-    @staticmethod
-    def left() -> Vector2:
-        """Return `(-1, 0)`."""
-        return Vector2(-1, 0)
-
-    @staticmethod
-    def right() -> Vector2:
-        """Return `(1, 0)`."""
-        return Vector2(1, 0)
+
+        __match_args__: ClassVar[tuple[str, str]]
+
+        def __init__(self, x: float, y: float) -> None:
+            """Build a vector from two numbers."""
+
+        @property
+        def x(self) -> float:
+            """The X component."""
+
+        @property
+        def y(self) -> float:
+            """The Y component, increasing downwards."""
+
+        def __len__(self) -> int:
+            """Return 2."""
+
+        def __getitem__(self, index: int) -> float:
+            """Return `x` for 0 or -2 and `y` for 1 or -1."""
+
+        def __iter__(self) -> Iterator[float]:
+            """Yield `x`, then `y`."""
+
+        def __hash__(self) -> int:
+            """Hash as the tuple `(x, y)` does."""
+
+        def __eq__(self, other: object) -> bool:
+            """Compare with another vector or an `(x, y)` tuple."""
+
+        def __bool__(self) -> bool:
+            """Return False only for the zero vector."""
+
+        def __add__(self, other: Coordinate) -> Vector2:
+            """Add another vector or coordinate pair."""
+
+        def __radd__(self, other: Coordinate) -> Vector2:
+            """Add this vector to a coordinate pair."""
+
+        def __sub__(self, other: Coordinate) -> Vector2:
+            """Subtract another vector or coordinate pair."""
+
+        def __rsub__(self, other: Coordinate) -> Vector2:
+            """Subtract this vector from a coordinate pair."""
+
+        def __mul__(self, other: float) -> Vector2:
+            """Scale by a scalar."""
+
+        def __rmul__(self, other: float) -> Vector2:
+            """Scale by a scalar, with the scalar on the left."""
+
+        def __truediv__(self, other: float) -> Vector2:
+            """Divide by a scalar, raising ZeroDivisionError for zero."""
+
+        def __floordiv__(self, other: float) -> Vector2:
+            """Floor-divide each component by a scalar."""
+
+        def __neg__(self) -> Vector2:
+            """Return the vector pointing the opposite way."""
+
+        def __pos__(self) -> Vector2:
+            """Return this vector."""
+
+        def __abs__(self) -> float:
+            """Return the length."""
+
+        @property
+        def length(self) -> float:
+            """The length, `sqrt(x * x + y * y)`."""
+
+        @property
+        def magnitude(self) -> float:
+            """The length; an alias for `length`."""
+
+        @property
+        def length_squared(self) -> float:
+            """The squared length, `x * x + y * y`."""
+
+        @property
+        def sqr_magnitude(self) -> float:
+            """The squared length; cheaper than `magnitude` for comparisons."""
+
+        @property
+        def angle(self) -> float:
+            """The angle from +X in radians, `atan2(y, x)`."""
+
+        @property
+        def angle_degrees(self) -> float:
+            """The angle from +X in degrees."""
+
+        @property
+        def polar_tuple(self) -> tuple[float, float]:
+            """The `(length, angle)` pair."""
+
+        @property
+        def int_tuple(self) -> tuple[int, int]:
+            """The components rounded half to even, as ints."""
+
+        def dot(self, other: Coordinate) -> float:
+            """Return the dot product with another vector or pair."""
+
+        def cross(self, other: Coordinate) -> float:
+            """Return the 2D cross product (determinant) with another vector."""
+
+        def get_distance(self, other: Coordinate) -> float:
+            """Return the distance to another point."""
+
+        def distance_to(self, other: Coordinate) -> float:
+            """Return the distance to another point."""
+
+        def get_distance_squared(self, other: Coordinate) -> float:
+            """Return the squared distance to another point."""
+
+        def get_angle_between(self, other: Coordinate) -> float:
+            """Return the signed angle to another vector, in radians."""
+
+        def get_angle_degrees_between(self, other: Coordinate) -> float:
+            """Return the signed angle to another vector, in degrees."""
+
+        def projection(self, other: Coordinate) -> Vector2:
+            """Return the component of this vector along `other`.
+
+            A zero `other` gives the zero vector.
+            """
+
+        def reject(self, other: Coordinate) -> Vector2:
+            """Return the component of this vector perpendicular to `other`."""
+
+        def convert_to_basis(
+            self, x_vector: Coordinate, y_vector: Coordinate
+        ) -> Vector2:
+            """Return this vector's coordinates in another basis."""
+
+        def cpvrotate(self, other: Coordinate) -> Vector2:
+            """Rotate by `other` through complex multiplication."""
+
+        def cpvunrotate(self, other: Coordinate) -> Vector2:
+            """Undo `cpvrotate` by the same `other`."""
+
+        def normalize(self) -> Vector2:
+            """Return a unit vector, or the zero vector if this has no length."""
+
+        def normalized(self) -> Vector2:
+            """Return a unit vector; an alias for `normalize`."""
+
+        def normalized_and_length(self) -> tuple[Vector2, float]:
+            """Return the unit vector and the length together."""
+
+        def perpendicular(self) -> Vector2:
+            """Return this vector turned a quarter turn, `(-y, x)`."""
+
+        def perpendicular_normal(self) -> Vector2:
+            """Return the unit perpendicular, or this vector if it is zero."""
+
+        def rotated(self, angle_radians: float) -> Vector2:
+            """Return this vector rotated by an angle in radians."""
+
+        def rotated_degrees(self, angle_degrees: float) -> Vector2:
+            """Return this vector rotated by an angle in degrees."""
+
+        def rotate_degrees(self, angle_degrees: float) -> Vector2:
+            """Return this vector rotated by an angle in degrees."""
+
+        def scale_to_length(self, length: float) -> Vector2:
+            """Return this vector at `length`, lengthening or shortening it.
+
+            Raises:
+                ZeroDivisionError: If this vector has no length.
+            """
+
+        def clamp_magnitude(self, max_length: float) -> Vector2:
+            """Return this vector shortened to at most `max_length`.
+
+            Never lengthens it. A non-positive `max_length` gives the zero
+            vector.
+            """
+
+        def reflect(self, normal: Coordinate) -> Vector2:
+            """Return this vector mirrored about a surface normal.
+
+            The normal may have any length; a zero one leaves the vector
+            unchanged.
+            """
+
+        def lerp(self, target: Coordinate, t: float) -> Vector2:
+            """Interpolate towards `target`; `t` is not clamped."""
+
+        def interpolate_to(self, other: Coordinate, range: float) -> Vector2:
+            """Interpolate towards `other`; an alias for `lerp`."""
+
+        def move_towards(self, target: Coordinate, max_distance: float) -> Vector2:
+            """Return a point stepped towards `target`, never overshooting.
+
+            A non-positive `max_distance` leaves the point where it is.
+            """
+
+        def snapped(self, grid: float | Vector2) -> Vector2:
+            """Return this point rounded to the nearest multiple of `grid`.
+
+            `grid` is uniform as a number or per-axis as a vector; a zero
+            step leaves that axis alone.
+            """
+
+        def to_tuple(self) -> tuple[float, float]:
+            """Return the components as a plain tuple."""
+
+        def to_int_tuple(self) -> tuple[int, int]:
+            """Return the components truncated towards zero, as ints."""
+
+        @staticmethod
+        def zero() -> Vector2:
+            """Return `(0, 0)`."""
+
+        @staticmethod
+        def one() -> Vector2:
+            """Return `(1, 1)`."""
+
+        @staticmethod
+        def ones() -> Vector2:
+            """Return `(1, 1)`."""
+
+        @staticmethod
+        def unit() -> Vector2:
+            """Return `(0, 1)`."""
+
+        @staticmethod
+        def up() -> Vector2:
+            """Return `(0, -1)`. Y increases downwards, so up is negative."""
+
+        @staticmethod
+        def down() -> Vector2:
+            """Return `(0, 1)`."""
+
+        @staticmethod
+        def left() -> Vector2:
+            """Return `(-1, 0)`."""
+
+        @staticmethod
+        def right() -> Vector2:
+            """Return `(1, 0)`."""
+
+        @staticmethod
+        def from_polar(length: float, angle: float) -> Vector2:
+            """Return a vector of `length` at `angle` radians from +X."""
+
+        @staticmethod
+        def from_angle_degrees(degrees: float, length: float = 1.0) -> Vector2:
+            """Return a vector of `length` at `degrees` from +X."""
+
+else:
+    Vector2 = require_extension("Vector2").Vector2
+
+Coordinate = tuple[float, float] | list[float] | Vector2
+"""Anything accepted where a 2D coordinate is expected."""
 
 
 @dataclass(slots=True)

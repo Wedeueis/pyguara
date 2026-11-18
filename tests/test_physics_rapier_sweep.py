@@ -63,7 +63,7 @@ def _engine(native: bool, seed: int, kind: str) -> RapierEngine:
                 False,
             )
             number += 1
-    # Moving solids too, which the pymunk mirror cannot sweep against.
+    # Moving solids too.
     for crate in range(4):
         body = engine.create_body(
             f"crate{crate}",
@@ -126,8 +126,8 @@ def test_a_half_pixel_rounds_to_even(step: float) -> None:
     assert results[1] == results[0]
 
 
-def test_whole_numbers_stay_whole() -> None:
-    """An int position, delta and remainder come back as the loop's types."""
+def test_both_paths_hand_back_the_same_values() -> None:
+    """Whole-number input comes back the same from both paths, as floats."""
     results = []
     for native in (False, True):
         mover = CharacterMover(_engine(native, 0, "grid"))
@@ -139,7 +139,7 @@ def test_whole_numbers_stay_whole() -> None:
             )
         )
     assert results[1] == results[0]
-    assert results[0][1] == [int, int, int, int]
+    assert results[0][1] == [float, float, float, float]
 
 
 def test_the_blocker_is_named() -> None:

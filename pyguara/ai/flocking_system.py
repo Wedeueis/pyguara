@@ -27,10 +27,6 @@ from pyguara.native import require_extension
 # `rust/src/flocking.rs`, which rejects a length that is not a multiple.
 _STRIDE = 15
 
-# `tuple.__new__`, which is what `NamedTuple._make` calls, bound once
-# rather than looked up per vector. See `FlockingSystem.update`.
-_new_vector = tuple.__new__
-
 
 @dataclass(slots=True)
 class FlockingAgent(StrictComponent):
@@ -320,10 +316,9 @@ class FlockingSystem:
         steering_group = self._tick % groups
         self._tick += 1
 
-        # One crossing for the whole flock. The write-back builds its
-        # vectors with `_new_vector`, which is cheaper than `Vector2(x, y)`
-        # and produces an identical object. A disabled agent is skipped,
-        # not written back with the unchanged row the solver returns.
+        # One crossing for the whole flock, which returns the vectors to
+        # write back already built. A disabled agent is skipped, not written
+        # back with the unchanged row the solver returns.
         enabled = [agent.enabled for agent in agents]
         rows = self._native.tick(
             dt,
@@ -340,5 +335,5 @@ class FlockingSystem:
             if not is_enabled:
                 continue
             if self._integrate:
-                transform.position = _new_vector(Vector2, position)
-            agent.velocity = _new_vector(Vector2, velocity)
+                transform.position = position
+            agent.velocity = velocity

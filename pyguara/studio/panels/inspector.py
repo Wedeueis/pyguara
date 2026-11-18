@@ -245,8 +245,7 @@ class InspectorPanel(EditorPanel):
             return str_changed, str_value
 
         if isinstance(value, Vector2):
-            # Vector2 subclasses pymunk's immutable Vec2d, so an edit
-            # replaces the whole value rather than assigning to .x/.y.
+            # Vector2 is immutable, so an edit replaces the whole value rather than assigning to .x/.y.
             vec_changed, vec_value = imgui.drag_float2(label, [value.x, value.y])
             if not vec_changed:
                 return False, value

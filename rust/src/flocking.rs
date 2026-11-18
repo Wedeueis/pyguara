@@ -57,6 +57,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use crate::grid::{check_query_span, Grid};
+use crate::vector::Point;
 
 /// Floats per agent in the uploaded row, as `FlockingSystem._pack` writes
 /// it: `x, y, vx, vy` then the eleven tuning values.
@@ -81,7 +82,7 @@ struct Params {
     seek_y: f64,
 }
 
-/// `Vec2d.length`, as `Vector2` overrides it: `sqrt(x * x + y * y)`.
+/// `Vector2.length`: `sqrt(x * x + y * y)`.
 ///
 /// Spelled out rather than borrowed from `hypot`, which is a different
 /// (and more careful) algorithm and does not agree with either.
@@ -90,7 +91,7 @@ fn length(x: f64, y: f64) -> f64 {
     (x * x + y * y).sqrt()
 }
 
-/// `vector.normalized() * target`, in pymunk's order of operations.
+/// `vector.normalized() * target`, in `Vector2`'s order of operations.
 ///
 /// `normalized()` is `self / length`, then `__mul__` scales -- so it is
 /// `(x / length) * target`, not `x * (target / length)`. The two differ by
@@ -101,7 +102,7 @@ fn scaled_to(x: f64, y: f64, len: f64, target: f64) -> (f64, f64) {
     if len != 0.0 {
         ((x / len) * target, (y / len) * target)
     } else {
-        // What `Vec2d.normalized()` returns for a zero vector; scaling it
+        // What `Vector2.normalized()` returns for a zero vector; scaling it
         // leaves it zero.
         (0.0, 0.0)
     }
@@ -398,14 +399,10 @@ impl NativeFlockingSolver {
     ///         only velocities change, and positions come back as given.
     ///
     /// Returns:
-    ///     `((x, y), (vx, vy))` per agent, in slot order. A skipped
-    ///     agent's row is its input unchanged, so the caller can write
-    ///     back only the agents it enabled. Nested rather than four flat
-    ///     floats so the caller can hand each pair straight to
-    ///     `tuple.__new__`, which is the cheapest way to build the
-    ///     `Vector2` the components have to hold -- and at 63% of a
-    ///     native tick, the write-back is the dominant cost here, not a
-    ///     detail. See `FlockingSystem._tick_natively`.
+    ///     `(position, velocity)` per agent as `Vector2`s, in slot order.
+    ///     A skipped agent's row is its input unchanged, so the caller can
+    ///     write back only the agents it enabled. Built here rather than
+    ///     in Python because the write-back is most of a native tick.
     #[pyo3(signature = (dt, cell_size, groups, steering_group, agents, enabled, integrate = true))]
     #[allow(clippy::too_many_arguments)]
     fn tick(
@@ -418,7 +415,7 @@ impl NativeFlockingSolver {
         agents: Vec<f64>,
         enabled: Vec<bool>,
         integrate: bool,
-    ) -> PyResult<Vec<((f64, f64), (f64, f64))>> {
+    ) -> PyResult<Vec<(Point, Point)>> {
         if agents.len() % STRIDE != 0 {
             return Err(PyValueError::new_err(format!(
                 "agents has {} floats, which is not a multiple of the {STRIDE}-float \
@@ -496,8 +493,8 @@ impl NativeFlockingSolver {
         Ok((0..count)
             .map(|slot| {
                 (
-                    (self.live_x[slot], self.live_y[slot]),
-                    (self.vel_x[slot], self.vel_y[slot]),
+                    Point::of(self.live_x[slot], self.live_y[slot]),
+                    Point::of(self.vel_x[slot], self.vel_y[slot]),
                 )
             })
             .collect())

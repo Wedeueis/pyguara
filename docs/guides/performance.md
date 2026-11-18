@@ -103,9 +103,9 @@ converging on the player.
 **The remaining cost is almost all boundary.** At 1000 agents the 1.86 ms splits
 as 0.31 ms resolving entities and components (17%, paid by both stores), 0.29 ms
 packing 15 floats per agent (16%), ~0.54 ms of native solve (29%), and the rest
-write-back — 2000 `Vector2` constructions, which is why `_tick_natively` builds
-them through `tuple.__new__` rather than `Vector2(x, y)`: 1.8x cheaper for an
-identical object, worth 15% of the tick. Unlike the flow field, none of this can
+write-back — 2000 `Vector2` constructions, which the native solver now builds
+itself and returns, so none is constructed in Python (see
+[`Vector2` in Rust](#vector2-in-rust)). Unlike the flow field, none of this can
 be kept native between ticks, because a flock is not opaque — every agent is an
 ECS entity whose position other systems read. That is the whole reason this
 port prices at 9x where the field prices at 57x.
@@ -1024,9 +1024,8 @@ field:
 | testing the tint through `Color.__eq__`, which builds two tuples per command | ~25% |
 | reaching the `material_id` property when neither command has a material | ~5% |
 
-The first one is the finding worth carrying elsewhere. `Vector2` subclasses
-`pymunk.Vec2d`, so each intermediate is a real object allocated and dropped
-inside the loop; doing the same two float operations on the components is
+The first one is the finding worth carrying elsewhere. Each `Vector2`
+intermediate is a real object allocated and dropped inside the loop; doing the same two float operations on the components is
 bit-exact and three to four times faster on its own. **The cost was never the
 loop.**
 
@@ -1370,6 +1369,64 @@ The engine sees scene changes and nothing else. A game that loads more
 inside a running scene, such as a level built on demand or a world that
 arrives over the network, calls `settle_memory()` itself once the load is done.
 
+## `Vector2` in Rust
+
+`Vector2` moved from a `pymunk.Vec2d` subclass to a class in the native
+extension (roadmap 6f), measured 2026-11-18 on the same machine and
+interpreter, main against the branch. It holds its components both as `f64`,
+for arithmetic, and as the Python floats `x` and `y` return, so a read hands
+back an existing object as a tuple field does.
+
+### One operation -- nanoseconds, best of seven
+
+| Operation | pymunk subclass | Rust | |
+| --- | ---: | ---: | ---: |
+| `Vector2(x, y)` | 226 | 122 | 1.9x |
+| `a + b` | 279 | 84 | 3.3x |
+| `a * 2.0` | 262 | 94 | 2.8x |
+| `a / 2.0` | 275 | 89 | 3.1x |
+| `a.x` | 21 | 13 | 1.6x |
+| `x, y = a` | 42 | 72 | **0.6x** |
+| `a.length` | 128 | 35 | 3.7x |
+| `a.normalize()` | 361 | 81 | 4.5x |
+| `a.distance_to(b)` | 335 | 44 | 7.6x |
+| `a.dot(b)` | 223 | 41 | 5.4x |
+| `a.lerp(b, 0.5)` | 408 | 96 | 4.2x |
+| `a == b` | 24 | 21 | 1.1x |
+| `hash(a)` | 51 | 52 | 1.0x |
+
+**Unpacking is the one thing that got slower.** A tuple unpacks without a
+call; anything else goes through `__iter__`. In a loop that runs per entity,
+read `v.x` and `v.y`, which are now the fastest way in. Indexing, `v[0]`, is
+about 15% slower than a tuple's for the same reason.
+
+Two designs were measured and dropped on the way. With `f64` fields and PyO3
+getters, `a.x` cost 33 ns and the CPU render sweeps lost 20-35%; with
+`double` member descriptors it cost 31 ns, because each read allocates a
+float. Holding the float objects is what made reads cheaper than a tuple's.
+
+### Whole sweeps -- milliseconds, best of two fresh processes each
+
+| Sweep | pymunk subclass | Rust | |
+| --- | ---: | ---: | ---: |
+| `FlockingSystem`, 1000 agents, native | 1.66 | 1.25 | 1.33x |
+| `FlockingSystem`, 3000 agents, native | 5.22 | 4.28 | 1.22x |
+| `FlockingSystem`, 1000 agents, Python | 12.54 | 9.91 | 1.27x |
+| `Batcher`, 20000 sprites, one texture | 8.69 | 6.61 | 1.31x |
+| CPU frame, 5000 sprites | 9.10 | 8.67 | 1.05x |
+| CPU frame, 20000 sprites | 40.53 | 39.91 | 1.02x |
+| Render submission, 20000 | 22.68 | 22.39 | 1.01x |
+| `RenderQueue.sort`, 8000 | 3.65 | 3.58 | 1.02x |
+| `SpatialHash.query_radius`, 10000, native | 4.06 | 3.78 | 1.07x |
+| Swept character probe, 50 | 46.99 | 44.03 | 1.07x |
+| Flow field recompute, 96, Python | 51.26 | 50.92 | 1.01x |
+
+Nothing is slower measured this way. **Run inside one long pytest session,
+several rows read 10-20% slower instead**, sort among them, which touches no
+vector: main ran its sort in 2.87 ms there against 3.65 ms in a fresh
+process, so what moved is the state earlier benchmarks leave behind, not the
+sort. Compare these numbers process by process.
+
 ---
 
 ## Smaller measurements
@@ -1379,7 +1436,7 @@ explains a choice in the code.
 
 | What | Measured | The choice it explains |
 | --- | --- | --- |
-| `Vector2.__add__` against adding two floats | 452 ns against 69 ns (6.5x) | `flock_force` and `Batcher` do their inner-loop arithmetic on floats and build a `Vector2` only at the boundary |
+| `Vector2.__add__` against adding two floats | 452 ns against 69 ns (6.5x) on the pymunk-based class; 84 ns against 69 ns on the Rust one | `flock_force` and `Batcher` do their inner-loop arithmetic on floats and build a `Vector2` only at the boundary |
 | Uploading a 96x96 grid's walls and weights to the native flow field | 0.18 ms, against a 1.36 ms recompute | `FlowFieldService` uploads the whole graph when its contents change, with no incremental path |
 | A circular wipe's cover at 1280x720, as a fan of 68 quads | 1.04 ms, with every seam blended twice under a translucent cover | `circular_cover_points` returns one self-touching polygon: 0.3 ms, and no seams |
 | The same cover as two scanline rectangles per row | 1,440 draw calls; 2.62 ms opaque, 5.89 ms translucent | As above |

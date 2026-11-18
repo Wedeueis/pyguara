@@ -14,9 +14,6 @@ from dataclasses import dataclass, field
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Rect, Vector2
 
-# `tuple.__new__`: see `pyguara.common.types._new_vector`.
-_new_vector = tuple.__new__
-
 # ===== Camera Effects Data Structures =====
 
 
@@ -397,12 +394,9 @@ class Camera2D:
             # in the same order, so the same floats, without the four
             # intermediate vectors it builds. Immediate-mode game code
             # calls this once per thing it draws.
-            return _new_vector(
-                Vector2,
-                (
-                    world_pos[0] * zoom + (vp.centerx - view[0] * zoom),
-                    world_pos[1] * zoom + (vp.centery - view[1] * zoom),
-                ),
+            return Vector2(
+                world_pos.x * zoom + (vp.centerx - view.x * zoom),
+                world_pos.y * zoom + (vp.centery - view.y * zoom),
             )
         return world_pos * zoom + self.screen_offset(vp)
 

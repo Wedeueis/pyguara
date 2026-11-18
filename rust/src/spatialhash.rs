@@ -59,6 +59,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
 use crate::grid::{check_position, check_query_span, Grid};
+use crate::vector::Pair;
 
 /// Every bit set, as `spatial.py`'s `_FULL_MASK`.
 const FULL_MASK: u32 = 0xFFFF_FFFF;
@@ -132,7 +133,7 @@ impl NativeSpatialHash {
         &mut self,
         python: Python<'_>,
         key: Py<PyAny>,
-        position: (f64, f64),
+        position: Pair,
         mask: u32,
     ) -> PyResult<()> {
         check_position(position.0, position.1, self.cell_size)?;
@@ -201,7 +202,7 @@ impl NativeSpatialHash {
     fn query_point<'py>(
         &mut self,
         python: Python<'py>,
-        point: (f64, f64),
+        point: Pair,
         mask: u32,
     ) -> PyResult<Bound<'py, PyList>> {
         check_position(point.0, point.1, self.cell_size)?;
@@ -263,7 +264,7 @@ impl NativeSpatialHash {
     fn query_radius<'py>(
         &mut self,
         python: Python<'py>,
-        center: (f64, f64),
+        center: Pair,
         radius: f64,
         mask: u32,
     ) -> PyResult<Bound<'py, PyList>> {

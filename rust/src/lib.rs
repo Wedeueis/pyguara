@@ -74,6 +74,7 @@ mod sparks;
 mod spatialhash;
 mod steam;
 mod text;
+mod vector;
 mod window;
 mod world;
 
@@ -83,6 +84,8 @@ pub type Rgba = (u8, u8, u8, u8);
 /// Register the module's classes.
 #[pymodule]
 fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<vector::Vector2>()?;
+    vector::install_component_members(module.py())?;
     module.add_class::<flocking::NativeFlockingSolver>()?;
     module.add_class::<flowfield::NativeFlowField>()?;
     module.add_class::<gpu::NativeGpu>()?;

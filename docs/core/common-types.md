@@ -21,9 +21,15 @@ Transform().up   # (0, -1), rotated by the transform's world rotation
 
 ## Vector2
 
-An immutable 2D vector, subclassing `pymunk.Vec2d` for C-optimised math and to
-pass straight into the physics backend. Every operation returns a new
-`Vector2`; nothing mutates in place.
+An immutable 2D vector, implemented in the native extension. Every operation
+returns a new `Vector2`; nothing mutates in place. Its components are always
+floats: `Vector2(3, 4).x` is `3.0`.
+
+It behaves as the `(x, y)` tuple it equals: it unpacks, indexes, has a length
+of 2, compares equal to `(x, y)` and hashes the same, so it can look up a dict
+keyed by plain tuples. It is not a `tuple` subclass, so `isinstance(v, tuple)`
+is False. Anywhere a coordinate is accepted, a tuple, a two-item list or any
+object with `x` and `y` works too.
 
 ```python
 v = Vector2(3, 4)
@@ -51,7 +57,7 @@ v.rotate_degrees(90)        # degrees
     site, so the ambiguous name was removed. Replace `v.rotate(deg)` with
     `v.rotate_degrees(deg)`.
 
-Since `Vector2` is a tuple subclass, note that `Vector2(0, 0)` is **falsy**.
+`Vector2(0, 0)` is **falsy**, as the tuple it equals would not be.
 Use `if v is not None`, never `if v`, when a zero vector is a legitimate value.
 
 ## Color

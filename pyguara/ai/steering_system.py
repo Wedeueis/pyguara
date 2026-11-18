@@ -1,7 +1,5 @@
 """System for updating steering behaviors."""
 
-from typing import cast
-
 from pyguara.ai.components import Navigator, SteeringAgent, SteeringBehaviorType
 from pyguara.ai.steering import SteeringBehavior
 from pyguara.common.components import Transform
@@ -60,9 +58,7 @@ class SteeringSystem:
 
             # Apply steering force (truncate to max force)
             if steering_force.length > agent.max_force:
-                steering_force = cast(
-                    Vector2, steering_force.normalized() * agent.max_force
-                )
+                steering_force = steering_force.normalized() * agent.max_force
 
             # Calculate acceleration (F = ma, so a = F/m)
             acceleration = steering_force * (1.0 / agent.mass)
@@ -70,9 +66,7 @@ class SteeringSystem:
             # Update velocity
             new_velocity = agent.velocity + acceleration * dt
             if new_velocity.length > agent.max_speed:
-                new_velocity = cast(
-                    Vector2, new_velocity.normalized() * agent.max_speed
-                )
+                new_velocity = new_velocity.normalized() * agent.max_speed
             agent.velocity = new_velocity
 
             # ARRIVE must actually stop. The dt-scaled force above is only a
@@ -87,9 +81,7 @@ class SteeringSystem:
                 elif distance < agent.slowing_radius and agent.slowing_radius > 0:
                     ramp_speed = agent.max_speed * (distance / agent.slowing_radius)
                     if agent.velocity.length > ramp_speed:
-                        agent.velocity = cast(
-                            Vector2, agent.velocity.normalized() * ramp_speed
-                        )
+                        agent.velocity = agent.velocity.normalized() * ramp_speed
 
             # Update position
             transform.position = transform.position + agent.velocity * dt

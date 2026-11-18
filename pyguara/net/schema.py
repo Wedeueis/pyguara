@@ -35,9 +35,6 @@ _MAX_RECORD_BYTES = 512
 _MAX_NET_ID = 65535
 _INT16 = (-32768, 32767)
 
-# `tuple.__new__`, bound once: a `Vector2` built from a pair without the
-# `NamedTuple` constructor's argument handling.
-_new_tuple = tuple.__new__
 _INT32 = (-(2**31), 2**31 - 1)
 
 
@@ -198,11 +195,6 @@ class QuantisedVector(_Codec):
     def native_field(self) -> tuple[str, str, float, float | None]:
         """Describe this field to the native interpolator."""
         return ("vector", self.format[0], self._step, self._snap_squared)
-
-    @staticmethod
-    def from_native(value: tuple[float, float]) -> Any:
-        """Build the `Vector2` the native interpolator returned as `(x, y)`."""
-        return _new_tuple(Vector2, value)
 
 
 class Angle(_Codec):

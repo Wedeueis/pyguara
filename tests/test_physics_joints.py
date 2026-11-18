@@ -127,8 +127,8 @@ class TestJointCreation:
             self.entity_b.id, BodyType.DYNAMIC, Vector2(200, 100)
         )
 
-    def test_create_pin_joint_pymunk(self):
-        """Pymunk backend should create pin joints."""
+    def test_create_pin_joint(self):
+        """The engine creates pin joints."""
         joint_handle = self.engine.create_joint(
             body_a=self.body_a,
             body_b=self.body_b,
@@ -145,8 +145,8 @@ class TestJointCreation:
 
         assert joint_handle is not None
 
-    def test_create_distance_joint_pymunk(self):
-        """Pymunk backend should create distance joints."""
+    def test_create_distance_joint(self):
+        """The engine creates distance joints."""
         joint_handle = self.engine.create_joint(
             body_a=self.body_a,
             body_b=self.body_b,
@@ -163,8 +163,8 @@ class TestJointCreation:
 
         assert joint_handle is not None
 
-    def test_create_spring_joint_pymunk(self):
-        """Pymunk backend should create spring joints."""
+    def test_create_spring_joint(self):
+        """The engine creates spring joints."""
         joint_handle = self.engine.create_joint(
             body_a=self.body_a,
             body_b=self.body_b,
@@ -181,8 +181,8 @@ class TestJointCreation:
 
         assert joint_handle is not None
 
-    def test_create_slider_joint_pymunk(self):
-        """Pymunk backend should create slider joints."""
+    def test_create_slider_joint(self):
+        """The engine creates slider joints."""
         joint_handle = self.engine.create_joint(
             body_a=self.body_a,
             body_b=self.body_b,
@@ -199,8 +199,8 @@ class TestJointCreation:
 
         assert joint_handle is not None
 
-    def test_create_gear_joint_pymunk(self):
-        """Pymunk backend should create gear joints."""
+    def test_create_gear_joint(self):
+        """The engine creates gear joints."""
         joint_handle = self.engine.create_joint(
             body_a=self.body_a,
             body_b=self.body_b,
@@ -217,8 +217,8 @@ class TestJointCreation:
 
         assert joint_handle is not None
 
-    def test_create_motor_joint_pymunk(self):
-        """Pymunk backend should create motor joints."""
+    def test_create_motor_joint(self):
+        """The engine creates motor joints."""
         joint_handle = self.engine.create_joint(
             body_a=self.body_a,
             body_b=self.body_b,

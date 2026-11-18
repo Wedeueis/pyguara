@@ -7,8 +7,6 @@ two spellings together, to the bit, across zoom, shake and viewport.
 
 from __future__ import annotations
 
-import pymunk
-
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Rect, Vector2
 from pyguara.graphics.components.camera import Camera2D
@@ -43,10 +41,3 @@ def test_whole_number_inputs_keep_their_types() -> None:
     world = Vector2(3, 4)
 
     assert repr(camera.world_to_screen(world)) == repr(_long_way(camera, world, None))
-
-
-def test_a_plain_pymunk_vector_takes_the_long_way_and_still_works() -> None:
-    camera = Camera2D(800, 600)
-    world = pymunk.Vec2d(3.5, 4.5)
-
-    assert camera.world_to_screen(world) == camera.world_to_screen(Vector2(3.5, 4.5))  # type: ignore[arg-type]

@@ -217,7 +217,7 @@ class TestTheBatchIsActuallyTaken:
 
 
 class TestWhatTheBatchLeavesAlone:
-    def test_an_integer_position_stays_an_integer(self) -> None:
+    def test_a_whole_number_position_comes_back_the_same(self) -> None:
         results = []
         for accelerate in (False, True):
             manager = EntityManager()
@@ -234,7 +234,7 @@ class TestWhatTheBatchLeavesAlone:
             results.append(_state(manager))
 
         assert results[1] == results[0]
-        assert "<class 'int'>" in results[0][0]
+        assert "<class 'int'>" not in results[0][0]
 
     def test_negative_zero_survives_a_body_with_no_collider(self) -> None:
         # Without a collider `step_body` adds no offset, and -0.0 + 0.0 is

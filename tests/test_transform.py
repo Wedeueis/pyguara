@@ -305,8 +305,8 @@ class TestSharedComponents:
 
 
 class TestTransformFalsyDefaults:
-    """`position or default` is wrong for Vector2: pymunk's Vec2d is falsy at
-    (0, 0), so an explicitly requested zero was silently replaced."""
+    """`position or default` is wrong for Vector2: a zero vector is falsy,
+    so an explicitly requested zero would be silently replaced."""
 
     def test_explicit_zero_scale_is_honoured(self) -> None:
         assert Transform(scale=Vector2(0, 0)).scale == Vector2(0, 0)

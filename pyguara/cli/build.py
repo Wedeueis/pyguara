@@ -169,7 +169,6 @@ def _build_pyinstaller_args(
         # tick. Taken from `native.py`'s own constant rather than spelled
         # again, because a third spelling is a third thing to keep in step.
         _MODULE_NAME,
-        "pymunk",
         "numpy",
         "PIL",
         "PIL.Image",
