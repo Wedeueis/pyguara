@@ -133,7 +133,13 @@ ADR 0003 called this "a project, not a milestone", and that has not
 changed. Rapier runs beside pymunk, held to the existing physics tests,
 until it reproduces joints, queries, triggers, collision events, one-way
 platforms and the swept character mover. Then it becomes the default,
-and pymunk is retired a release later.
+and pymunk is retired.
+
+The retirement was planned for a release after the default switch, so
+games could switch back for one release. It shipped in the same release
+instead (the user's call, 2026-11-18): the only game on the engine,
+Reclaimer, pins an engine commit and moves when it bumps that pin. A
+config naming `pymunk` stops at startup with an error naming `rapier`.
 
 ### 5. `Vector2` follows physics, and is not a performance item
 
