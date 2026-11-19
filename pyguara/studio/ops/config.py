@@ -16,7 +16,8 @@ from pyguara.config.manager import ConfigManager
 from pyguara.studio.commands.config import SetConfigSetting
 from pyguara.studio.model.schema import describe_fields
 from pyguara.studio.model.values import decode, encode
-from pyguara.studio.ops.registry import OperationError
+from pyguara.studio.ops._args import schema
+from pyguara.studio.ops.registry import Operation, OperationError, RiskClass
 
 if TYPE_CHECKING:
     from pyguara.studio.session import StudioSession
@@ -245,3 +246,58 @@ def _argument(arguments: dict[str, Any], name: str) -> Any:
     if name not in arguments:
         raise OperationError(f"Missing required argument '{name}'.")
     return arguments[name]
+
+
+OPERATIONS: tuple[Operation, ...] = (
+    Operation(
+        name="config",
+        summary="Read, change or save the engine configuration.",
+        detail=(
+            "operation: 'get' reports every section, or one, with each "
+            "setting's type, value, default and an enum's valid names. "
+            "'set' changes one setting as an undoable edit; it is refused "
+            "with the reason when the value is the wrong type, fails "
+            "validation, or the setting is pinned by an active profile. A "
+            "subsystem that read the setting at startup does not notice "
+            "the change. 'save' writes the configuration file; a setting "
+            "an active profile overrides is written with the value under it."
+        ),
+        risk=RiskClass.WRITE_DISK,
+        parameters=schema(
+            {
+                "operation": {
+                    "type": "string",
+                    "enum": list(VERBS),
+                    "description": "Which of the three to do.",
+                },
+                "section": {
+                    "type": "string",
+                    "description": (
+                        "The section's name, e.g. 'physics'. Required by "
+                        "'set'; narrows 'get' to one section."
+                    ),
+                },
+                "setting": {
+                    "type": "string",
+                    "description": "The setting within the section, for 'set'.",
+                },
+                "value": {
+                    "description": (
+                        "The new value, for 'set'. An enum takes a member "
+                        "name; a colour takes {r, g, b, a}."
+                    ),
+                },
+                "coalesce": {
+                    "type": "boolean",
+                    "description": (
+                        "Fold this 'set' into the previous one when both "
+                        "write the same setting, so a dragged control is "
+                        "one history entry."
+                    ),
+                },
+            },
+            ["operation"],
+        ),
+        handler=config_operation,
+    ),
+)
