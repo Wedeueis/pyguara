@@ -4,32 +4,11 @@ This directory serves as the registry for long-term project vision, technical de
 
 ## 📂 Registry
 
-### 1. Systems & Architecture
-**File:** [`systems_improvement.md`](./systems_improvement.md)
+The systems and technical-debt notes that sat here were checked against the
+code on 2026-11-19 and removed: every item was built or is tracked by an
+issue. They are in the tag `archive/pre-alpha-history`.
 
-Focuses on major architectural evolutions to improve performance, scalability, and data-driven capabilities.
-
-*   **ECS Archetypes:** Transition from inverted indexes to contiguous arrays for CPU cache locality.
-*   **Schema Migrations:** Versioned serialization pipeline for save game compatibility.
-*   **Data-Driven Prefabs:** JSON/YAML entity definitions to replace hardcoded setup.
-*   **Input Persistence:** Export/Import bindings and conflict resolution.
-*   **Determinism:** Ordered iteration and input recording for replay systems.
-*   **Hot-Reloading:** Dynamic reloading of System logic during runtime.
-*   **Audio Instances:** Component-based audio sources tied to entity lifecycle.
-
-### 2. Technical Debt & Polish
-**File:** [`technical_debt_cleanup.md`](./technical_debt_cleanup.md)
-
-Addresses specific low/medium priority issues identified during the Beta assessment (PEP-2026.01).
-
-*   **Shape Rendering:** Native shape support in ModernGL backend.
-*   **Serialization:** MessagePack implementation for efficient binary saves.
-*   **Component Registry:** Dynamic registration to replace hardcoded lists.
-*   **Editor:** Command pattern implementation for Undo/Redo.
-*   **Concurrency:** Thread-safety verification suite.
-*   **Audio Effects:** 3D spatialization features and DSP effects chain.
-
-### 3. Education & Content
+### Education & Content
 **File:** [`tutorial_series_raodmap.md`](./tutorial_series_raodmap.md)
 
 Detailed plan for user onboarding and feature showcase games.

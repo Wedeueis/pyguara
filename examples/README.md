@@ -87,7 +87,7 @@ These modules correspond to the "Tutorial Series Roadmap".
   [`art.py`](./guara_falcao/art.py) — and their look comes from layering,
   palette and light. The character frames are cut out of the project's
   contact sheet once by
-  [`tools/slice_spritesheet.py`](../tools/slice_spritesheet.py), which keys
+  [`guara_falcao/slice_spritesheet.py`](guara_falcao/slice_spritesheet.py), which keys
   the backdrop to alpha and stands every frame on one shared canvas, and
   checked in as PNGs; the demo loads files and knows nothing about sheets.
 * **Run:** `uv run python examples/guara_falcao/main.py`

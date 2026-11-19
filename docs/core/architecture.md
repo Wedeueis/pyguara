@@ -3,6 +3,15 @@
 PyGuara's core is three cooperating pieces: an ECS that stores game state, a
 DI container that wires services, and an event system that decouples them.
 
+## Layers
+
+`ecs`, `di`, `events`, `common`, `log` and `errors` are the foundation. They
+import each other and the native extension, and nothing else in `pyguara`:
+no subsystem, no backend, no scene. Everything above them may depend on them.
+A foundation module that needs something from a subsystem takes it as an
+argument or a protocol instead of importing it. `tests/test_layering.py`
+enforces this, including imports made inside a function.
+
 ---
 
 # Entity Component System (ECS)

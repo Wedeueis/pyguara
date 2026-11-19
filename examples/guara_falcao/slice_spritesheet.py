@@ -32,8 +32,8 @@ What this does, per frame:
 
 Run it from the repository root:
 
-    uv run python tools/slice_spritesheet.py
-    uv run python tools/slice_spritesheet.py --measure   # re-derive boxes
+    uv run python -m examples.guara_falcao.slice_spritesheet
+    uv run python -m examples.guara_falcao.slice_spritesheet --measure
 """
 
 from __future__ import annotations

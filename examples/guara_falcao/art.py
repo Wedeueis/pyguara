@@ -10,7 +10,7 @@ The **characters** are not. The guará and the falcão used to be drawn
 here as well, swinging their legs off a sine wave, and they are now
 sprites played by the engine's own `Animator` and
 `AnimationStateMachine` -- see `animation.py`, and
-`tools/slice_spritesheet.py` for where the frames come from. That is the
+`slice_spritesheet.py` for where the frames come from. That is the
 whole point of the change: those two components had no reference usage
 anywhere in the repository, which is a poor advertisement for an engine
 that ships them. Nothing else moved: a demo that was primitives all the
