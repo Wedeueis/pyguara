@@ -7,9 +7,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from games.quintal_cerrado import art
-from games.quintal_cerrado.garden_grid import TILE_SIZE, GardenGrid
-from games.quintal_cerrado.garden_widget import (
+from examples.quintal_cerrado import art
+from examples.quintal_cerrado.garden_grid import TILE_SIZE, GardenGrid
+from examples.quintal_cerrado.garden_widget import (
     CURSOR_BLOCKED,
     CURSOR_OK,
     GardenGridCanvas,

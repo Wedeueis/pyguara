@@ -260,7 +260,7 @@ casts as a garbage collector. This demo puts it back in its own landscape.
 ## 8. How to run it
 
 ```bash
-uv run python games/tamandua_murundus/main.py                      # a real window
+uv run python examples/tamandua_murundus/main.py                      # a real window
 uv run python tools/agent_view.py tamandua_murundus --gl --frames 2000 --shot 1900
 ```
 
@@ -284,7 +284,7 @@ and is **not** built.
 
 | Cut | Why | Gated on |
 | --- | --- | --- |
-| **The 3-phase Matriarca boss** | No multi-phase boss exists anywhere, and `ai/fsm.py` has zero importers across `games/`. Behaviour-tree composites have memory, so a health-threshold front guard stops being re-checked once a sequence advances — #46's exact gap, and precisely the pattern a phase-abort boss needs. Largest content cost in the document, none of it reusable. | **#46** |
+| **The 3-phase Matriarca boss** | No multi-phase boss exists anywhere, and `ai/fsm.py` has zero importers across `examples/`. Behaviour-tree composites have memory, so a health-threshold front guard stops being re-checked once a sequence advances — #46's exact gap, and precisely the pattern a phase-abort boss needs. Largest content cost in the document, none of it reusable. | **#46** |
 | **Weapon evolution paths** | The mechanism already exists (`Upgrade.requires` + `UpgradeRecord.taken`), so this is content, not capability. | A second consumer of `kits/progression` |
 | **Claw cleave, tail-sweep ultimate** | Both are the tongue with a different shape. If they return, they return as cards, which is free. | — |
 | **12-minute run, six phases** | Run length is a balance problem with no engine payoff, and a 12-minute run cannot be iterated on through frame captures. | — |

@@ -1,4 +1,4 @@
-"""Tests for Vinagre: Matilha's combat loop (games/vinagre_matilha/combat.py).
+"""Tests for Vinagre: Matilha's combat loop (examples/vinagre_matilha/combat.py).
 
 The fight is the demo's actual game, so its rules are tested directly
 rather than only through headless capture: bites and their cooldown, the
@@ -8,7 +8,7 @@ it, and the rally that brings downed dogs back.
 
 from __future__ import annotations
 
-from games.vinagre_matilha.combat import (
+from examples.vinagre_matilha.combat import (
     BITE_DAMAGE_FLANKER,
     BITE_DAMAGE_VANGUARD,
     BITE_RANGE,
@@ -20,8 +20,8 @@ from games.vinagre_matilha.combat import (
     PackCombatSystem,
     PackRecoverySystem,
 )
-from games.vinagre_matilha.components import DogState, JaguarPhase, JaguarState
-from games.vinagre_matilha.events import (
+from examples.vinagre_matilha.components import DogState, JaguarPhase, JaguarState
+from examples.vinagre_matilha.events import (
     DogDownedEvent,
     JaguarSwipedEvent,
     PackBitEvent,

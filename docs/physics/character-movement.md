@@ -94,7 +94,7 @@ test for this caught.
 consumed as velocity, not an impulse. It overrides `CharacterBody.velocity`
 directly and suppresses input control for a short window, during which the
 velocity decays back toward zero and gravity keeps acting underneath it —
-an ordinary hit-stun. `games/guara_falcao`'s `HazardSystem` now calls it,
+an ordinary hit-stun. `examples/guara_falcao`'s `HazardSystem` now calls it,
 which is what finally gives `Hazard.knockback_force` something to do.
 
 **System ordering** (`GameplayScene.fixed_update()` in `guara_falcao`)

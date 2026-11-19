@@ -50,7 +50,7 @@ files import from `games/`. They are three different things:
    `test_quintal_cerrado_*.py` (16 of them) and `test_tamandua_*.py`.
    They test the demo, not the engine, and belong wherever the demo goes.
 2. **Engine tests that use a demo as the scene to run** -- eight
-   integration tests import `BootScene` from `games/boot_process` simply
+   integration tests import `BootScene` from `examples/boot_process` simply
    because they need *a* scene.
 3. **Engine tests that use the demos as a pixel corpus** --
    `test_demos_render.py`, `test_wgpu_demos.py`, `test_wgpu_gl_demos.py`
@@ -171,7 +171,7 @@ it becomes a `pyguara` CLI command beside `atlas`; if not it goes.
 
 - `main.py`: a second, undocumented way to start a tutorial scene. The
   roadmap's `pyguara new` and one-call entry point replace it.
-- `logs/`, `saves/`, `target/`, `games/__pycache__/` (17 GB on disk):
+- `logs/`, `saves/`, `target/`, `examples/__pycache__/` (17 GB on disk):
   untracked already. Confirm `saves/` is ignored.
 - `project/backlog/archive_202601/`, `archive_202611/` and `project/demos/`,
   once empty. **`project/` itself stays until beta** (decided

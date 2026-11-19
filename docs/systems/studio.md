@@ -205,7 +205,7 @@ things that look identical from the outside:
 
 The third is not a Studio bug and cannot be fixed from here: a component
 is authored state, and only a game that renders from it will show a change
-to it. Every demo in `games/` draws by hand, so editing a `Sprite`'s
+to it. Every demo in `examples/` draws by hand, so editing a `Sprite`'s
 colour changes the component and nothing else. Entities those demos *do*
 draw from their `Transform` -- the player, the tiles -- move when moved.
 
@@ -543,8 +543,8 @@ look at the frames, check what moved.
 
 ```python
 from pyguara.studio.agent.harness import open_headless
-from games.guara_falcao.bootstrap import configure_game_container
-from games.guara_falcao.scenes import GameScene
+from examples.guara_falcao.bootstrap import configure_game_container
+from examples.guara_falcao.scenes import GameScene
 
 harness = open_headless(
     GameScene,

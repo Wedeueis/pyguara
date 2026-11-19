@@ -13,14 +13,14 @@ import math
 
 import pytest
 
-from games.tamandua_murundus.components import Insect, Murundu, Tamandua
-from games.tamandua_murundus.events import (
+from examples.tamandua_murundus.components import Insect, Murundu, Tamandua
+from examples.tamandua_murundus.events import (
     InsectKilled,
     MurunduBroken,
     TongueLashed,
 )
-from games.tamandua_murundus.swarm import Swarm
-from games.tamandua_murundus.systems import MurunduSystem, TongueSystem
+from examples.tamandua_murundus.swarm import Swarm
+from examples.tamandua_murundus.systems import MurunduSystem, TongueSystem
 from pyguara.common.components import Transform
 from pyguara.common.random import RandomStream
 from pyguara.common.spatial import SpatialHash

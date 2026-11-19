@@ -13,8 +13,8 @@ import pytest
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
-from games.net_horde.scenes import HostScene, JoinScene  # noqa: E402
-from games.net_horde.world import HORDE_SIZE, Avatar, Move  # noqa: E402
+from examples.net_horde.scenes import HostScene, JoinScene  # noqa: E402
+from examples.net_horde.world import HORDE_SIZE, Avatar, Move  # noqa: E402
 from pyguara.application.application import Application  # noqa: E402
 from pyguara.application.bootstrap import create_headless_application  # noqa: E402
 from pyguara.application.clock import FixedClock  # noqa: E402

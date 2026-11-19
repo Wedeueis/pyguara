@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-GAMES_DIR = Path(__file__).resolve().parent.parent / "games"
+GAMES_DIR = Path(__file__).resolve().parent.parent / "examples"
 
 BOOTSTRAPS = sorted(GAMES_DIR.glob("*/bootstrap.py"))
 
@@ -215,7 +215,7 @@ def test_no_demo_edits_the_import_path(source_file: Path) -> None:
     source = source_file.read_text(encoding="utf-8")
 
     assert not EDITS_THE_IMPORT_PATH.search(source), (
-        f"games/{source_file.relative_to(GAMES_DIR)} edits sys.path. "
+        f"examples/{source_file.relative_to(GAMES_DIR)} edits sys.path. "
         "Run the demo from an environment made by `uv sync`, which already "
         "has the repository on the import path."
     )

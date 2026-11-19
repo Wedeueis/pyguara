@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import pytest
 
-from games.quintal_cerrado import seasons
-from games.quintal_cerrado.components import PlantComponent
-from games.quintal_cerrado.economy import sale_value
-from games.quintal_cerrado.icons import ICONS
-from games.quintal_cerrado.morning import report_lines
-from games.quintal_cerrado.scenes import GardenScene
-from games.quintal_cerrado.seasons import (
+from examples.quintal_cerrado import seasons
+from examples.quintal_cerrado.components import PlantComponent
+from examples.quintal_cerrado.economy import sale_value
+from examples.quintal_cerrado.icons import ICONS
+from examples.quintal_cerrado.morning import report_lines
+from examples.quintal_cerrado.scenes import GardenScene
+from examples.quintal_cerrado.seasons import (
     DRY,
     IN_SEASON_PREMIUM,
     SEASON_LENGTH,
@@ -27,11 +27,11 @@ from games.quintal_cerrado.seasons import (
     season_for,
     turns_on,
 )
-from games.quintal_cerrado.species import SPECIES_TABLE, sellable_species
-from games.quintal_cerrado.systems.day_resolver import DayReport
-from games.quintal_cerrado.systems.weather_system import WeatherSystem
-from games.quintal_cerrado.turn import SESSION_DAYS
-from games.quintal_cerrado.weather import WEATHER_TABLE, roll_condition
+from examples.quintal_cerrado.species import SPECIES_TABLE, sellable_species
+from examples.quintal_cerrado.systems.day_resolver import DayReport
+from examples.quintal_cerrado.systems.weather_system import WeatherSystem
+from examples.quintal_cerrado.turn import SESSION_DAYS
+from examples.quintal_cerrado.weather import WEATHER_TABLE, roll_condition
 from pyguara.common.random import RandomStream
 from tests.test_quintal_cerrado_growth import (  # noqa: F401
     _plant_at,

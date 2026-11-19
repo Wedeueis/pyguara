@@ -13,13 +13,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from games.quintal_cerrado.economy import ORGANIC_PREMIUM, SPRAY_COST
-from games.quintal_cerrado.hud import ToolCard
-from games.quintal_cerrado.icons import ICONS
-from games.quintal_cerrado.scenes import GardenScene, _dock_groups
-from games.quintal_cerrado.species import SPECIES_TABLE
-from games.quintal_cerrado.tool_info import describe
-from games.quintal_cerrado.turn import action_cost
+from examples.quintal_cerrado.economy import ORGANIC_PREMIUM, SPRAY_COST
+from examples.quintal_cerrado.hud import ToolCard
+from examples.quintal_cerrado.icons import ICONS
+from examples.quintal_cerrado.scenes import GardenScene, _dock_groups
+from examples.quintal_cerrado.species import SPECIES_TABLE
+from examples.quintal_cerrado.tool_info import describe
+from examples.quintal_cerrado.turn import action_cost
 from pyguara.common.types import Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.types import UIElementState

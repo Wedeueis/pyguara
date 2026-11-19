@@ -13,15 +13,15 @@ The [README](https://github.com/Wedeueis/pyguara#install) has the install
 steps. Then:
 
 ```bash
-uv run python games/boot_process/main.py     # the smallest module
-uv run python games/guara_falcao/main.py     # a platformer
+uv run python examples/boot_process/main.py     # the smallest module
+uv run python examples/guara_falcao/main.py     # a platformer
 ```
 
 - **[Onboarding](guides/ONBOARDING.md)**: the three patterns everything
   else is built from (dependency injection, protocols over backends,
   events), then each subsystem in a paragraph.
 - **[Zero to Hero](guides/zero_to_hero.md)**: a walk through the tutorial
-  modules in `games/`.
+  modules in `examples/`.
 - **[Project Structure](guides/PROJECT_STRUCTURE.md)**: how to lay out a
   game built on the engine.
 - **[Architecture & Style](guides/Archictecture & Style Guide.md)**: the

@@ -38,10 +38,10 @@ built before they were registered, read through `get`.
   gives every scene a scope that nothing registers a scoped service into.
 - **Auto-wiring serves five classes**, all in `bootstrap.py`:
   `InputManager`, `SceneManager`, `UIManager`, `AudioManager` and
-  `Application`. (The seven in `games/` are `boot_process`, which wires
+  `Application`. (The seven in `examples/` are `boot_process`, which wires
   by hand on purpose.)
 - **Game code does not inject; it looks up.** Of the 173 `container.get`
-  calls in `games/`, 118 ask for one of five services: `UIManager` (35),
+  calls in `examples/`, 118 ask for one of five services: `UIManager` (35),
   `SceneManager` (33), `Application` (24), `EventDispatcher` (16) and
   `InputManager` (10).
 - **34 `# type: ignore[type-abstract]` comments** exist because
@@ -96,7 +96,7 @@ constructor injection with no container in it, and it stays the pattern.
 
 - **Breaking.** `register_transient`, `register_scoped`, `create_scope`,
   `begin_run_scope`, `Scene.scope` and the decorators go. Nothing in the
-  engine or `games/` uses them, but a game outside this repository might;
+  engine or `examples/` uses them, but a game outside this repository might;
   the changelog entry is marked breaking.
 - **The run scope (#65) goes with them.** It was built for a roguelike
   run that outlives its floor transitions, and nothing uses it. A game
@@ -106,7 +106,7 @@ constructor injection with no container in it, and it stays the pattern.
   The thread-safety test stays: registration and lookup still need the
   lock an earlier audit found missing.
 - **A scene's constructor signature changes**, which touches every scene
-  in `games/` and in Reclaimer. Mechanical, and the one-call entry point
+  in `examples/` and in Reclaimer. Mechanical, and the one-call entry point
   in the roadmap's phase 4 wants the same change, so they land together.
 - **The README stops claiming "native Dependency Injection."** What is
   left is more modest and is what was always there.

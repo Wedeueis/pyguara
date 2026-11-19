@@ -19,13 +19,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from games.quintal_cerrado.components import PlantComponent
-from games.quintal_cerrado.garden_grid import GardenGrid
-from games.quintal_cerrado.garden_widget import GardenGridCanvas
-from games.quintal_cerrado.persistence_schema import SCHEMA_VERSION
-from games.quintal_cerrado.scenes import GardenScene, TitleScene
-from games.quintal_cerrado.soil_health_effect import SoilHealthEffect
-from games.quintal_cerrado.store import StoreOverlayScene
+from examples.quintal_cerrado.components import PlantComponent
+from examples.quintal_cerrado.garden_grid import GardenGrid
+from examples.quintal_cerrado.garden_widget import GardenGridCanvas
+from examples.quintal_cerrado.persistence_schema import SCHEMA_VERSION
+from examples.quintal_cerrado.scenes import GardenScene, TitleScene
+from examples.quintal_cerrado.soil_health_effect import SoilHealthEffect
+from examples.quintal_cerrado.store import StoreOverlayScene
 from pyguara.ai.components import AIComponent
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.manager import AudioManager

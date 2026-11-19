@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from games.tamandua_murundus.swarm import (
+from examples.tamandua_murundus.swarm import (
     SwarmBatchInput,
     build_batch,
 )

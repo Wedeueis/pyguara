@@ -1,4 +1,4 @@
-"""Tests for Vinagre: Matilha's game-specific systems (games/vinagre_matilha/systems.py).
+"""Tests for Vinagre: Matilha's game-specific systems (examples/vinagre_matilha/systems.py).
 
 No test file existed for any of these five systems before this tuning pass;
 each is exercised directly against a bare `EntityManager` the way
@@ -8,7 +8,7 @@ whole-demo headless capture.
 
 from __future__ import annotations
 
-from games.vinagre_matilha.components import (
+from examples.vinagre_matilha.components import (
     CurrentZone,
     DogState,
     JaguarState,
@@ -16,14 +16,14 @@ from games.vinagre_matilha.components import (
     PressurePlate,
     WebbedFeet,
 )
-from games.vinagre_matilha.events import GateOpenedEvent, JaguarCorneredEvent
-from games.vinagre_matilha.level_builder import FLANKER_SPATIAL_MASK
-from games.vinagre_matilha.pack_behaviors import (
+from examples.vinagre_matilha.events import GateOpenedEvent, JaguarCorneredEvent
+from examples.vinagre_matilha.level_builder import FLANKER_SPATIAL_MASK
+from examples.vinagre_matilha.pack_behaviors import (
     NEIGHBOR_COUNT_KEY,
     PLATE_ASSIGNEES_KEY,
     PLATE_POSITION_KEY,
 )
-from games.vinagre_matilha.systems import (
+from examples.vinagre_matilha.systems import (
     CurrentZoneSystem,
     FlankerAssignmentSystem,
     JaguarAISystem,

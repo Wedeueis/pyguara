@@ -7,7 +7,7 @@ scene's ambient light, the screen shake), and they only stay in sync
 because one object decides when a strike happens.
 """
 
-from games.true_coral.storm import (
+from examples.true_coral.storm import (
     CALM_RAIN,
     RAIN_RAMP,
     STORM_RAIN,

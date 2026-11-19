@@ -683,7 +683,7 @@ Two separate causes, and they want separate fixes:
   8-directional movement with corner-cutting refused, one expansion is
   roughly thirty interpreter operations. This is also why a native port
   must take the grid rather than the graph -- see ADR 0004, Decision 2.
-- **The cadence.** `games/vinagre_matilha` recomputed **every fixed tick**,
+- **The cadence.** `examples/vinagre_matilha` recomputed **every fixed tick**,
   60 times a second, on the 30x20 row above. Its goal is the jaguar's cell,
   which at 158 px/s across 32 px cells changes once every 12 ticks at a
   sprint -- so at least eleven of twelve recomputes reproduced the field
@@ -1490,7 +1490,7 @@ explains a choice in the code.
 | `EntityManager.create_entities(20000)` against a `create_entity()` loop | 1.06x, within noise; an inlined copy of the registration measured 1.21x | `create_entities` goes through `add_entity()`; it is a convenience, not a fast path |
 | Spawning 4,000 entities with one cached query registered, before `QueryCache` stopped copying its result set per component added | 214 ms, against 40 ms with no cached query | The cache updates in place |
 | `RenderSystem.submit` of 20,000 sprites, before and after it honoured `Sprite.flip_x`/`flip_y` | 21.3-21.9 ms before, 22.5-23.3 ms after (about 0.05 us a sprite); 25.9-27.0 ms when every sprite is flipped | A flip becomes a negative scale in `submit`, so no backend needs a second flag; an unflipped sprite pays only the two reads |
-| A pool of 700 entities each carrying a `FlockingAgent`, all matching queries while idle, in `games/tamandua_murundus` | about 18 frames per second, against about 60 once idle entities were disabled | `EntityPool` disables an idle entity, so it matches no query |
+| A pool of 700 entities each carrying a `FlockingAgent`, all matching queries while idle, in `examples/tamandua_murundus` | about 18 frames per second, against about 60 once idle entities were disabled | `EntityPool` disables an idle entity, so it matches no query |
 | A Python flocking tick at 1,000 agents, with the Python spatial index and with the native one | 16.6 ms against 9.8 ms | `FlockingSystem`'s Python path still pins its index to `accelerate=False`, so the Python path is Python throughout |
 | `FlowFieldService.vector_at` in Python | 3.27 us, 97% of it four `Vector2` operations | The native path answers the whole lookup in one call |
 | Physics at 4 substeps | 0.65 ms an update at 200 dynamic bodies, 2.5 ms at 500 | 4 is the default; 1/2/4 substeps stop a body crossing a 10px wall up to about 200/400/900 px/s |

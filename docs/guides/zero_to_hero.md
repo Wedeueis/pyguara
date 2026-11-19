@@ -1,6 +1,6 @@
 # Zero to Hero: Making your First PyGuara Game
 
-Welcome to the **Zero to Hero** tutorial series for the **PyGuara Game Engine**! This guide takes you step-by-step through the structure and concepts of PyGuara using the tutorial modules under the `games/` folder of the repository.
+Welcome to the **Zero to Hero** tutorial series for the **PyGuara Game Engine**! This guide takes you step-by-step through the structure and concepts of PyGuara using the tutorial modules under the `examples/` folder of the repository.
 
 By the end of this guide, you will understand how the engine boots up, how to design code around the Entity-Component-System (ECS) mindset, how to hook up input maps and handle events, how to integrate physical simulation via Pymunk, how to construct constraint-based UI scene graphs, and finally, how to compile and distribute your game as a standalone binary.
 
@@ -9,23 +9,23 @@ By the end of this guide, you will understand how the engine boots up, how to de
 ## 🗺️ Tutorial Roadmap
 
 The tutorial is structured into six parts:
-1. **The Boot Sequence** (`games/boot_process`): Initializing the engine, Dependency Injection, and starting your first Scene.
-2. **The ECS Mindset** (`games/ecs_mental_model`): Composing game objects using pure data components and executing logic with Systems.
-3. **Input Mapping & Events** (`games/input_events`): Binding keyboard controls to logical actions and using the event queue for decoupled communication.
-4. **Physical Simulation** (`games/physics_integration`): Adding rigid bodies, colliders, and collision listeners.
-5. **UI & Scene graphs** (`games/ui_scene_graph`): Organizing menu layouts, panels, and responsive widgets.
+1. **The Boot Sequence** (`examples/boot_process`): Initializing the engine, Dependency Injection, and starting your first Scene.
+2. **The ECS Mindset** (`examples/ecs_mental_model`): Composing game objects using pure data components and executing logic with Systems.
+3. **Input Mapping & Events** (`examples/input_events`): Binding keyboard controls to logical actions and using the event queue for decoupled communication.
+4. **Physical Simulation** (`examples/physics_integration`): Adding rigid bodies, colliders, and collision listeners.
+5. **UI & Scene graphs** (`examples/ui_scene_graph`): Organizing menu layouts, panels, and responsive widgets.
 6. **Standalone Compilation**: Building and packaging the final game executable using `pyguara build`.
 
-`games/` has seven tutorial modules. The two this guide does not walk
-through are `games/asset_pipeline` (loading sprites with `.meta` files
-through `ResourceManager`) and `games/tilemap_authoring` (building a level
+`examples/` has seven tutorial modules. The two this guide does not walk
+through are `examples/asset_pipeline` (loading sprites with `.meta` files
+through `ResourceManager`) and `examples/tilemap_authoring` (building a level
 from a Tiled map). Each is short enough to read directly, and
-[games/README.md](https://github.com/Wedeueis/pyguara/blob/main/games/README.md)
+[examples/README.md](https://github.com/Wedeueis/pyguara/blob/main/examples/README.md)
 describes both.
 
 ---
 
-## 🛠️ Part 1: The Boot Sequence (`games/boot_process`)
+## 🛠️ Part 1: The Boot Sequence (`examples/boot_process`)
 
 Before we can render characters or handle physics, we must initialize the engine. In PyGuara, this is done using **Dependency Injection (DI)** and a **bootstrap configuration** file.
 
@@ -41,8 +41,8 @@ The entry point of any PyGuara game performs the following core steps:
 import logging
 from pyguara.application.application import Application
 from pyguara.events.dispatcher import EventDispatcher
-from games.boot_process.bootstrap import configure_game_container
-from games.boot_process.scenes import BootScene
+from examples.boot_process.bootstrap import configure_game_container
+from examples.boot_process.scenes import BootScene
 
 def main():
     # 1. Configure logging
@@ -129,7 +129,7 @@ def configure_game_container() -> DIContainer:
 > `create_application()`, or `create_container()` when it needs to add its
 > own services first: both read `config/game_config.json` and build the
 > configured backend, which is **wgpu** by default. The capstone demos'
-> `bootstrap.py` files (for example `games/guara_falcao/bootstrap.py`) show
+> `bootstrap.py` files (for example `examples/guara_falcao/bootstrap.py`) show
 > that form, and [Project Structure](PROJECT_STRUCTURE.md) has the template.
 >
 > ```python
@@ -142,7 +142,7 @@ def configure_game_container() -> DIContainer:
 
 ---
 
-## 🧩 Part 2: The ECS Mindset (`games/ecs_mental_model`)
+## 🧩 Part 2: The ECS Mindset (`examples/ecs_mental_model`)
 
 Instead of writing classic Object-Oriented inheritance trees (like a `Player` class that inherits from `PhysicsObject` which inherits from `GameObject`), PyGuara leverages a strict **Entity-Component-System (ECS)** composition architecture.
 
@@ -178,7 +178,7 @@ To process movement logic, we create a `MovementSystem`. In its constructor, we 
 ```python
 from pyguara.ecs.manager import EntityManager
 from pyguara.common.types import Vector2
-from games.ecs_mental_model.components import Transform
+from examples.ecs_mental_model.components import Transform
 
 class MovementSystem:
     def __init__(self, entity_manager: EntityManager):
@@ -209,8 +209,8 @@ In the scene's `on_enter` method, we register the system, spawn an entity, and a
 ```python
 from pyguara.scene.base import Scene
 from pyguara.common.types import Vector2, Color, Rect
-from games.ecs_mental_model.components import Transform, Sprite
-from games.ecs_mental_model.systems import MovementSystem
+from examples.ecs_mental_model.components import Transform, Sprite
+from examples.ecs_mental_model.systems import MovementSystem
 
 class ECSScene(Scene):
     def on_enter(self) -> None:
@@ -238,7 +238,7 @@ class ECSScene(Scene):
 
 ---
 
-## 🎮 Part 3: Input Mapping & Events (`games/input_events`)
+## 🎮 Part 3: Input Mapping & Events (`examples/input_events`)
 
 PyGuara decouples player input from the engine loop using semantic action bindings and a pub/sub event dispatcher.
 
@@ -288,7 +288,7 @@ way this wiring goes wrong.
 ```python
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.input.events import OnActionEvent
-from games.input_events.events import DashEvent
+from examples.input_events.events import DashEvent
 
 class InputBridgeSystem:
     def __init__(self, entity_manager, dispatcher: EventDispatcher, player_id: str):
@@ -355,7 +355,7 @@ step — the scene's `update()` has nothing to call by hand.
 
 ---
 
-## 🏃 Part 4: Physical Simulation (`games/physics_integration`)
+## 🏃 Part 4: Physical Simulation (`examples/physics_integration`)
 
 For advanced simulation, PyGuara runs the **Rapier** rigid body engine, in its native extension. Rather than calculating gravity manually, physical objects register `RigidBody` and `Collider` components. The `PhysicsSystem` automatically simulates rigid body calculations and mirrors the resulting coordinates back onto `Transform` components.
 
@@ -392,7 +392,7 @@ ground.add_component(Collider(shape_type=ShapeType.BOX, dimensions=[800, 40]))
 
 ---
 
-## 🖥️ Part 5: UI Scene Graphs & Layouts (`games/ui_scene_graph`)
+## 🖥️ Part 5: UI Scene Graphs & Layouts (`examples/ui_scene_graph`)
 
 Creating buttons, health bars, and overlay dialogs requires a layout-agnostic framework to handle resolution adjustments automatically. PyGuara provides a constraint-based UI layout system.
 
@@ -453,10 +453,10 @@ The `pyguara build` command compiles your entry script, copies all associated as
 
 ```bash
 # Basic directory-based build
-uv run pyguara build games/guara_falcao/main.py --output dist/guara_falcao
+uv run pyguara build examples/guara_falcao/main.py --output dist/guara_falcao
 
 # Compact single-executable build
-uv run pyguara build games/true_coral/main.py --onefile --output dist/true_coral
+uv run pyguara build examples/true_coral/main.py --onefile --output dist/true_coral
 ```
 
 ### Build Options Reference
@@ -471,4 +471,4 @@ uv run pyguara build games/true_coral/main.py --onefile --output dist/true_coral
 See [Command-Line Tools](../systems/cli.md) for the full option list and for
 `pyguara atlas`, the sprite-atlas packer.
 
-Now you have all the knowledge required to bootstrap, design, script, and publish your own 2D games using the PyGuara game engine! Keep exploring the examples under the `games/` folder to study advanced scripts, spatial audio routing, and the in-engine debug overlays.
+Now you have all the knowledge required to bootstrap, design, script, and publish your own 2D games using the PyGuara game engine! Keep exploring the demos under the `examples/` folder to study advanced scripts, spatial audio routing, and the in-engine debug overlays.

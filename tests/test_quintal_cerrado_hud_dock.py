@@ -8,18 +8,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from games.quintal_cerrado import layout
-from games.quintal_cerrado.bootstrap import WINDOW_HEIGHT, WINDOW_WIDTH
-from games.quintal_cerrado.components import (
+from examples.quintal_cerrado import layout
+from examples.quintal_cerrado.bootstrap import WINDOW_HEIGHT, WINDOW_WIDTH
+from examples.quintal_cerrado.components import (
     GENERIC_SEED_KEY,
     PlayerEconomy,
     specific_seed_key,
 )
-from games.quintal_cerrado.economy import COMPOST_COST, SPRAY_COST
-from games.quintal_cerrado.hud import CellInspector
-from games.quintal_cerrado.hud_widgets import GLOW, ToolDock, ToolSlot
-from games.quintal_cerrado.icons import DIM_TARGET, ICONS, draw_icon
-from games.quintal_cerrado.scenes import (
+from examples.quintal_cerrado.economy import COMPOST_COST, SPRAY_COST
+from examples.quintal_cerrado.hud import CellInspector
+from examples.quintal_cerrado.hud_widgets import GLOW, ToolDock, ToolSlot
+from examples.quintal_cerrado.icons import DIM_TARGET, ICONS, draw_icon
+from examples.quintal_cerrado.scenes import (
     _TOOL_KEYS,
     MENU_SLOT,
     SLEEP_SLOT,
@@ -27,8 +27,8 @@ from games.quintal_cerrado.scenes import (
     _dock_groups,
     slot_status,
 )
-from games.quintal_cerrado.species import SPECIES_TABLE
-from games.quintal_cerrado.weather import WEATHER_TABLE
+from examples.quintal_cerrado.species import SPECIES_TABLE
+from examples.quintal_cerrado.weather import WEATHER_TABLE
 from pyguara.common.types import Color, Rect
 from pyguara.graphics.protocols import UIRenderer
 

@@ -111,7 +111,7 @@ result on both backends and is deterministic enough to assert in a test.
 
 ## Seeing it work
 
-`games/guara_falcao` is the worked example: a title screen, a HUD, a pause
+`examples/guara_falcao` is the worked example: a title screen, a HUD, a pause
 menu and an options panel, all skinned by `cerrado_dusk()` and none of them
 holding a colour of their own.
 

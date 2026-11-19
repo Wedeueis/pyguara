@@ -14,8 +14,8 @@ from typing import Any
 
 import pytest
 
-from games.guara_falcao import animation
-from games.guara_falcao.components import PlayerAnimState
+from examples.guara_falcao import animation
+from examples.guara_falcao.components import PlayerAnimState
 from pyguara.graphics.components.animation import (
     AnimationClip,
     AnimationStateMachine,

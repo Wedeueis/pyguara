@@ -637,7 +637,7 @@ class Application:
 
         Not resolved in `__init__` on purpose. Replay is the only thing here
         that needs it, and requiring it at construction would make every
-        hand-wired container -- `games/boot_process` is one, deliberately --
+        hand-wired container -- `examples/boot_process` is one, deliberately --
         register a service it never uses. Resolved here, a container without
         it still builds an `Application`, and only recording or playback
         fails, loudly, which is the one place it matters.

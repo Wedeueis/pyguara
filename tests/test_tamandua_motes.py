@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from games.tamandua_murundus.motes import MOTE_CAP, MOTE_VALUE, Motes
+from examples.tamandua_murundus.motes import MOTE_CAP, MOTE_VALUE, Motes
 from pyguara.common.components import Transform
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Rect, Vector2
@@ -92,7 +92,7 @@ class TestDropping:
 
     def test_the_shipping_cap_is_below_the_swarm_cap(self) -> None:
         """Motes only pile up if the player stops collecting entirely."""
-        from games.tamandua_murundus.swarm import SWARM_CAP
+        from examples.tamandua_murundus.swarm import SWARM_CAP
 
         assert MOTE_CAP < SWARM_CAP
 
@@ -258,7 +258,7 @@ class TestTheLevelCurve:
         against the curve's own arithmetic, which would only prove the
         formula agrees with itself.
         """
-        from games.tamandua_murundus.scenes import (
+        from examples.tamandua_murundus.scenes import (
             LEVEL_CURVE,
             MEASURED_RUN_YIELD,
         )
@@ -275,7 +275,7 @@ class TestTheLevelCurve:
     def test_an_idle_run_still_levels_at_least_once(self) -> None:
         """A player who barely engages should still see the mechanic --
         a run that never levels teaches nothing about progression."""
-        from games.tamandua_murundus.scenes import LEVEL_CURVE
+        from examples.tamandua_murundus.scenes import LEVEL_CURVE
         from pyguara.events.dispatcher import EventDispatcher
         from pyguara.kits.progression import Experience, grant_experience
 
@@ -286,7 +286,7 @@ class TestTheLevelCurve:
         assert experience.level >= 2
 
     def test_each_level_costs_more_than_the_last(self) -> None:
-        from games.tamandua_murundus.scenes import LEVEL_CURVE
+        from examples.tamandua_murundus.scenes import LEVEL_CURVE
 
         costs = [LEVEL_CURVE.cost_for(level) for level in range(1, 9)]
 

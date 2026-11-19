@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import pytest
 
-from games.protocolo_bandeira.ai_behaviors import (
+from examples.protocolo_bandeira.ai_behaviors import (
     is_in_attack_range,
     is_player_detected,
 )
-from games.protocolo_bandeira.components import AIContext
-from games.protocolo_bandeira.pooling import EnemyPool
+from examples.protocolo_bandeira.components import AIContext
+from examples.protocolo_bandeira.pooling import EnemyPool
 from pyguara.common.types import Rect, Vector2
 from pyguara.ecs.manager import EntityManager
 

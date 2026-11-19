@@ -7,11 +7,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from games.quintal_cerrado.components import PlantComponent
-from games.quintal_cerrado.garden_grid import TILE_SIZE, GardenGrid
-from games.quintal_cerrado.garden_widget import TOOLTIP_DELAY, GardenGridCanvas
-from games.quintal_cerrado.hud import LAYER_RUNGS, PEST_CALM, CellInspector, pest_color
-from games.quintal_cerrado.species import SPECIES_TABLE
+from examples.quintal_cerrado.components import PlantComponent
+from examples.quintal_cerrado.garden_grid import TILE_SIZE, GardenGrid
+from examples.quintal_cerrado.garden_widget import TOOLTIP_DELAY, GardenGridCanvas
+from examples.quintal_cerrado.hud import (
+    LAYER_RUNGS,
+    PEST_CALM,
+    CellInspector,
+    pest_color,
+)
+from examples.quintal_cerrado.species import SPECIES_TABLE
 from pyguara.common.types import Color, Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher

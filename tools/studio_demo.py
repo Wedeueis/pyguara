@@ -25,36 +25,36 @@ sys.path.insert(0, str(REPO_ROOT))
 
 # name -> (bootstrap module, scenes module, scene class). Explicit
 # rather than discovered, and the class names are checked against
-# `games/*/scenes.py`: four of them are not `GameScene`.
+# `examples/*/scenes.py`: four of them are not `GameScene`.
 DEMOS: dict[str, tuple[str, str, str]] = {
     "guara_falcao": (
-        "games.guara_falcao.bootstrap",
-        "games.guara_falcao.scenes",
+        "examples.guara_falcao.bootstrap",
+        "examples.guara_falcao.scenes",
         "GameScene",
     ),
     "tamandua_murundus": (
-        "games.tamandua_murundus.bootstrap",
-        "games.tamandua_murundus.scenes",
+        "examples.tamandua_murundus.bootstrap",
+        "examples.tamandua_murundus.scenes",
         "ClearingScene",
     ),
     "quintal_cerrado": (
-        "games.quintal_cerrado.bootstrap",
-        "games.quintal_cerrado.scenes",
+        "examples.quintal_cerrado.bootstrap",
+        "examples.quintal_cerrado.scenes",
         "GardenScene",
     ),
     "true_coral": (
-        "games.true_coral.bootstrap",
-        "games.true_coral.scenes",
+        "examples.true_coral.bootstrap",
+        "examples.true_coral.scenes",
         "GameScene",
     ),
     "protocolo_bandeira": (
-        "games.protocolo_bandeira.bootstrap",
-        "games.protocolo_bandeira.scenes",
+        "examples.protocolo_bandeira.bootstrap",
+        "examples.protocolo_bandeira.scenes",
         "ArenaScene",
     ),
     "mourisco_ressonancia": (
-        "games.mourisco_ressonancia.bootstrap",
-        "games.mourisco_ressonancia.scenes",
+        "examples.mourisco_ressonancia.bootstrap",
+        "examples.mourisco_ressonancia.scenes",
         "CaveScene",
     ),
 }

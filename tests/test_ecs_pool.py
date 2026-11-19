@@ -110,7 +110,7 @@ def test_a_factory_that_forgets_poolable_raises() -> None:
 
 
 def test_get_active_is_in_acquisition_order() -> None:
-    """The documented order, which `games/` iterates every frame.
+    """The documented order, which `examples/` iterates every frame.
 
     Pinned because the active set is a dict keyed on entity id: dicts
     preserve insertion order, but nothing about "keyed on id" makes that

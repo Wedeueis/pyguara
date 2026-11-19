@@ -1,6 +1,6 @@
 """The Tiled map module 6 ships, and the contract between it and the game.
 
-`games/tilemap_authoring/assets/cerrado_cave.tmx` is meant to be opened in
+`examples/tilemap_authoring/assets/cerrado_cave.tmx` is meant to be opened in
 Tiled and edited. These tests are what makes that safe: they pin the three
 custom properties the scene reads, so a re-save that drops them fails here
 rather than showing up as a level with no walls.
@@ -17,7 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from games.tilemap_authoring.scenes import (  # noqa: E402
+from examples.tilemap_authoring.scenes import (  # noqa: E402
     MAP_PATH,
     TERRAIN_LAYER,
     TILE_COLORS,
@@ -149,7 +149,7 @@ def test_the_merged_rects_cover_exactly_the_solid_area(tilemap):
 
 def test_the_scene_builds_one_static_body_per_merged_rect():
     """End to end: the map's geometry really does reach the physics world."""
-    from games.tilemap_authoring.scenes import TilemapScene
+    from examples.tilemap_authoring.scenes import TilemapScene
     from pyguara.application.bootstrap import create_headless_application
     from pyguara.events.dispatcher import EventDispatcher
     from pyguara.physics.components import RigidBody
@@ -172,7 +172,7 @@ def test_the_scene_builds_one_static_body_per_merged_rect():
 
 
 def test_the_player_spawns_at_the_marker():
-    from games.tilemap_authoring.scenes import TilemapScene
+    from examples.tilemap_authoring.scenes import TilemapScene
     from pyguara.application.bootstrap import create_headless_application
     from pyguara.events.dispatcher import EventDispatcher
 

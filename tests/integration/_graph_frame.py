@@ -265,7 +265,7 @@ def storm(backend: Backend) -> Any:
 
 def chain(backend: Backend) -> Any:
     """Three effects through the stack's ping-pong buffers, then copied out."""
-    from games.quintal_cerrado.soil_health_effect import SoilHealthEffect
+    from examples.quintal_cerrado.soil_health_effect import SoilHealthEffect
     from pyguara.graphics.vfx.effects import BloomEffect, VignetteEffect
 
     return _post_process(
@@ -285,7 +285,7 @@ def passthrough(backend: Backend) -> Any:
 
 def pulse(backend: Backend) -> Any:
     """`mourisco_ressonancia`'s wavefront rings, added over a lit light map."""
-    from games.mourisco_ressonancia.pulse_pass import PulsePass, PulseRing
+    from examples.mourisco_ressonancia.pulse_pass import PulsePass, PulseRing
     from pyguara.common.types import Vector2
     from pyguara.graphics.components.camera import Camera2D
     from pyguara.graphics.pipeline.buffers import LIGHT_FBO_NAME

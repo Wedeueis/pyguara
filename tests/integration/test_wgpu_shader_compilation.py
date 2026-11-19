@@ -34,7 +34,7 @@ def _modules() -> list[str]:
     """
     root = Path(pyguara.__file__).resolve().parent.parent
     names = []
-    for folder in (root / "pyguara" / "graphics", root / "games"):
+    for folder in (root / "pyguara" / "graphics", root / "examples"):
         for path in sorted(folder.rglob("*.py")):
             relative = path.relative_to(root).with_suffix("")
             names.append(".".join(relative.parts))

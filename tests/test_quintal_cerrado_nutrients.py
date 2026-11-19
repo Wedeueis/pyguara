@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import pytest
 
-from games.quintal_cerrado import nutrients
-from games.quintal_cerrado.components import PlantComponent, SoilCell, compost_cell
-from games.quintal_cerrado.economy import sale_value
-from games.quintal_cerrado.garden_grid import GardenGrid
-from games.quintal_cerrado.scenes import GardenScene
-from games.quintal_cerrado.systems.nutrient_system import (
+from examples.quintal_cerrado import nutrients
+from examples.quintal_cerrado.components import PlantComponent, SoilCell, compost_cell
+from examples.quintal_cerrado.economy import sale_value
+from examples.quintal_cerrado.garden_grid import GardenGrid
+from examples.quintal_cerrado.scenes import GardenScene
+from examples.quintal_cerrado.systems.nutrient_system import (
     NutrientSystem,
 )
 from tests.test_quintal_cerrado_growth import (  # noqa: F401
@@ -210,7 +210,7 @@ class TestTheMigration:
     """A v2 garden, saved before nutrients existed, still loads."""
 
     def _v2_payload(self, scene: GardenScene) -> dict:
-        from games.quintal_cerrado.persistence_schema import to_save_payload
+        from examples.quintal_cerrado.persistence_schema import to_save_payload
 
         payload = to_save_payload(
             scene.grid,
@@ -226,7 +226,7 @@ class TestTheMigration:
         return payload
 
     def test_it_fills_in_the_nutrients_v2_never_had(self, scene: GardenScene) -> None:
-        from games.quintal_cerrado.persistence_schema import (
+        from examples.quintal_cerrado.persistence_schema import (
             STARTING_NUTRIENT,
             migrate_v2_to_v3,
         )
@@ -241,7 +241,7 @@ class TestTheMigration:
     def test_a_migrated_save_loads_into_a_garden(self, scene: GardenScene) -> None:
         """What #199 asked the demo set to show: the versioning story, not
         just the happy path."""
-        from games.quintal_cerrado.persistence_schema import (
+        from examples.quintal_cerrado.persistence_schema import (
             STARTING_NUTRIENT,
             apply_save_payload,
             migrate_v2_to_v3,
@@ -264,7 +264,7 @@ class TestTheMigration:
 
     def test_the_manager_carries_an_old_save_forward(self) -> None:
         """Registered on the real `MigrationManager`, as the game wires it."""
-        from games.quintal_cerrado.persistence_schema import (
+        from examples.quintal_cerrado.persistence_schema import (
             MIGRATIONS,
             SCHEMA_VERSION,
             STARTING_NUTRIENT,

@@ -582,7 +582,7 @@ Remote players through the input layer, tick estimate, command buffer, predictio
 (a person must judge this), and the host and client agree on position afterwards.
 
 **Done (#380).** Host and client end in exactly the same state, on the plan's network and at 20%
-loss, and the character moves on the tick of the input. The owner played `games/net_horde` on
+loss, and the character moves on the tick of the input. The owner played `examples/net_horde` on
 2026-11-05 and judged that it feels right, with no obvious issues. That covers walking and walls
 on a simulated network: enemy contact and a real connection are still untested. Not built: predicting dashes and skills,
 which need a game to define them, and `kits/platformer_movement`, which has no adapter.

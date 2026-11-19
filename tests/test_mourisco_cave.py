@@ -8,7 +8,7 @@ would have no shape at all.
 
 from __future__ import annotations
 
-from games.mourisco_ressonancia.cave import (
+from examples.mourisco_ressonancia.cave import (
     TILE,
     CaveLayout,
     exposed_faces,

@@ -9,19 +9,19 @@ from __future__ import annotations
 
 import pytest
 
-from games.quintal_cerrado import structures
-from games.quintal_cerrado.components import AutomationComponent, PlantComponent
-from games.quintal_cerrado.events import PlantHarvestedEvent, SolarIncomeEvent
-from games.quintal_cerrado.scenes import GardenScene
-from games.quintal_cerrado.store import StoreOverlayScene
-from games.quintal_cerrado.systems import automation_system as auto
-from games.quintal_cerrado.systems import weather_system
-from games.quintal_cerrado.systems.automation_system import (
+from examples.quintal_cerrado import structures
+from examples.quintal_cerrado.components import AutomationComponent, PlantComponent
+from examples.quintal_cerrado.events import PlantHarvestedEvent, SolarIncomeEvent
+from examples.quintal_cerrado.scenes import GardenScene
+from examples.quintal_cerrado.store import StoreOverlayScene
+from examples.quintal_cerrado.systems import automation_system as auto
+from examples.quintal_cerrado.systems import weather_system
+from examples.quintal_cerrado.systems.automation_system import (
     DRIP_TARGET,
     DRONE_HARVESTS_PER_NIGHT,
     SOLAR_YIELD,
 )
-from games.quintal_cerrado.systems.day_resolver import SUB_STEP
+from examples.quintal_cerrado.systems.day_resolver import SUB_STEP
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.events.input import KeyDownEvent
 from pyguara.input.keys import ESCAPE, KEY_O

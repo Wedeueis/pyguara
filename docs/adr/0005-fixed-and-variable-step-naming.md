@@ -41,7 +41,7 @@ method would therefore:
   defining `update` keeps satisfying `System` — `SystemManager` would call
   the new name, find nothing, and the system would simply stop ticking,
   with no error anywhere. 55 `def update(self, dt` definitions exist under
-  `pyguara/` alone, plus every system in `games/` and in any game built on
+  `pyguara/` alone, plus every system in `examples/` and in any game built on
   the engine.
 - Break the one thing the asymmetry buys. `Scene.fixed_update` and
   `System.update` being spelled differently is what lets a reader see, at

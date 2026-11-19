@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import pytest
 
-from games.quintal_cerrado import stress
-from games.quintal_cerrado.components import SoilCell
-from games.quintal_cerrado.species import SPECIES_TABLE
-from games.quintal_cerrado.weather import WEATHER_TABLE, WeatherState
+from examples.quintal_cerrado import stress
+from examples.quintal_cerrado.components import SoilCell
+from examples.quintal_cerrado.species import SPECIES_TABLE
+from examples.quintal_cerrado.weather import WEATHER_TABLE, WeatherState
 
 GUANDU = SPECIES_TABLE["guandu"]
 CAGAITA = SPECIES_TABLE["cagaita"]

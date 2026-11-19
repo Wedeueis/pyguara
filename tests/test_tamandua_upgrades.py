@@ -11,15 +11,15 @@ from __future__ import annotations
 
 import pytest
 
-from games.tamandua_murundus.components import Murundu, Tamandua
-from games.tamandua_murundus.upgrade_ui import (
+from examples.tamandua_murundus.components import Murundu, Tamandua
+from examples.tamandua_murundus.upgrade_ui import (
     CARD_HEIGHT,
     CARD_WIDTH,
     CardElement,
     card_views,
     layout_cards,
 )
-from games.tamandua_murundus.upgrades import build_pool
+from examples.tamandua_murundus.upgrades import build_pool
 from pyguara.common.components import Transform
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Vector2

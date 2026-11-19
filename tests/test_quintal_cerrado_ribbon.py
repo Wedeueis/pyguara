@@ -7,23 +7,23 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from games.quintal_cerrado.components import (
+from examples.quintal_cerrado.components import (
     GENERIC_SEED_KEY,
     GardenConditions,
     PlayerEconomy,
 )
-from games.quintal_cerrado.ribbon import (
+from examples.quintal_cerrado.ribbon import (
     ALERT,
     SCORE_INTERVAL,
     ResilienceCard,
     ResourceCard,
     WeatherCard,
 )
-from games.quintal_cerrado.scoring import Score
-from games.quintal_cerrado.seasons import SEASON_LENGTH
-from games.quintal_cerrado.systems.weather_system import WeatherSystem
-from games.quintal_cerrado.turn import SESSION_DAYS
-from games.quintal_cerrado.weather import WEATHER_TABLE
+from examples.quintal_cerrado.scoring import Score
+from examples.quintal_cerrado.seasons import SEASON_LENGTH
+from examples.quintal_cerrado.systems.weather_system import WeatherSystem
+from examples.quintal_cerrado.turn import SESSION_DAYS
+from examples.quintal_cerrado.weather import WEATHER_TABLE
 from pyguara.common.random import RandomStream
 from pyguara.graphics.protocols import UIRenderer
 

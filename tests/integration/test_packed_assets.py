@@ -36,7 +36,7 @@ except ImportError:  # pragma: no cover
 
 needs_extension = pytest.mark.skipif(extension is None, reason="extension not built")
 
-CAVE = Path(__file__).resolve().parents[2] / "games" / "tilemap_authoring" / "assets"
+CAVE = Path(__file__).resolve().parents[2] / "examples" / "tilemap_authoring" / "assets"
 
 
 @pytest.fixture(autouse=True)

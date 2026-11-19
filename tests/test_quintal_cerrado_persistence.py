@@ -17,25 +17,25 @@ from typing import Any
 
 import pytest
 
-from games.quintal_cerrado import clock, structures
-from games.quintal_cerrado.components import (
+from examples.quintal_cerrado import clock, structures
+from examples.quintal_cerrado.components import (
     AutomationComponent,
     PlantComponent,
     PlayerEconomy,
 )
-from games.quintal_cerrado.evaluation import EvaluationScene
-from games.quintal_cerrado.events import OutbreakStartedEvent
-from games.quintal_cerrado.pause import PauseScene
-from games.quintal_cerrado.persistence_schema import (
+from examples.quintal_cerrado.evaluation import EvaluationScene
+from examples.quintal_cerrado.events import OutbreakStartedEvent
+from examples.quintal_cerrado.pause import PauseScene
+from examples.quintal_cerrado.persistence_schema import (
     SAVE_KEY,
     SCHEMA_VERSION,
     SaveFormatError,
     apply_save_payload,
     to_save_payload,
 )
-from games.quintal_cerrado.scenes import GardenScene, TitleScene
-from games.quintal_cerrado.scoring import compute_score
-from games.quintal_cerrado.turn import SESSION_DAYS, DayCycle
+from examples.quintal_cerrado.scenes import GardenScene, TitleScene
+from examples.quintal_cerrado.scoring import compute_score
+from examples.quintal_cerrado.turn import SESSION_DAYS, DayCycle
 from pyguara.ai.components import AIComponent
 from pyguara.common.types import Vector2
 from pyguara.events.input import KeyDownEvent, MouseMotionEvent

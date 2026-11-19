@@ -139,13 +139,13 @@ Save it as a file and run it with `uv run python your_file.py`.
 
 ## See it run
 
-`games/` holds seven tutorial modules, seven larger demos and a
+`examples/` holds seven tutorial modules, seven larger demos and a
 networking demo.
-[games/README.md](games/README.md) lists them.
+[examples/README.md](examples/README.md) lists them.
 
 ```bash
-uv run python games/guara_falcao/main.py      # a platformer
-uv run python games/vinagre_matilha/main.py   # squad tactics
+uv run python examples/guara_falcao/main.py      # a platformer
+uv run python examples/vinagre_matilha/main.py   # squad tactics
 uv run python tools/studio_demo.py            # a demo with Studio attached
 ```
 
@@ -172,7 +172,7 @@ what is left and in what order.
 
 - [Onboarding](docs/guides/ONBOARDING.md) and
   [Zero to Hero](docs/guides/zero_to_hero.md), a tutorial through the
-  modules in `games/`
+  modules in `examples/`
 - [Architecture](docs/core/architecture.md), then the pages under
   `docs/core/` and `docs/systems/`
 - [Rendering](docs/graphics/rendering.md),

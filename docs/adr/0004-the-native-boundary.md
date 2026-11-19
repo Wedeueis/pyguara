@@ -208,7 +208,7 @@ outward; its absence is what pins projectiles.
 | `Sparks` | yes | nothing holds a `_Spark`; the output is per-kind batches |
 | flow field | yes, **built** | `vector_at`/`cost_at` are the only readers, and they ask rather than fetch; the field never returns to Python |
 | `FlockingSystem` | **no** | agents are ECS entities; `Transform` and `FlockingAgent` are read by rendering, the spatial index and AI — built anyway, at 9.0x against the field's 56.7x, which is what non-opacity costs |
-| `ProjectileSystem` | **no** | `get_active()` is public, and `games/protocolo_bandeira` reads `.position`/`.velocity` off every projectile, every frame |
+| `ProjectileSystem` | **no** | `get_active()` is public, and `examples/protocolo_bandeira` reads `.position`/`.velocity` off every projectile, every frame |
 
 Non-opaque does not mean "no". It means the boundary is pinned at the
 element level, and the ratio rule then decides on **density**: how much
@@ -499,7 +499,7 @@ Measure whether the work is *necessary* before measuring whether it is
 *fast*. A native port that preserves redundant work ships redundant work,
 only faster.
 
-The live example found while writing this: `games/vinagre_matilha`'s
+The live example found while writing this: `examples/vinagre_matilha`'s
 `FlankerAssignmentSystem.update` calls `FlowFieldService.recompute()`
 unconditionally, every fixed tick. On its 30x20 stage-1 grid that is
 **5.0 ms, 30% of a 16.7 ms frame budget, 60 times a second**.

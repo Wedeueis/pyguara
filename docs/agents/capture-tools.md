@@ -29,7 +29,7 @@ opened on SDL's `disk` driver; the native mixer, the default, owns its
 device, so it is rendered offline in the same format (`capture_native`):
 
 ```bash
-uv run python tools/audio_capture.py --asset games/quintal_cerrado/assets/audio/seed.wav --wav
+uv run python tools/audio_capture.py --asset examples/quintal_cerrado/assets/audio/seed.wav --wav
 uv run python tools/audio_capture.py --seam --laps 5 --stall 0.35
 ```
 

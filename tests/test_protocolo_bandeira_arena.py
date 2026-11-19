@@ -13,9 +13,9 @@ covered in `test_protocolo_bandeira_ai.py`.
 
 from __future__ import annotations
 
-from games.protocolo_bandeira.events import WaveCompleteEvent
-from games.protocolo_bandeira.pooling import EnemyPool
-from games.protocolo_bandeira.wave_manager import WaveManager
+from examples.protocolo_bandeira.events import WaveCompleteEvent
+from examples.protocolo_bandeira.pooling import EnemyPool
+from examples.protocolo_bandeira.wave_manager import WaveManager
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Rect, Vector2
 from pyguara.ecs.manager import EntityManager

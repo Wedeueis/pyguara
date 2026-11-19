@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from games.tamandua_murundus.phases import (
+from examples.tamandua_murundus.phases import (
     BRIGHTEST,
     CYCLE_KEYFRAMES,
     DARKEST,
@@ -189,9 +189,9 @@ class TestTheDifficultyCurve:
         Returns:
             `(seconds, phase name, swarm size)` sampled each second.
         """
-        from games.tamandua_murundus.components import Murundu
-        from games.tamandua_murundus.swarm import SWARM_CAP, Swarm
-        from games.tamandua_murundus.systems import MurunduSystem
+        from examples.tamandua_murundus.components import Murundu
+        from examples.tamandua_murundus.swarm import SWARM_CAP, Swarm
+        from examples.tamandua_murundus.systems import MurunduSystem
         from pyguara.common.components import Transform
         from pyguara.common.random import RandomStream
         from pyguara.common.types import Rect, Vector2
@@ -233,7 +233,7 @@ class TestTheDifficultyCurve:
 
     def test_an_idle_run_reaches_the_ceiling(self) -> None:
         """A density climax that never arrives is not a climax."""
-        from games.tamandua_murundus.swarm import SWARM_CAP
+        from examples.tamandua_murundus.swarm import SWARM_CAP
 
         samples = self.simulate_idle_run()
 
@@ -243,7 +243,7 @@ class TestTheDifficultyCurve:
         """An earlier pairing filled the swarm by the halfway mark, which
         left the last two phases adding no pressure at all -- the
         difficulty curve went flat exactly where it should peak."""
-        from games.tamandua_murundus.swarm import SWARM_CAP
+        from examples.tamandua_murundus.swarm import SWARM_CAP
 
         samples = self.simulate_idle_run()
         first_full = next(

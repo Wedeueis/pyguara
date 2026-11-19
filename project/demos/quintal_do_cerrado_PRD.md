@@ -1,6 +1,6 @@
 ## **Project Name:** _Quintal do Cerrado_ (Working Title)
 
-**Module Path:** `games/quintal_cerrado/`
+**Module Path:** `examples/quintal_cerrado/`
 **Target Duration:** a twelve-day playable capstone demo, played turn by turn
 **Engine:** PyGuara 2D (`pyguara`)
 **Theme:** Agroforestry, Syntropic Agriculture, Cozy Incremental Gardening
@@ -149,7 +149,7 @@ furniture, plus two things of its own: soft translucent **cards**
 ### A. Directory Structure
 
 ```
-games/quintal_cerrado/
+examples/quintal_cerrado/
 ├── bootstrap.py            # Composition root, DI container, ModernGL render graph
 ├── main.py                 # Game entry point
 ├── scenes.py               # TitleScene & GardenScene (the turn loop)

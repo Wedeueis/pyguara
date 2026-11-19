@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-from games.tamandua_murundus.components import Insect
-from games.tamandua_murundus.swarm import (
+from examples.tamandua_murundus.components import Insect
+from examples.tamandua_murundus.swarm import (
     INSECT_DULL,
     INSECT_LIT,
     Swarm,

@@ -141,7 +141,7 @@ no statement the code contradicts.
 | --- | --- | --- |
 | **`pyguara new <name>`** | A project that runs: `pyproject.toml`, a scene, config, an assets folder, `AGENTS.md` from `pyguara studio instructions`. No `sys.path` edits. **Done** (#456) | M |
 | **A one-call entry point** | `pyguara.run(MyScene)`, with the scene's dispatcher supplied by the engine. The explicit bootstrap stays for those who want it. **Done** (#454, with `Application.quit()` in #453) | S |
-| **Demos as installed code** | Drop the `sys.path.append` from every `games/*/main.py`; run them as modules. **Done** (#455): no demo edits `sys.path`, and the documented script form stays, since the editable install makes both work | S |
+| **Demos as installed code** | Drop the `sys.path.append` from every `examples/*/main.py`; run them as modules. **Done** (#455): no demo edits `sys.path`, and the documented script form stays, since the editable install makes both work | S |
 | **PyPI release** | 0.6.0 (2026-11-01) and 0.7.0 (2026-11-16) are published. *0.8.0 closes phase 6* | S |
 | **Hosted docs with an API reference** | Deploy the mkdocs site; generate the reference from docstrings, which are already there. **Done** (#457, deploy fixed in #451) | M |
 

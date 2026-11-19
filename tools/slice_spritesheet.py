@@ -46,7 +46,7 @@ import numpy as np
 from PIL import Image
 
 SHEET = Path("assets/textures/pyguara_platformer_spritesheet.jpg")
-OUT_DIR = Path("games/guara_falcao/assets/textures")
+OUT_DIR = Path("examples/guara_falcao/assets/textures")
 
 BACKDROP = (124, 124, 124)
 """The sheet's flat grey, sampled from an empty corner."""

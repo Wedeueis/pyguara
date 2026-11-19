@@ -7,20 +7,20 @@ fixtures.
 
 from __future__ import annotations
 
-from games.quintal_cerrado.components import PlantComponent
-from games.quintal_cerrado.garden_grid import GardenGrid
-from games.quintal_cerrado.scenes import GardenScene
-from games.quintal_cerrado.systems.pest_system import PestSystem
-from games.quintal_cerrado.systems.plant_growth_system import (
+from examples.quintal_cerrado.components import PlantComponent
+from examples.quintal_cerrado.garden_grid import GardenGrid
+from examples.quintal_cerrado.scenes import GardenScene
+from examples.quintal_cerrado.systems.pest_system import PestSystem
+from examples.quintal_cerrado.systems.plant_growth_system import (
     COLD_SNAP_SHADE_COVER,
     PlantGrowthSystem,
 )
-from games.quintal_cerrado.systems.soil_system import SoilSystem
-from games.quintal_cerrado.systems.weather_system import (
+from examples.quintal_cerrado.systems.soil_system import SoilSystem
+from examples.quintal_cerrado.systems.weather_system import (
     FORECAST_LENGTH,
     WeatherSystem,
 )
-from games.quintal_cerrado.weather import CALM_CONDITION_ID, WeatherState
+from examples.quintal_cerrado.weather import CALM_CONDITION_ID, WeatherState
 from pyguara.common.random import RandomStream
 from tests.test_quintal_cerrado_growth import (  # noqa: F401
     _nights,

@@ -10,10 +10,10 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
-from games.quintal_cerrado.garden_widget import NIGHT_DARKNESS, SUNRISE_SECONDS
-from games.quintal_cerrado.morning import MorningScene, report_lines
-from games.quintal_cerrado.scenes import GardenScene
-from games.quintal_cerrado.systems.day_resolver import DayReport
+from examples.quintal_cerrado.garden_widget import NIGHT_DARKNESS, SUNRISE_SECONDS
+from examples.quintal_cerrado.morning import MorningScene, report_lines
+from examples.quintal_cerrado.scenes import GardenScene
+from examples.quintal_cerrado.systems.day_resolver import DayReport
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.scene.manager import SceneManager
 from pyguara.ui.manager import UIManager

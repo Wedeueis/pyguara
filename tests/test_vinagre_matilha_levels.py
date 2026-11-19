@@ -16,7 +16,7 @@ import math
 
 import pytest
 
-from games.vinagre_matilha.level_builder import (
+from examples.vinagre_matilha.level_builder import (
     CELL_SIZE,
     STAGE_1,
     STAGE_2,

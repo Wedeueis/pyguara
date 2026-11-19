@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import pytest
 
-from games.quintal_cerrado.components import PlantComponent
-from games.quintal_cerrado.evaluation import EvaluationScene
-from games.quintal_cerrado.scenes import GardenScene, slot_status
-from games.quintal_cerrado.systems.day_resolver import DayReport
-from games.quintal_cerrado.turn import (
+from examples.quintal_cerrado.components import PlantComponent
+from examples.quintal_cerrado.evaluation import EvaluationScene
+from examples.quintal_cerrado.scenes import GardenScene, slot_status
+from examples.quintal_cerrado.systems.day_resolver import DayReport
+from examples.quintal_cerrado.turn import (
     MAX_STAMINA,
     SESSION_DAYS,
     TILL_COST,

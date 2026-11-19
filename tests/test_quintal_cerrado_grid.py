@@ -1,6 +1,6 @@
 """`GardenGrid`/`level_builder` logic, headless.
 
-No UI or DI needed: this only exercises `games.quintal_cerrado`'s own use
+No UI or DI needed: this only exercises `examples.quintal_cerrado`'s own use
 of `pyguara.tilemap` (tilling a cell, marking it occupied), not the
 tilemap package's own behaviour -- `tests/test_tilemap.py` and
 `test_tiled_loader.py` already cover that.
@@ -8,8 +8,8 @@ tilemap package's own behaviour -- `tests/test_tilemap.py` and
 
 from __future__ import annotations
 
-from games.quintal_cerrado.garden_grid import GardenGrid
-from games.quintal_cerrado.level_builder import RAW_DIRT_GID, TILLED_GID
+from examples.quintal_cerrado.garden_grid import GardenGrid
+from examples.quintal_cerrado.level_builder import RAW_DIRT_GID, TILLED_GID
 
 
 def test_till_flips_terrain_gid_and_soil_type() -> None:

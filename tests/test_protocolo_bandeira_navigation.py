@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import pytest
 
-from games.protocolo_bandeira.ai_behaviors import chase_player
-from games.protocolo_bandeira.components import AIContext
-from games.protocolo_bandeira.navigation import (
+from examples.protocolo_bandeira.ai_behaviors import chase_player
+from examples.protocolo_bandeira.components import AIContext
+from examples.protocolo_bandeira.navigation import (
     CELL_SIZE,
     CLEARANCE,
     MAX_PATH_AGE,

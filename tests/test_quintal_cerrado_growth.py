@@ -18,27 +18,27 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from games.quintal_cerrado import garden_states, treatments
-from games.quintal_cerrado.components import (
+from examples.quintal_cerrado import garden_states, treatments
+from examples.quintal_cerrado.components import (
     GENERIC_SEED_KEY,
     PlantComponent,
     specific_seed_key,
 )
-from games.quintal_cerrado.economy import (
+from examples.quintal_cerrado.economy import (
     COMPOST_COST,
     OVERRIPE_WEED_SEED_BONUS,
     SPRAY_COST,
     sale_value,
 )
-from games.quintal_cerrado.events import OutbreakResolvedEvent, OutbreakStartedEvent
-from games.quintal_cerrado.persistence_schema import SCHEMA_VERSION
-from games.quintal_cerrado.scenes import GardenScene
-from games.quintal_cerrado.seasons import season_for
-from games.quintal_cerrado.soil_health_effect import SoilHealthEffect
-from games.quintal_cerrado.species import SPECIES_TABLE
-from games.quintal_cerrado.systems import weed_spread_system as weed_module
-from games.quintal_cerrado.systems.day_resolver import SUB_STEP
-from games.quintal_cerrado.systems.weed_spread_system import (
+from examples.quintal_cerrado.events import OutbreakResolvedEvent, OutbreakStartedEvent
+from examples.quintal_cerrado.persistence_schema import SCHEMA_VERSION
+from examples.quintal_cerrado.scenes import GardenScene
+from examples.quintal_cerrado.seasons import season_for
+from examples.quintal_cerrado.soil_health_effect import SoilHealthEffect
+from examples.quintal_cerrado.species import SPECIES_TABLE
+from examples.quintal_cerrado.systems import weed_spread_system as weed_module
+from examples.quintal_cerrado.systems.day_resolver import SUB_STEP
+from examples.quintal_cerrado.systems.weed_spread_system import (
     WeedSpreadSystem,
 )
 from pyguara.ai.components import AIComponent

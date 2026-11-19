@@ -18,12 +18,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from games.guara_falcao import art
-from games.guara_falcao.components import Collectible, Health, Score
-from games.guara_falcao.events import DebugCollidersToggled
-from games.guara_falcao.hud import Hud
-from games.guara_falcao.menus import OptionsScene, PauseScene
-from games.guara_falcao.scenes import GameScene
+from examples.guara_falcao import art
+from examples.guara_falcao.components import Collectible, Health, Score
+from examples.guara_falcao.events import DebugCollidersToggled
+from examples.guara_falcao.hud import Hud
+from examples.guara_falcao.menus import OptionsScene, PauseScene
+from examples.guara_falcao.scenes import GameScene
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.common.components import Transform
 from pyguara.common.types import Rect, Vector2
@@ -301,7 +301,7 @@ class TestTheArt:
     def test_the_sky_never_blooms(self) -> None:
         """The sun disc is meant to be the only thing over the bloom
         threshold; a near-white sky band hazed the whole frame."""
-        from games.guara_falcao.bootstrap import BLOOM_THRESHOLD
+        from examples.guara_falcao.bootstrap import BLOOM_THRESHOLD
 
         for band in art.SKY_BANDS:
             luminance = (0.2126 * band.r + 0.7152 * band.g + 0.0722 * band.b) / 255
