@@ -336,7 +336,12 @@ convention = "google"
 "pyguara/cli/*.py" = ["DOC501"]
 # Every operation handler reports a bad argument as OperationError; the
 # operation protocol documents that once.
-"pyguara/studio/ops/builtin.py" = ["DOC501"]
+"pyguara/studio/ops/edit.py" = ["DOC501"]
+"pyguara/studio/ops/history.py" = ["DOC501"]
+"pyguara/studio/ops/project.py" = ["DOC501"]
+"pyguara/studio/ops/query.py" = ["DOC501"]
+"pyguara/studio/ops/run.py" = ["DOC501"]
+"pyguara/studio/ops/scenes.py" = ["DOC501"]
 
 [tool.ruff.lint.flake8-bugbear]
 # Vector2 is immutable and hashable, so sharing one as a default argument is safe. Without
