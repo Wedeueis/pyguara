@@ -6,7 +6,7 @@ Drives the day resolver's own systems directly -- the same call
 that should take a few seconds of simulated ticks stays a fast test.
 
 No real window: builds the same minimal, mocked container
-`tests/test_quintal_cerrado_screens.py` uses, rather than
+`examples/quintal_cerrado/tests/test_quintal_cerrado_screens.py` uses, rather than
 `bootstrap.configure_game_container()`, which opens a real `PygameWindow`.
 """
 

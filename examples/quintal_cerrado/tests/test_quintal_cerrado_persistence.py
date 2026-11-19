@@ -6,7 +6,7 @@ The first tests to exercise `pyguara.persistence` through a real demo: a real
 is asserted is what actually survives a trip through JSON on disk -- not what
 survives being handed from one dict to another.
 
-Reuses `tests/test_quintal_cerrado_growth.py`'s container and scene fixtures.
+Reuses `examples/quintal_cerrado/tests/test_quintal_cerrado_growth.py`'s container and scene fixtures.
 """
 
 from __future__ import annotations
@@ -35,6 +35,14 @@ from examples.quintal_cerrado.persistence_schema import (
 )
 from examples.quintal_cerrado.scenes import GardenScene, TitleScene
 from examples.quintal_cerrado.scoring import compute_score
+from examples.quintal_cerrado.tests.test_quintal_cerrado_growth import (  # noqa: F401
+    _force_stage,
+    _nights,
+    _plant_at,
+    _resolve,
+    game_container,
+    scene,
+)
 from examples.quintal_cerrado.turn import SESSION_DAYS, DayCycle
 from pyguara.ai.components import AIComponent
 from pyguara.common.types import Vector2
@@ -45,14 +53,6 @@ from pyguara.persistence.manager import PersistenceManager
 from pyguara.scene.manager import SceneManager
 from pyguara.ui.manager import UIManager
 from pyguara.ui.types import UIEventType
-from tests.test_quintal_cerrado_growth import (  # noqa: F401
-    _force_stage,
-    _nights,
-    _plant_at,
-    _resolve,
-    game_container,
-    scene,
-)
 
 
 def _persistence(scene: GardenScene) -> PersistenceManager:

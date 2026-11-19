@@ -227,7 +227,7 @@ Reported upward as **#163** rather than worked around silently.
 | `test_tamandua_motes.py` | 22 |
 | `test_tamandua_swarm.py` | 21 |
 | `test_tamandua_clearing.py` | 20 |
-| `tests/visual/test_tamandua_swarm_snapshots.py` | 3 |
+| `test_tamandua_swarm_snapshots.py` | 3 |
 
 ---
 

@@ -18,15 +18,15 @@ from examples.quintal_cerrado.hud import ToolCard
 from examples.quintal_cerrado.icons import ICONS
 from examples.quintal_cerrado.scenes import GardenScene, _dock_groups
 from examples.quintal_cerrado.species import SPECIES_TABLE
+from examples.quintal_cerrado.tests.test_quintal_cerrado_growth import (  # noqa: F401
+    game_container,
+    scene,
+)
 from examples.quintal_cerrado.tool_info import describe
 from examples.quintal_cerrado.turn import action_cost
 from pyguara.common.types import Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.types import UIElementState
-from tests.test_quintal_cerrado_growth import (  # noqa: F401
-    game_container,
-    scene,
-)
 
 
 def _renderer() -> Any:

@@ -104,7 +104,7 @@ Reasons and the full procedure: `docs/agents/branching.md`.
 | `pyguara/kits/` | Gameplay building blocks: combat, movement, loot, procgen |
 | `pyguara/studio/` | The editor and the agent operation surface |
 | `pyguara/native.py`, `rust/src/` | The extension loader and the Rust crate |
-| `examples/` | Tutorials and capstone demos. Tests use the capstones as a pixel corpus |
+| `examples/` | Tutorials and capstone demos, each with its own `tests/` and a `DESIGN.md`. Engine tests use the capstones as a pixel corpus |
 | `docs/adr/` | Decisions that still constrain the code. Read the relevant one first |
 | `docs/guides/performance.md` | Every measured number |
 

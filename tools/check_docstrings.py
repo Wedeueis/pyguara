@@ -41,6 +41,10 @@ SCOPES: dict[str, frozenset[str]] = {
     "tests": frozenset({"DS001", "DS003"}),
 }
 
+# What a run with no paths checks: every scope, and `examples/`, whose
+# only checked files are each demo's `tests/`.
+DEFAULT_PATHS: tuple[Path, ...] = (*(Path(name) for name in SCOPES), Path("examples"))
+
 # The rules that also apply to `#` comments, by top-level directory. A
 # comment may explain why at any length; it may not tell the code's history,
 # cite a tracker or quote a benchmark.
@@ -285,8 +289,16 @@ def check_source(
 
 
 def _rules_for(relative: Path) -> frozenset[str]:
-    """Return the rules that apply to a path, by its top-level directory."""
-    return SCOPES.get(relative.parts[0], frozenset())
+    """Return the rules that apply to a path.
+
+    By its top-level directory, except that a `tests` folder anywhere
+    below it, such as a demo's own tests, is held to the rules for tests.
+    """
+    if relative.parts[0] in SCOPES:
+        return SCOPES[relative.parts[0]]
+    if "tests" in relative.parts[1:-1]:
+        return SCOPES["tests"]
+    return frozenset()
 
 
 def check_paths(paths: Iterable[Path], root: Path = REPO_ROOT) -> list[Finding]:
@@ -396,7 +408,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     whole_tree = not args.paths
-    paths = args.paths or [Path(name) for name in SCOPES]
+    paths = args.paths or list(DEFAULT_PATHS)
     try:
         allowed = read_keys(ALLOWLIST_PATH, need_reason=True)
         baseline = set() if args.no_baseline else read_keys(BASELINE_PATH)

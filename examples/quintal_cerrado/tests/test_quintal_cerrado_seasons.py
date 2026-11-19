@@ -30,14 +30,14 @@ from examples.quintal_cerrado.seasons import (
 from examples.quintal_cerrado.species import SPECIES_TABLE, sellable_species
 from examples.quintal_cerrado.systems.day_resolver import DayReport
 from examples.quintal_cerrado.systems.weather_system import WeatherSystem
-from examples.quintal_cerrado.turn import SESSION_DAYS
-from examples.quintal_cerrado.weather import WEATHER_TABLE, roll_condition
-from pyguara.common.random import RandomStream
-from tests.test_quintal_cerrado_growth import (  # noqa: F401
+from examples.quintal_cerrado.tests.test_quintal_cerrado_growth import (  # noqa: F401
     _plant_at,
     game_container,
     scene,
 )
+from examples.quintal_cerrado.turn import SESSION_DAYS
+from examples.quintal_cerrado.weather import WEATHER_TABLE, roll_condition
+from pyguara.common.random import RandomStream
 
 
 class TestTheCalendar:

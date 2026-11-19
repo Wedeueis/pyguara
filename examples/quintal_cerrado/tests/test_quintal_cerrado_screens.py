@@ -8,7 +8,7 @@ click on the grid actually reaches `GardenGrid` through the real
 
 No GPU needed: the UI system is backend-agnostic, so a real `UIManager`
 plus a mocked `UIRenderer`/`IRenderer` is the whole harness, the same
-pattern `tests/test_guara_falcao_screens.py` uses.
+pattern `examples/guara_falcao/tests/test_guara_falcao_screens.py` uses.
 """
 
 from __future__ import annotations

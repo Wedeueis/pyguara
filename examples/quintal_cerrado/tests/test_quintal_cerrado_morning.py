@@ -14,16 +14,16 @@ from examples.quintal_cerrado.garden_widget import NIGHT_DARKNESS, SUNRISE_SECON
 from examples.quintal_cerrado.morning import MorningScene, report_lines
 from examples.quintal_cerrado.scenes import GardenScene
 from examples.quintal_cerrado.systems.day_resolver import DayReport
-from pyguara.graphics.protocols import UIRenderer
-from pyguara.scene.manager import SceneManager
-from pyguara.ui.manager import UIManager
-from pyguara.ui.types import UILayer
-from tests.test_quintal_cerrado_growth import (  # noqa: F401
+from examples.quintal_cerrado.tests.test_quintal_cerrado_growth import (  # noqa: F401
     _plant_at,
     _resolve,
     game_container,
     scene,
 )
+from pyguara.graphics.protocols import UIRenderer
+from pyguara.scene.manager import SceneManager
+from pyguara.ui.manager import UIManager
+from pyguara.ui.types import UILayer
 
 
 def _text(report: DayReport) -> str:

@@ -14,6 +14,14 @@ from examples.quintal_cerrado.components import PlantComponent
 from examples.quintal_cerrado.evaluation import EvaluationScene
 from examples.quintal_cerrado.scenes import GardenScene, slot_status
 from examples.quintal_cerrado.systems.day_resolver import DayReport
+from examples.quintal_cerrado.tests.test_quintal_cerrado_growth import (  # noqa: F401
+    _force_stage,
+    _nights,
+    _plant_at,
+    _resolve,
+    game_container,
+    scene,
+)
 from examples.quintal_cerrado.turn import (
     MAX_STAMINA,
     SESSION_DAYS,
@@ -24,14 +32,6 @@ from examples.quintal_cerrado.turn import (
 from pyguara.ai.ai_system import AISystem
 from pyguara.di.container import DIContainer
 from pyguara.scene.manager import SceneManager
-from tests.test_quintal_cerrado_growth import (  # noqa: F401
-    _force_stage,
-    _nights,
-    _plant_at,
-    _resolve,
-    game_container,
-    scene,
-)
 
 
 def _plant(scene: GardenScene, cell: tuple[int, int]) -> PlantComponent:

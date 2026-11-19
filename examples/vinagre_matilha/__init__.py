@@ -1,4 +1,4 @@
 """Vinagre: Matilha - Real-time squad-tactics demo.
 
-See project/demos/vinagre_matilha_GDD.md for the design.
+See examples/vinagre_matilha/DESIGN.md for the design.
 """

@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pytest
 
-GAMES_DIR = Path(__file__).resolve().parent.parent / "examples"
+EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
 
-BOOTSTRAPS = sorted(GAMES_DIR.glob("*/bootstrap.py"))
+BOOTSTRAPS = sorted(EXAMPLES_DIR.glob("*/bootstrap.py"))
 
 CONSTRUCTS_A_MANAGER = re.compile(r"\bFramebufferManager\s*\(")
 
@@ -170,7 +170,7 @@ def test_only_the_render_graph_builds_a_framebuffer_manager() -> None:
     )
 
 
-SCENES = sorted(GAMES_DIR.glob("*/scenes.py"))
+SCENES = sorted(EXAMPLES_DIR.glob("*/scenes.py"))
 
 CONSTRUCTS_A_CAMERA = re.compile(r"\bCamera2D\s*\(")
 ASSIGNS_THE_SCENE_CAMERA = re.compile(r"\bself\.camera\s*=")
@@ -198,15 +198,15 @@ def test_a_scene_with_its_own_camera_assigns_it(scenes: Path) -> None:
     )
 
 
-DEMO_SOURCES = sorted(GAMES_DIR.rglob("*.py"))
+DEMO_SOURCES = sorted(EXAMPLES_DIR.rglob("*.py"))
 EDITS_THE_IMPORT_PATH = re.compile(r"\bsys\.path\.(append|insert|extend)\s*\(")
 
 
 @pytest.mark.parametrize(
-    "source_file", DEMO_SOURCES, ids=lambda p: str(p.relative_to(GAMES_DIR))
+    "source_file", DEMO_SOURCES, ids=lambda p: str(p.relative_to(EXAMPLES_DIR))
 )
 def test_no_demo_edits_the_import_path(source_file: Path) -> None:
-    """A demo imports `pyguara` and `games` as installed code.
+    """A demo imports `pyguara` and `examples` as installed code.
 
     `uv sync` installs the repository in editable mode, which puts both on
     the import path. A demo that adds the repository root itself hides a
@@ -215,7 +215,7 @@ def test_no_demo_edits_the_import_path(source_file: Path) -> None:
     source = source_file.read_text(encoding="utf-8")
 
     assert not EDITS_THE_IMPORT_PATH.search(source), (
-        f"examples/{source_file.relative_to(GAMES_DIR)} edits sys.path. "
+        f"examples/{source_file.relative_to(EXAMPLES_DIR)} edits sys.path. "
         "Run the demo from an environment made by `uv sync`, which already "
         "has the repository on the import path."
     )

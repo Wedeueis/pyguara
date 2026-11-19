@@ -2,7 +2,8 @@
 
 Written 2026-11-14, from an inventory of `next` at `6154b5a`. Its four
 open questions were decided the same day (see "Decided", at the end).
-Step 1 of "Order" is done (2026-11-18); the rest has not started.
+Steps 1 and 3 of "Order" are done (2026-11-18 and 2026-11-19); step 2
+is partly done, and 4 and 5 wait for their triggers.
 
 **When:** after the fork merges back into `pyguara` and the roadmap's
 phase 3 lands (`engine_completion_roadmap.md`). Cleaning the fork first
@@ -208,6 +209,13 @@ otherwise send one to files that are gone.
    deletion each one replaces.
 3. `games/` to `examples/`, game-rule tests and design documents beside
    their games, a test scene in place of `BootScene`.
+   *Done 2026-11-19: `ClearScene` in `tests/integration/_scenes.py`;
+   `main.py` removed; 34 test files and the swarm snapshots moved to
+   `examples/<name>/tests/`, picked up by `testpaths` and held to the
+   test docstring rules; seven design documents to
+   `examples/<name>/DESIGN.md`, emptying `project/demos/`. Not yet done
+   from the in-place list: the pixel tests discovering demos through
+   `demo_list` instead of importing `examples.*`.*
 4. After PyPI: create `pyguara-examples`; tutorials to `tutorials/`,
    `docs/design_system/` to `design_system/`.
 5. At beta: capstones to `showcase/`, fixtures left behind, `project/`

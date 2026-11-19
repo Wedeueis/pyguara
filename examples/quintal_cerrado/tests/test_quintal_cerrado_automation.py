@@ -1,6 +1,6 @@
 """The automation tech tree: the store, placing structures, and what they do.
 
-Reuses `tests/test_quintal_cerrado_growth.py`'s container and scene fixtures
+Reuses `examples/quintal_cerrado/tests/test_quintal_cerrado_growth.py`'s container and scene fixtures
 rather than a third copy -- same mocked container, no real window.
 """
 # ruff: noqa: F811  (fixtures imported from the growth tests are used by name)
@@ -22,14 +22,7 @@ from examples.quintal_cerrado.systems.automation_system import (
     SOLAR_YIELD,
 )
 from examples.quintal_cerrado.systems.day_resolver import SUB_STEP
-from pyguara.events.dispatcher import EventDispatcher
-from pyguara.events.input import KeyDownEvent
-from pyguara.input.keys import ESCAPE, KEY_O
-from pyguara.input.manager import InputManager
-from pyguara.scene.manager import SceneManager
-from pyguara.ui.manager import UIManager
-from pyguara.ui.types import UILayer
-from tests.test_quintal_cerrado_growth import (  # noqa: F401
+from examples.quintal_cerrado.tests.test_quintal_cerrado_growth import (  # noqa: F401
     FIXED_DT,
     _force_stage,
     _nights,
@@ -38,6 +31,13 @@ from tests.test_quintal_cerrado_growth import (  # noqa: F401
     game_container,
     scene,
 )
+from pyguara.events.dispatcher import EventDispatcher
+from pyguara.events.input import KeyDownEvent
+from pyguara.input.keys import ESCAPE, KEY_O
+from pyguara.input.manager import InputManager
+from pyguara.scene.manager import SceneManager
+from pyguara.ui.manager import UIManager
+from pyguara.ui.types import UILayer
 
 
 def _machines(scene: GardenScene) -> None:

@@ -18,7 +18,7 @@ from examples.quintal_cerrado.scenes import GardenScene
 from examples.quintal_cerrado.systems.nutrient_system import (
     NutrientSystem,
 )
-from tests.test_quintal_cerrado_growth import (  # noqa: F401
+from examples.quintal_cerrado.tests.test_quintal_cerrado_growth import (  # noqa: F401
     _nights,
     _plant_at,
     _resolve,

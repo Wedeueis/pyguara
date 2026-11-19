@@ -48,7 +48,7 @@ test:  ## Run standard tests (skips slow/perf)
 	uv run pytest $(PARALLEL) -m "not performance and not slow"
 
 test-unit:  ## Run fast unit tests
-	uv run pytest $(PARALLEL) tests/ -m "not slow and not integration"
+	uv run pytest $(PARALLEL) tests/ examples/ -m "not slow and not integration"
 
 perf-guard:  ## Run the complexity-class guards (cheap; no wall-clock asserts)
 	uv run pytest -m "performance and not slow" --no-cov

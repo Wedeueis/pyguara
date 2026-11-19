@@ -178,7 +178,7 @@ addopts = [
     "--strict-config",
     "--snapshot-warn-unused"
 ]
-testpaths = ["tests"]
+testpaths = ["tests", "examples"]
 # Exclude deprecated test directories
 norecursedirs = [
     "deprecated_tests",

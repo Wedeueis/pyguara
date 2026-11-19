@@ -99,7 +99,7 @@ These modules correspond to the "Tutorial Series Roadmap".
 * **Genre:** Real-time squad tactics. Lead a bush-dog pack running a jaguar down a riverbed.
 * **Key Concepts:** boid flocking (`FlockingSystem`), shared-blackboard behaviour trees, flow-field navigation, `TriggerVolume` currents and a pack-weighted pressure plate, `kits/action_combat`.
 * **Run:** `uv run python examples/vinagre_matilha/main.py`
-* **Spec:** [`project/demos/vinagre_matilha_GDD.md`](../project/demos/vinagre_matilha_GDD.md)
+* **Spec:** [`examples/vinagre_matilha/DESIGN.md`](vinagre_matilha/DESIGN.md)
 
 ### [mourisco_ressonancia](./mourisco_ressonancia) — Mourisco: Ressonância
 * **Genre:** Stealth exploration in a pitch-black cave, lit only by echolocation.
@@ -108,7 +108,7 @@ These modules correspond to the "Tutorial Series Roadmap".
   a custom wavefront-ring shader, DDA ray occlusion, `kits/echolocation`.
 * **Run:** `uv run python examples/mourisco_ressonancia/main.py`
 * **Look at it headlessly:** `uv run python tools/agent_view.py mourisco_ressonancia`
-* **Spec:** [`project/demos/mourisco_ressonancia_GDD.md`](../project/demos/mourisco_ressonancia_GDD.md)
+* **Spec:** [`examples/mourisco_ressonancia/DESIGN.md`](mourisco_ressonancia/DESIGN.md)
 
 ### [protocolo_bandeira](./protocolo_bandeira) — Protocolo Bandeira
 * **Genre:** Twin-stick wave arena. A giant anteater holds a cerrado clearing against a swarm.
@@ -139,7 +139,7 @@ These modules correspond to the "Tutorial Series Roadmap".
   table in `swarm.py`.
 * **Run:** `uv run python examples/tamandua_murundus/main.py`
 * **Look at it headlessly:** `uv run python tools/agent_view.py tamandua_murundus`
-* **Spec:** [`project/demos/tamandua_murundus_GDD.md`](../project/demos/tamandua_murundus_GDD.md)
+* **Spec:** [`examples/tamandua_murundus/DESIGN.md`](tamandua_murundus/DESIGN.md)
 
 ### [true_coral](./true_coral) — True Coral
 * **Genre:** Snake, on a rain-soaked forest floor at night.
@@ -151,7 +151,7 @@ These modules correspond to the "Tutorial Series Roadmap".
   `kits/spawn` for the prey.
 * **Run:** `uv run python examples/true_coral/main.py`
 * **Look at it headlessly:** `uv run python tools/agent_view.py true_coral`
-* **Spec:** [`project/demos/true_coral_GDD.md`](../project/demos/true_coral_GDD.md)
+* **Spec:** [`examples/true_coral/DESIGN.md`](true_coral/DESIGN.md)
 
 ### [quintal_cerrado](./quintal_cerrado) — Quintal do Cerrado
 * **Genre:** Cozy agroforestry. The full till → seed → water → grow →
@@ -225,7 +225,7 @@ These modules correspond to the "Tutorial Series Roadmap".
   house style as `guara_falcao`.
 * **Run:** `uv run python examples/quintal_cerrado/main.py`
 * **Look at it headlessly:** `uv run python tools/agent_view.py quintal_cerrado`
-* **Spec:** [`project/demos/quintal_do_cerrado_PRD.md`](../project/demos/quintal_do_cerrado_PRD.md)
+* **Spec:** [`examples/quintal_cerrado/DESIGN.md`](quintal_cerrado/DESIGN.md)
 
 ## Networking
 

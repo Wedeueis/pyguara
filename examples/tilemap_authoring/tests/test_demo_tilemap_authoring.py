@@ -8,21 +8,14 @@ rather than showing up as a level with no walls.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from examples.tilemap_authoring.scenes import (  # noqa: E402
+from examples.tilemap_authoring.scenes import (
     MAP_PATH,
     TERRAIN_LAYER,
     TILE_COLORS,
 )
-from pyguara.tilemap import EMPTY_GID, load_tmx  # noqa: E402
+from pyguara.tilemap import EMPTY_GID, load_tmx
 
 
 @pytest.fixture(scope="module")

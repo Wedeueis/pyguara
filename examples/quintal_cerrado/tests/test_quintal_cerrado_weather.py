@@ -1,7 +1,7 @@
 # ruff: noqa: F811  (fixtures imported from the growth tests are used by name)
 """Weather: the forecasted cycle, and its effect on soil, pests and growth.
 
-Reuses `tests/test_quintal_cerrado_growth.py`'s container and scene
+Reuses `examples/quintal_cerrado/tests/test_quintal_cerrado_growth.py`'s container and scene
 fixtures.
 """
 
@@ -20,9 +20,7 @@ from examples.quintal_cerrado.systems.weather_system import (
     FORECAST_LENGTH,
     WeatherSystem,
 )
-from examples.quintal_cerrado.weather import CALM_CONDITION_ID, WeatherState
-from pyguara.common.random import RandomStream
-from tests.test_quintal_cerrado_growth import (  # noqa: F401
+from examples.quintal_cerrado.tests.test_quintal_cerrado_growth import (  # noqa: F401
     _nights,
     _plant_at,
     _plant_component,
@@ -30,6 +28,8 @@ from tests.test_quintal_cerrado_growth import (  # noqa: F401
     game_container,
     scene,
 )
+from examples.quintal_cerrado.weather import CALM_CONDITION_ID, WeatherState
+from pyguara.common.random import RandomStream
 
 
 class TestWeatherSystem:
