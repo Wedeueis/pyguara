@@ -7,7 +7,7 @@ That is the house style and it works, but it meant `Animator` and
 reference usage anywhere, which is what #201 flagged. This is that usage,
 and the demo gets real art for it.
 
-The frames come from `tools/slice_spritesheet.py`, which cuts them out of
+The frames come from `slice_spritesheet.py`, which cuts them out of
 the project's contact sheet once and writes keyed PNGs. Nothing here
 knows the sheet exists; it loads files.
 
@@ -61,7 +61,7 @@ HIT = "hit"
 FRAME_HEIGHT = 176
 """Height of every sliced guará frame, in source pixels. The slicer puts
 all of them on one canvas, so a state change never resizes the
-character. Keep in step with what `tools/slice_spritesheet.py` prints."""
+character. Keep in step with what `slice_spritesheet.py` prints."""
 
 DRAW_HEIGHT = 78.0
 """How tall the guará is drawn, in world pixels. Bigger than the 40-pixel

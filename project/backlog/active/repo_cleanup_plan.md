@@ -167,6 +167,8 @@ back; nothing is lost and a newcomer does not wade through it.
 
 `tools/slice_spritesheet.py` is referenced by nothing. If it is useful
 it becomes a `pyguara` CLI command beside `atlas`; if not it goes.
+*It was referenced after all, by `guara_falcao` and `.gitignore`, as the
+way its frames are re-derived; it moved into that demo (2026-11-19).*
 
 ### Deleted outright
 
@@ -198,13 +200,18 @@ otherwise send one to files that are gone.
 1. Archive tag, then the history deletions. No code depends on any of it.
    *Done 2026-11-18: tag `archive/pre-alpha-history` on `ce25a4a`;
    `REFACTOR_STATE.md` became `docs/guides/contributing.md` in the same
-   pull request. Still owed from the table above, each needing a read
-   rather than a deletion: `future/systems_improvement.md` and
-   `technical_debt_cleanup.md` checked against open issues, `rust_core.md`
-   checked against the ADRs, `DEPENDENCY_MAP.md` regenerated or dropped,
-   and `slice_spritesheet.py` kept as a command or removed. `main.py` goes
-   with step 3, since `tests/integration/test_bootstrap.py` and `make run`
-   still use it.*
+   pull request. The four reads it left were done 2026-11-19:
+   `future/systems_improvement.md` and `technical_debt_cleanup.md` had
+   twelve of their fourteen items built and one tracked (#72); the last
+   became #512, and both notes went. `rust_core.md` holds nothing
+   decided that the ADRs do not, apart from an unmeasured Delaunay and
+   Poisson port that ADR 0004's rule governs; it stays in the archive
+   folder because ADRs 0003, 0004 and 0011 cite it by path.
+   `DEPENDENCY_MAP.md` went; its one lasting rule, that the foundation
+   imports nothing above it, is now a section of `docs/core/architecture.md`
+   and `tests/test_layering.py`. `slice_spritesheet.py` cuts one demo's
+   sheet, so it moved into `examples/guara_falcao/`. `main.py` went with
+   step 3.*
 2. The documentation extractions, in the same pull request as the
    deletion each one replaces.
 3. `games/` to `examples/`, game-rule tests and design documents beside
