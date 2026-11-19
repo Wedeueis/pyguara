@@ -242,9 +242,10 @@ class Application:
                 self._editor_layer_cache = cast(
                     "EditorInputSink | None", self._container.get(EditorLayer)
                 )
-            except Exception:
-                # No editor attached, or ImGui is not installed. Both are
-                # the normal case for a shipped game.
+            except (ImportError, ServiceNotFoundException):
+                # Studio or ImGui is not installed, or no editor is
+                # attached: the normal case for a shipped game. Anything
+                # else is a broken editor and is raised.
                 self._editor_layer_cache = None
         return self._editor_layer_cache
 

@@ -109,6 +109,7 @@ def _build_pyinstaller_args(
     clean: bool,
     debug: bool,
     bundle_id: str | None = None,
+    include_studio: bool = False,
 ) -> list[str]:
     """Build the PyInstaller command arguments."""
     # Invoke via the running interpreter rather than a bare ``pyinstaller``
@@ -183,6 +184,12 @@ def _build_pyinstaller_args(
 
     for hidden in default_hidden_imports + hidden_imports:
         args.extend(["--hidden-import", hidden])
+
+    # The editor and the agent operation surface stay out of a shipped
+    # game. The application looks Studio up through a lazy import, which
+    # PyInstaller follows, so without this every build carries the package.
+    if not include_studio:
+        args.extend(["--exclude-module", "pyguara.studio"])
 
     # Clean build
     if clean:
@@ -285,6 +292,13 @@ def _path_separator() -> str:
     help="Bake the asset folders into one <name>.pak instead of loose files",
 )
 @click.option(
+    "--with-studio",
+    "include_studio",
+    is_flag=True,
+    default=False,
+    help="Keep pyguara.studio in the build (excluded by default)",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     default=False,
@@ -304,6 +318,7 @@ def build(
     debug: bool,
     bundle_id: str | None,
     pack: bool,
+    include_studio: bool,
     dry_run: bool,
 ) -> None:  # noqa: D301  (\b is Click's no-wrap marker; r""" would defeat it)
     """Build a standalone executable from a PyGuara game.
@@ -371,6 +386,7 @@ def build(
         clean=clean,
         debug=debug,
         bundle_id=bundle_id,
+        include_studio=include_studio,
     )
 
     if dry_run:
