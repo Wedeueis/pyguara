@@ -179,11 +179,10 @@ class PhysicsConfig:
     gravity_x: float = 0.0
     gravity_y: float = 0.0
 
-    # Solver steps per physics tick. The world runs no continuous collision
-    # detection, so a body jumps velocity/tick pixels and passes through
-    # anything thinner; more substeps stop faster bodies, and the speeds are
-    # in docs/physics/simulation.md. 4 is the default, for knockback and
-    # explosion-flung props. 1 disables substepping.
+    # Solver steps per physics tick. Joints are what they hold together: a
+    # pinned chain under a heavy weight comes apart at 1. Stacking and thin
+    # walls come out the same at any count. More cost more while bodies move;
+    # docs/physics/simulation.md has the figures. 1 disables substepping.
     substeps: int = 4
 
     @property

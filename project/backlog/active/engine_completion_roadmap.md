@@ -254,7 +254,7 @@ ceiling, and API stability, which waits for a team outside the project.
 | **Unsafe audit** ([#503](https://github.com/Wedeueis/pyguara/issues/503)) | Every `unsafe` block in `steam.rs` and `mixer.rs` documented and checked; Steam-sourced lengths and layouts bounds-checked, each finding a hostile-input test first | M |
 | **No-GPU message** ([#504](https://github.com/Wedeueis/pyguara/issues/504)) | A native dialog when a windowed build dies at startup, and one supported way for a game to opt in to the software renderer. The engine still never falls back on its own | M |
 | **Studio out of builds** ([#505](https://github.com/Wedeueis/pyguara/issues/505)) | `pyguara build` excludes `pyguara.studio` by default; the runtime survives its absence | S |
-| **Two measurements** ([#506](https://github.com/Wedeueis/pyguara/issues/506)) | The swapchain copy's cost per frame, and physics at 1, 2 and 4 substeps. Change either only on the numbers | S |
+| **Two measurements** ([#506](https://github.com/Wedeueis/pyguara/issues/506)) | The swapchain copy's cost per frame, and physics at 1, 2 and 4 substeps. Change either only on the numbers. *Measured 2026-11-19: the copy is 94/152 us at 1080p/1440p on an RTX 3050, so no direct path; 4 substeps stay, since joints need them and Reclaimer never steps the solver. Open: the copy on a real integrated GPU* | S |
 
 **Large files** are split when work next touches them, not on their own:
 `gpu.rs` with the swapchain item, `bootstrap.py`'s `_setup_container`
