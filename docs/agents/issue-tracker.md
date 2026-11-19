@@ -35,13 +35,10 @@ Run `gh issue view <number> --comments`.
 
 ## Wayfinding operations
 
-> **This repo already has a wayfinder map, and it predates this file.** The
-> engine-remediation effort (48 of 49 tickets resolved) lives as local markdown
-> at `.scratch/engine-remediation/map.md`, with tickets under
-> `.scratch/engine-remediation/issues/`. That is its permanent home -- leave it
-> where it is. **New** wayfinder runs use the GitHub representation described
-> below. If a task refers to engine remediation, read the `.scratch` files; for
-> anything else, GitHub is the tracker.
+> **One earlier wayfinder effort, engine remediation, ran as local markdown
+> and is finished.** It is archived under the tag `archive/pre-alpha-history`:
+> `git show archive/pre-alpha-history:.scratch/engine-remediation/map.md`.
+> Every wayfinder run uses the GitHub representation described below.
 
 
 Used by `/wayfinder`. The **map** is a single issue with **child** issues as tickets.

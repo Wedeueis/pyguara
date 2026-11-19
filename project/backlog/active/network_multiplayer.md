@@ -4,7 +4,8 @@
 replication and prediction exist, and run on Linux and native Windows. The owner has played the
 demo on both and judged that it feels right. Probe 4, which needs two machines, is postponed by
 the owner, so nothing here has run over a real connection yet. Written 2026-11-01, against `4ea2fa1`.
-Reproduce the Python numbers with `tools/net_phase0.py`.
+The Python numbers came from `tools/net_phase0.py`, which no longer runs against the engine and
+is kept in the tag `archive/pre-alpha-history`.
 
 **The requirement.** One player hosts a game from their own machine, and other players
 connect to it. The first user is Reclaimer, an online co-op action RPG with hordes and

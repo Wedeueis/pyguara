@@ -276,7 +276,8 @@ A client draws from `projectile.payload`, a `NetShot` carrying the shot's kind.
 ### What it costs
 
 Measured with `tools/net_phase0.py`, on a horde of real components with three clients, per frame
-at 60 Hz with 20 Hz snapshots. Reproducible, but not from a shipping game.
+at 60 Hz with 20 Hz snapshots. The probe measured the Python implementation and stopped running
+when replication moved to Rust and physics to Rapier; it is in the tag `archive/pre-alpha-history`.
 
 | Entities | Host | Client | Per client, at 20 Hz |
 | ---: | ---: | ---: | ---: |
