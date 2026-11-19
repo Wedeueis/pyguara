@@ -766,6 +766,9 @@ impl ColumnView {
         this.exports.fetch_add(1, Ordering::Relaxed);
         drop(world);
         drop(this);
+        // SAFETY: `view` is non-null and CPython's to fill (see above);
+        // `pointer` stays valid while `exports` is non-zero, and `shape` is
+        // freed only by `__releasebuffer__`.
         unsafe {
             (*view).buf = pointer;
             (*view).len = (rows * item_size) as ffi::Py_ssize_t;
@@ -793,6 +796,8 @@ impl ColumnView {
     /// Called by CPython once per successful `__getbuffer__`, with the
     /// same `view`.
     unsafe fn __releasebuffer__(&self, view: *mut ffi::Py_buffer) {
+        // SAFETY: `internal` is the `Shape` `__getbuffer__` boxed for this
+        // view, released exactly once.
         unsafe {
             drop(Box::from_raw((*view).internal.cast::<Shape>()));
         }

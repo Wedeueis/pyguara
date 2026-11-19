@@ -1,6 +1,6 @@
 # Makefile for Pyguara
 
-.PHONY: help install native test test-unit test-integration test-performance perf-guard benchmark coverage coverage-check lint format format-check type-check clean clean-all docs-build docs-serve run version ci pre-commit-install build
+.PHONY: help install native test test-unit test-integration test-performance perf-guard benchmark coverage coverage-check lint lint-rust format format-check type-check clean clean-all docs-build docs-serve run version ci pre-commit-install build
 
 # --- Default ---
 help:  ## Show this help message
@@ -72,6 +72,9 @@ coverage-check:  ## Fail if coverage is below 60%
 lint:  ## Check code style and docstring content
 	uv run ruff check pyguara tests
 	uv run python tools/check_docstrings.py
+
+lint-rust:  ## Check that every unsafe block in the Rust crate says why it is sound
+	cargo clippy --release --all-features -- -A clippy::all -D clippy::undocumented_unsafe_blocks
 
 format:  ## Format code
 	uv run ruff format pyguara tests

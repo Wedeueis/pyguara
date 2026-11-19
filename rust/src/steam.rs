@@ -18,11 +18,20 @@
 //! also post, so each request yields exactly one event. Membership changes and
 //! overlay join requests are broadcast callbacks.
 //!
-//! Struct offsets read here (`SteamNetworkingMessage_t`, `CallbackMsg_t`,
-//! `SteamNetConnectionInfo_t`) were checked with `offset_of!` against the
-//! Steamworks SDK's own layouts for both Linux (pack 4) and Windows (pack 8),
-//! where they coincide. `SteamNetworkingIdentity` is 136 bytes, packed to 1,
-//! and only ever read or written through Steam's own accessors.
+//! **Every offset, size, callback id and constant read here** is the one the
+//! Steamworks headers give, for Linux and macOS (callbacks packed to 4) and
+//! Windows (packed to 8): `tools/steam_offsets.cpp` prints them from an SDK,
+//! and should be rerun when the SDK moves. They coincide on both packings
+//! except `LobbyCreated_t`'s lobby id, at 4 or 8 (`CREATED_LOBBY`).
+//! `SteamNetworkingIdentity` is 136 bytes and only ever read or written
+//! through Steam's own accessors.
+//!
+//! **Nothing from Steam is trusted to be in range**: a callback is read only
+//! as far as its reported size, a string field only to its buffer's end and
+//! lossily, a message count only as far as the array Steam was given, and a
+//! null interface or string is refused or read as empty.
+//! `tests/test_native_steam_hostile.py` drives each of these through a
+//! stand-in `steam_api`.
 
 use std::cell::RefCell;
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
@@ -214,6 +223,8 @@ fn c_string(what: &str, text: &str, limit: usize) -> PyResult<CString> {
 /// # Safety
 /// `param` must hold at least `offset + 8` bytes.
 unsafe fn read_u64(param: *const u8, offset: usize) -> u64 {
+    // SAFETY: the caller guarantees the 8 bytes; an unaligned read needs no
+    // alignment.
     unsafe { param.add(offset).cast::<u64>().read_unaligned() }
 }
 
@@ -222,8 +233,48 @@ unsafe fn read_u64(param: *const u8, offset: usize) -> u64 {
 /// # Safety
 /// `param` must hold at least `offset + 4` bytes.
 unsafe fn read_u32(param: *const u8, offset: usize) -> u32 {
+    // SAFETY: as `read_u64`, for 4 bytes.
     unsafe { param.add(offset).cast::<u32>().read_unaligned() }
 }
+
+/// A callback, read out of Steam's buffer before that buffer is freed.
+enum Event {
+    SessionRequest(u64),
+    SessionFailed(u64, c_int, String),
+    LobbyCreated(u32, u64),
+    LobbyEntered(u64, u32),
+    LobbyMember(u64, u64, bool),
+    JoinRequested(u64),
+    ConnectRequested(String),
+}
+
+impl Event {
+    fn into_tuple<'p>(self, py: Python<'p>) -> PyResult<Bound<'p, PyTuple>> {
+        match self {
+            Self::SessionRequest(peer) => ("session_request", peer).into_pyobject(py),
+            Self::SessionFailed(peer, reason, detail) => {
+                ("session_failed", peer, reason, detail).into_pyobject(py)
+            }
+            Self::LobbyCreated(code, lobby) => ("lobby_created", code, lobby).into_pyobject(py),
+            Self::LobbyEntered(lobby, response) => ("lobby_entered", lobby, response).into_pyobject(py),
+            Self::LobbyMember(lobby, member, joined) => {
+                ("lobby_member", lobby, member, joined).into_pyobject(py)
+            }
+            Self::JoinRequested(lobby) => ("join_requested", lobby).into_pyobject(py),
+            Self::ConnectRequested(connect) => ("connect_requested", connect).into_pyobject(py),
+        }
+    }
+}
+
+/// Read a NUL-terminated string from a fixed-size field, stopping at its end
+/// if there is no NUL, and replacing what is not UTF-8.
+fn field_string(field: &[u8]) -> String {
+    let end = field.iter().position(|&b| b == 0).unwrap_or(field.len());
+    String::from_utf8_lossy(&field[..end]).into_owned()
+}
+
+/// The largest call result read. Lobby results are 12 to 24 bytes.
+const MAX_RESULT_BYTES: usize = 4096;
 
 /// What a call handle this object holds was asked for.
 #[derive(Clone, Copy)]
@@ -251,6 +302,7 @@ pub struct NativeSteam {
     messages: Interface,
     friends: Interface,
     matchmaking: Interface,
+    utils: Interface,
     steam_id: u64,
     pending: RefCell<Vec<(u64, Pending)>>,
 }
@@ -275,55 +327,88 @@ impl NativeSteam {
     ///
     /// # Safety
     /// Steam must be open and `param` the 16-byte completion message, read
-    /// before `FreeLastCallback`.
-    unsafe fn call_result<'p>(
-        &self,
-        py: Python<'p>,
-        api: &Api,
-        pipe: c_int,
-        param: *const u8,
-    ) -> PyResult<Option<Bound<'p, PyTuple>>> {
-        let handle = unsafe { read_u64(param, 0) };
-        let expected = unsafe { param.add(8).cast::<c_int>().read_unaligned() };
-        let size = unsafe { read_u32(param, 12) } as usize;
+    /// before `FreeLastCallback`, as Steam requires of `GetAPICallResult`.
+    unsafe fn call_result(&self, api: &Api, pipe: c_int, param: *const u8) -> Option<Event> {
+        // SAFETY: the caller guarantees the 16 bytes of the completion
+        // message: the handle at 0, the callback id at 8 and the size at 12.
+        let (handle, expected, size) =
+            unsafe { (read_u64(param, 0), read_u32(param, 8) as c_int, read_u32(param, 12) as usize) };
         let what = {
             let mut pending = self.pending.borrow_mut();
-            let Some(index) = pending.iter().position(|(h, _)| *h == handle) else {
-                return Ok(None);
-            };
+            let index = pending.iter().position(|(h, _)| *h == handle)?;
             pending.swap_remove(index).1
         };
-        if size > 4096 {
-            return Ok(None);
-        }
+        // A result too large to be one of ours is answered as a failure, so
+        // the request still yields its one event.
+        let size = if size > MAX_RESULT_BYTES { 0 } else { size };
         let mut buffer = vec![0u64; size.div_ceil(8)];
         let mut failed = false;
-        // SAFETY: `buffer` holds `size` bytes, as Steam asked for.
-        let read = unsafe {
-            (api.call_result)(pipe, handle, buffer.as_mut_ptr().cast(), size as c_int, expected, &mut failed)
-        };
+        // SAFETY: `buffer` holds at least `size` bytes, which is what Steam is
+        // told it may write, and `failed` outlives the call.
+        let read = size > 0
+            && unsafe {
+                (api.call_result)(pipe, handle, buffer.as_mut_ptr().cast(), size as c_int, expected, &mut failed)
+            };
         let result = buffer.as_ptr().cast::<u8>();
-        let event = match what {
+        Some(match what {
             Pending::CreateLobby => {
                 if !read || failed || expected != LOBBY_CREATED || size < CREATED_LOBBY + 8 {
-                    ("lobby_created", 2u32, 0u64).into_pyobject(py)?
+                    Event::LobbyCreated(2, 0)
                 } else {
                     // SAFETY: `size` covers both fields, checked above.
                     let (code, lobby) = unsafe { (read_u32(result, 0), read_u64(result, CREATED_LOBBY)) };
-                    ("lobby_created", code, if code == RESULT_OK as u32 { lobby } else { 0 }).into_pyobject(py)?
+                    Event::LobbyCreated(code, if code == RESULT_OK as u32 { lobby } else { 0 })
                 }
             }
             Pending::JoinLobby(lobby) => {
                 if !read || failed || expected != LOBBY_ENTER || size < ENTER_RESPONSE + 4 {
-                    ("lobby_entered", lobby, 5u32).into_pyobject(py)?
+                    Event::LobbyEntered(lobby, 5)
                 } else {
-                    // SAFETY: as above.
-                    let response = unsafe { read_u32(result, ENTER_RESPONSE) };
-                    ("lobby_entered", lobby, response).into_pyobject(py)?
+                    // SAFETY: `size` covers the field, checked above.
+                    Event::LobbyEntered(lobby, unsafe { read_u32(result, ENTER_RESPONSE) })
                 }
             }
-        };
-        Ok(Some(event))
+        })
+    }
+
+    /// Decode one callback Steam is holding.
+    ///
+    /// # Safety
+    /// Steam must be open, and `param` must hold `bytes` bytes that stay
+    /// valid until `FreeLastCallback`.
+    unsafe fn decode(&self, api: &Api, pipe: c_int, callback: c_int, param: *const u8, bytes: usize) -> Option<Event> {
+        // SAFETY: each arm reads only below the size its guard checked, and
+        // the identity accessor reads the 136 bytes at the start of `param`.
+        unsafe {
+            match callback {
+                SESSION_REQUEST if bytes >= IDENTITY_BYTES => {
+                    Some(Event::SessionRequest((api.get_id)(param.cast())))
+                }
+                SESSION_FAILED if bytes >= INFO_END_DEBUG + INFO_END_DEBUG_BYTES => {
+                    let peer = (api.get_id)(param.cast());
+                    let reason = read_u32(param, INFO_END_REASON) as c_int;
+                    let debug = std::slice::from_raw_parts(param.add(INFO_END_DEBUG), INFO_END_DEBUG_BYTES);
+                    Some(Event::SessionFailed(peer, reason, field_string(debug)))
+                }
+                CALL_COMPLETED if bytes >= 16 => self.call_result(api, pipe, param),
+                LOBBY_CHAT_UPDATE if bytes >= 28 => {
+                    let (lobby, member, change) = (read_u64(param, 0), read_u64(param, 8), read_u32(param, 24));
+                    if change & MEMBER_ENTERED != 0 {
+                        Some(Event::LobbyMember(lobby, member, true))
+                    } else if change & MEMBER_REMOVED != 0 {
+                        Some(Event::LobbyMember(lobby, member, false))
+                    } else {
+                        None
+                    }
+                }
+                LOBBY_JOIN_REQUESTED if bytes >= 16 => Some(Event::JoinRequested(read_u64(param, 0))),
+                RICH_PRESENCE_JOIN_REQUESTED if bytes >= 8 + CONNECT_BYTES => {
+                    let raw = std::slice::from_raw_parts(param.add(8), CONNECT_BYTES);
+                    Some(Event::ConnectRequested(field_string(raw)))
+                }
+                _ => None,
+            }
+        }
     }
 }
 
@@ -359,17 +444,18 @@ impl NativeSteam {
             // accessors are valid.
             unsafe { (api.dispatch_init)() };
             // SAFETY: as above.
-            let (messages, friends, matchmaking, steam_id) = unsafe {
-                let user = (api.user)();
-                ((api.messages)(), (api.friends)(), (api.matchmaking)(), (api.user_steam_id)(user))
+            let (user, messages, friends, matchmaking, utils) = unsafe {
+                ((api.user)(), (api.messages)(), (api.friends)(), (api.matchmaking)(), (api.utils)())
             };
-            if messages.is_null() || friends.is_null() || matchmaking.is_null() {
+            if [user, messages, friends, matchmaking, utils].iter().any(|i| i.is_null()) {
                 // SAFETY: Steam started above.
                 unsafe { (api.shutdown)() };
-                return Err("this steam_api lacks the networking interfaces".into());
+                return Err("this steam_api lacks the interfaces the engine uses".into());
             }
+            // SAFETY: `user` is a live interface, checked above.
+            let steam_id = unsafe { (api.user_steam_id)(user) };
             let pending = RefCell::new(Vec::new());
-            Ok(Self { api: Some(api), messages, friends, matchmaking, steam_id, pending })
+            Ok(Self { api: Some(api), messages, friends, matchmaking, utils, steam_id, pending })
         })();
         opened.map_err(|reason| {
             OPEN.store(false, Ordering::SeqCst);
@@ -387,16 +473,21 @@ impl NativeSteam {
     #[getter]
     fn persona_name(&self) -> PyResult<String> {
         let api = self.api()?;
-        // SAFETY: Steam returns a string it owns, valid until the next call.
-        let name = unsafe { CStr::from_ptr((api.persona_name)(self.friends)) };
-        Ok(name.to_string_lossy().into_owned())
+        // SAFETY: Steam is open; it returns a string it owns, valid until the
+        // next call, or null.
+        let name = unsafe { (api.persona_name)(self.friends) };
+        if name.is_null() {
+            return Ok(String::new());
+        }
+        // SAFETY: non-null, and NUL-terminated by Steam.
+        Ok(unsafe { CStr::from_ptr(name) }.to_string_lossy().into_owned())
     }
 
     /// Start reaching Valve's relay network now, rather than on first send.
     fn init_relay(&self) -> PyResult<()> {
         let api = self.api()?;
-        // SAFETY: Steam is open.
-        unsafe { (api.init_relay)((api.utils)()) };
+        // SAFETY: Steam is open and `utils` was checked at open.
+        unsafe { (api.init_relay)(self.utils) };
         Ok(())
     }
 
@@ -422,64 +513,24 @@ impl NativeSteam {
     ///       untrusted `connect` string.
     fn run_callbacks<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyList>> {
         let api = self.api()?;
-        let mut events: Vec<Bound<'p, PyTuple>> = Vec::new();
+        let mut events = Vec::new();
         // SAFETY: manual dispatch as steam_api.h prescribes: run the frame,
-        // read each callback, free it before asking for the next.
+        // then read each callback and free it before asking for the next.
+        // Nothing between the read and the free can return early.
         unsafe {
             let pipe = (api.pipe)();
             (api.dispatch_run_frame)(pipe);
             let mut message = CallbackMsg { user: 0, callback: 0, param: std::ptr::null_mut(), param_bytes: 0 };
             while (api.dispatch_next)(pipe, &mut message) {
                 let bytes = usize::try_from(message.param_bytes).unwrap_or(0);
-                let param = message.param;
-                match message.callback {
-                    SESSION_REQUEST if bytes >= IDENTITY_BYTES => {
-                        let peer = (api.get_id)(param.cast());
-                        events.push(("session_request", peer).into_pyobject(py)?);
-                    }
-                    SESSION_FAILED if bytes >= INFO_END_DEBUG + INFO_END_DEBUG_BYTES => {
-                        let peer = (api.get_id)(param.cast());
-                        let reason = param.add(INFO_END_REASON).cast::<c_int>().read_unaligned();
-                        let debug = std::slice::from_raw_parts(param.add(INFO_END_DEBUG), INFO_END_DEBUG_BYTES);
-                        let end = debug.iter().position(|&b| b == 0).unwrap_or(debug.len());
-                        let detail = String::from_utf8_lossy(&debug[..end]).into_owned();
-                        events.push(("session_failed", peer, reason, detail).into_pyobject(py)?);
-                    }
-                    CALL_COMPLETED if bytes >= 16 => {
-                        if let Some(event) = self.call_result(py, api, pipe, param)? {
-                            events.push(event);
-                        }
-                    }
-                    LOBBY_CHAT_UPDATE if bytes >= 28 => {
-                        let lobby = read_u64(param, 0);
-                        let member = read_u64(param, 8);
-                        let change = read_u32(param, 24);
-                        let joined = if change & MEMBER_ENTERED != 0 {
-                            Some(true)
-                        } else if change & MEMBER_REMOVED != 0 {
-                            Some(false)
-                        } else {
-                            None
-                        };
-                        if let Some(joined) = joined {
-                            events.push(("lobby_member", lobby, member, joined).into_pyobject(py)?);
-                        }
-                    }
-                    LOBBY_JOIN_REQUESTED if bytes >= 16 => {
-                        events.push(("join_requested", read_u64(param, 0)).into_pyobject(py)?);
-                    }
-                    RICH_PRESENCE_JOIN_REQUESTED if bytes >= 8 + CONNECT_BYTES => {
-                        let raw = std::slice::from_raw_parts(param.add(8), CONNECT_BYTES);
-                        let end = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
-                        let connect = String::from_utf8_lossy(&raw[..end]).into_owned();
-                        events.push(("connect_requested", connect).into_pyobject(py)?);
-                    }
-                    _ => {}
+                if !message.param.is_null() {
+                    events.extend(self.decode(api, pipe, message.callback, message.param, bytes));
                 }
                 (api.dispatch_free)(pipe);
             }
         }
-        PyList::new(py, events)
+        let tuples = events.into_iter().map(|event| event.into_tuple(py)).collect::<PyResult<Vec<_>>>()?;
+        PyList::new(py, tuples)
     }
 
     /// Accept a session someone asked for (see `run_callbacks`).
@@ -522,7 +573,10 @@ impl NativeSteam {
         // read, then released exactly once.
         unsafe {
             let count = (api.receive)(self.messages, 0, pointers.as_mut_ptr(), MAX_MESSAGES as c_int);
-            for &message in &pointers[..usize::try_from(count).unwrap_or(0)] {
+            // Never more than the array Steam was given, and never a slot it
+            // did not fill.
+            let count = usize::try_from(count).unwrap_or(0).min(MAX_MESSAGES);
+            for &message in pointers[..count].iter().filter(|message| !message.is_null()) {
                 let base = message.cast::<u8>();
                 let data = base.add(MESSAGE_DATA).cast::<*const u8>().read_unaligned();
                 let size = base.add(MESSAGE_SIZE).cast::<c_int>().read_unaligned();

@@ -104,6 +104,9 @@ pub fn install_component_members(python: Python<'_>) -> PyResult<()> {
             flags: ffi::Py_READONLY,
             doc: doc.as_ptr(),
         }));
+        // SAFETY: `definition` is leaked, so it outlives the class, and its
+        // name and doc are static C strings; the call returns a new reference
+        // or null with an exception set, which `from_owned_ptr_or_err` takes.
         let descriptor = unsafe {
             Bound::from_owned_ptr_or_err(
                 python,
