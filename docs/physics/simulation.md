@@ -36,9 +36,16 @@ moving `velocity × dt` in one solver step can pass through anything thinner
 than that jump. `physics.substeps` (default **4**) splits each tick into
 that many solver steps to shorten it.
 
-In practice Rapier keeps thin walls solid without them. Measured with
-`tests/integration/test_collision_robustness.py`'s `fire_at_wall` and **one**
-substep, an 8px box stops at a 10px wall at 20,000 px/s (333px a step), and
+What they buy in practice is joints. A chain of 20 pinned links with a
+weight 50 times a link's on the end stretches 0.3% at four substeps, 30% at
+two, and comes apart at one. Stacking does not change: a column of 20
+boxes sinks 12 px at any count. Four cost 2.7x one while bodies move and
+1.4x once they sleep; `docs/guides/performance.md` has the table. A game
+with many moving bodies and no joints can set `physics.substeps` to 1 or 2.
+
+Nor do thin walls need them: Rapier keeps them solid without substeps.
+Measured with `tests/integration/test_collision_robustness.py`'s
+`fire_at_wall` and **one** substep, an 8px box stops at a 10px wall at 20,000 px/s (333px a step), and
 a 1px box at a 1px wall. Only a circle of 1 or 2px fired into a wall as
 thin, at 20,000 px/s, came out just past it. Chipmunk tunnelled at 1,200
 px/s through that 10px wall with one substep. Fast projectiles should still

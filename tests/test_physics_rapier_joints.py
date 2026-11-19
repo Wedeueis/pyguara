@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 
 from pyguara.common.types import Vector2
-from pyguara.physics.backends.rapier_impl import RapierEngine
+from pyguara.physics.backends.rapier_impl import DEFAULT_SUBSTEPS, RapierEngine
 from pyguara.physics.types import (
     BodyType,
     CollisionLayer,
@@ -175,3 +175,48 @@ def test_rapier_refuses_a_force_limit_it_cannot_honour() -> None:
     with pytest.raises(NotImplementedError, match="MOTOR"):
         _joint(engine, a, b, JointType.PIN, max_force=100.0)
     _joint(engine, a, b, JointType.MOTOR, max_force=100.0)
+
+
+def _weighted_chain_stretch(substeps: int) -> float:
+    """Hang 20 pinned 10 px links, the last 50 times heavier, for 5 s.
+
+    Returns:
+        How much longer the chain is than it was built, as a fraction.
+    """
+    engine: Any = RapierEngine(substeps)
+    engine.initialize(Vector2(0, 900))
+    previous = engine.create_body("anchor", BodyType.STATIC, Vector2(0, 0))
+    links = []
+    for index in range(1, 21):
+        heavy = 50.0 if index == 20 else 1.0
+        link = engine.create_body(
+            f"link{index}", BodyType.DYNAMIC, Vector2(index * 10, 0)
+        )
+        engine.add_shape(
+            link,
+            ShapeType.CIRCLE,
+            [3.0],
+            ORIGIN,
+            PhysicsMaterial(density=heavy),
+            CollisionLayer(),
+            False,
+        )
+        _joint(engine, previous, link, JointType.PIN)
+        links.append((previous, link))
+        previous = link
+    _run(engine, 5.0)
+    length = sum(_distance(a, b) for a, b in links)
+    engine.cleanup()
+    return length / 200.0 - 1.0
+
+
+def test_the_default_substeps_hold_a_weighted_chain_together() -> None:
+    """What the default substep count is for.
+
+    Stacking and thin walls come out the same at one substep as at four;
+    joints do not. Under a 50:1 end weight this chain stretches about 30%
+    at two substeps and comes apart at one. If the second assertion fails,
+    one substep has become enough and the default is worth measuring again.
+    """
+    assert abs(_weighted_chain_stretch(DEFAULT_SUBSTEPS)) < 0.05
+    assert _weighted_chain_stretch(1) > 1.0

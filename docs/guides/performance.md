@@ -473,6 +473,35 @@ top-down step, and level with pymunk's mirror. Pymunk's mirror holds
 static boxes only, so one dynamic body anywhere sends every probe to
 Chipmunk; Rapier's sweep queries the whole world and has no such case.
 
+### Rapier's substep count -- what 1, 2 and 4 buy
+
+`tools/substep_probe.py`, 2026-11-19. Wired as bootstrap wires it, with a
+collision system that accepts every pair, 60 Hz, 900 px/s^2 of gravity;
+medians of 60 ticks. "Settled" is after five seconds.
+
+| | 1 substep | 2 | 4 |
+| --- | ---: | ---: | ---: |
+| 200 boxes falling, ms a tick | 0.80 | 1.26 | 2.20 |
+| 200 boxes settled | 0.34 | 0.38 | 0.47 |
+| 800 boxes falling | 2.02 | 3.01 | 4.41 |
+| 800 boxes settled | 1.39 | 1.55 | 1.94 |
+| Column of 20 boxes, how far the top sinks, px | 12.1 | 12.1 | 12.0 |
+| 8 px box at a 2 px wall at 60,000 px/s | stops | stops | stops |
+| Chain of 20 pinned links, even weight: stretch | +4.4% | +0.5% | -0.5% |
+| The same with the end link 50x heavier | +1466% | +30% | +0.3% |
+
+Stacking and thin walls come out the same at every count; joints are what
+the substeps hold together, and a weighted chain comes apart at one.
+`test_the_default_substeps_hold_a_weighted_chain_together` pins that. Four
+costs 2.7x one while bodies move and 1.4x once they sleep.
+
+**The default stays 4.** Where it costs nothing to keep: Reclaimer steps
+its world once, to settle a room's walls, and never during play; its
+characters move by `sweep_box` and its projectiles by raycast, neither of
+which substeps touch. `physics_integration`, the physics capstone, spends
+0.013 ms a tick on physics at 1, 2 or 4. A game with hundreds of moving
+bodies and no joints can set `physics.substeps` to 1 or 2.
+
 ## Object pools
 
 ### The native particle pool -- milliseconds per frame
@@ -1337,6 +1366,33 @@ with *different* regions share one draw call.
 
 The bytes uploaded are 1.2 MB per frame at 20,000 sprites.
 
+### The present copy -- microseconds a frame
+
+`NativeGpu` draws every frame offscreen, and `present` copies it to the
+window with one full-screen triangle. `tools/present_copy_probe.py`
+measures that work with no window: the same full-screen pass, run N times
+a frame over hashed noise, with the cost of one read from the slope.
+2026-11-19.
+
+| Adapter | 1920x1080 | 2560x1440 |
+| --- | ---: | ---: |
+| RTX 3050, Mesa GL over D3D12 | 94 | 152 |
+| llvmpipe, 12 threads | 1,580 | 2,970 |
+
+On the RTX 3050 it is 0.6% of a 60 Hz frame at 1080p and 0.9% at 1440p.
+It reads and writes the frame once, about 16.6 MB at 1080p, so it is
+bound by memory bandwidth: the GPU figure is about 175 GB/s. An
+integrated GPU sharing dual-channel DDR4 (about 50 GB/s) would take
+roughly 0.4 ms and 0.7 ms; that is an estimate, not yet measured on one.
+A flat-coloured frame measured half as much on the RTX, because the GPU
+compresses it, so the probe copies noise.
+
+Rendering straight into the window's texture would save this copy on a
+frame with no readback. It has not been done: under 1% of the frame on a
+discrete GPU, and an estimated 2 to 4% on an integrated one. On a
+software adapter it is 10 to 18%, which would matter if a software
+renderer ever became the fallback for a machine with no GPU.
+
 ---
 
 ## Resource loading, and the GIL
@@ -1493,7 +1549,6 @@ explains a choice in the code.
 | A pool of 700 entities each carrying a `FlockingAgent`, all matching queries while idle, in `examples/tamandua_murundus` | about 18 frames per second, against about 60 once idle entities were disabled | `EntityPool` disables an idle entity, so it matches no query |
 | A Python flocking tick at 1,000 agents, with the Python spatial index and with the native one | 16.6 ms against 9.8 ms | `FlockingSystem`'s Python path still pins its index to `accelerate=False`, so the Python path is Python throughout |
 | `FlowFieldService.vector_at` in Python | 3.27 us, 97% of it four `Vector2` operations | The native path answers the whole lookup in one call |
-| Physics at 4 substeps | 0.65 ms an update at 200 dynamic bodies, 2.5 ms at 500 | 4 is the default; 1/2/4 substeps stop a body crossing a 10px wall up to about 200/400/900 px/s |
 | The frame profiler, recording one frame (seven timestamps), 2026-11-16 | 2.2 us, against nothing when it is off | It can stay on in a shipped build: 0.013% of a 60 Hz frame |
 | The frame profiler's overlay, summarising 120 frames and laying out its rows every frame, before the summary was cached | 157 us a frame | The overlay shows one summary for 15 frames: 33 us a frame, before the renderer's own cost for the text |
 
