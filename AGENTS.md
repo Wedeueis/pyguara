@@ -30,9 +30,11 @@ archived. This repository is the only one; issues live here.
 | `localisation_plan.md` | The ten languages Reclaimer ships in, and the four PRs that get it there |
 | `docstring_standard_plan.md` | The docstring cleanup, by PR, and the baseline it shrinks |
 
-`REFACTOR_STATE.md` and `.scratch/engine-remediation/` record two
-**finished** efforts. Do not resume either. `project/backlog/archive_*/`
-holds superseded plans; nothing in it describes the current code.
+Two **finished** efforts, the subsystem audit and the engine
+remediation, are archived under the tag `archive/pre-alpha-history`. Do
+not resume either; the method they used is `docs/guides/contributing.md`.
+`project/backlog/archive_202611/` holds superseded plans; nothing in it
+describes the current code.
 
 ## Setup
 

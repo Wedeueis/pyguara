@@ -41,6 +41,7 @@ nav:
       - Agent Integration: guides/agent-integration.md
       - Measured Limits: guides/performance.md
       - Testing a Network Path: guides/network-probe.md
+      - Finding and Fixing Defects: guides/contributing.md
   - Core:
       - Architecture: core/architecture.md
       - Entity Component System: core/ecs.md

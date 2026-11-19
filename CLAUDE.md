@@ -22,9 +22,9 @@ the files under `docs/agents/` directly; they are the source of truth.
 ### Issue tracker
 
 Issues and PRDs live as **GitHub issues** in `Wedeueis/pyguara`, driven through
-the `gh` CLI. See `docs/agents/issue-tracker.md` -- which also records that
-`.scratch/engine-remediation/` is the completed wayfinder effort's own home, and
-that new wayfinder runs use GitHub instead.
+the `gh` CLI. See `docs/agents/issue-tracker.md`. The one earlier wayfinder
+effort, engine remediation, is finished and archived under the tag
+`archive/pre-alpha-history`; wayfinder runs use GitHub.
 
 ### Triage labels
 

@@ -237,8 +237,9 @@ against the Python interface before phase 6 still runs.
    constructor change with phase 4's one-call entry point, so the three
    land together. It is Python by design and independent of the items
    above.
-2. **Process history** (`REFACTOR_STATE.md` and the rest): see
-   `repo_cleanup_plan.md`.
+2. **Process history** (`REFACTOR_STATE.md` and the rest): archived
+   under the tag `archive/pre-alpha-history`, its method kept as
+   `docs/guides/contributing.md`; see `repo_cleanup_plan.md`.
 
 ### Phase 7. Hardening before launch
 

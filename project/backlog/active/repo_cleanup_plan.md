@@ -2,7 +2,7 @@
 
 Written 2026-11-14, from an inventory of `next` at `6154b5a`. Its four
 open questions were decided the same day (see "Decided", at the end).
-Nothing here has been moved or deleted yet.
+Step 1 of "Order" is done (2026-11-18); the rest has not started.
 
 **When:** after the fork merges back into `pyguara` and the roadmap's
 phase 3 lands (`engine_completion_roadmap.md`). Cleaning the fork first
@@ -162,7 +162,7 @@ back; nothing is lost and a newcomer does not wade through it.
 | `project/backlog/archive_202611/github_phase1/` | `BRANCHES.md` and the seven `IMPLEMENTATION_P0-*.md` plans from January, moved out of `.github/` 2026-11-14. They describe a `develop` branch the repository no longer has |
 | `project/backlog/archive_202611/external_audit_issue_305.md` (was `active/Consolide uma versao completa de feedabcks, bugs....md`) | the external audit; reconciled and closed in issue #305 |
 | `project/backlog/archive_202611/future/systems_improvement.md`, `technical_debt_cleanup.md` | moved to the archive folder 2026-11-14. Still owed before the tag: check each line against open issues and open one for anything live |
-| `tools/columnar_probe.py`, `count_vector_ops.py`, `net_phase0.py`, `preflight_pymunk_vector.py`, `wgpu_probe.py` | each answered a question an ADR now records |
+| `tools/columnar_probe.py`, `count_vector_ops.py`, `net_phase0.py`, `preflight_pymunk_vector.py`, `wgpu_probe.py` | each answered a question an ADR now records. *Done, except `columnar_probe.py`, which still runs and is how 6g is measured when it resumes (postponed 2026-11-18, after this plan); it stays until 6g is decided. `preflight_pymunk_vector.py` had gone with pymunk* |
 
 `tools/slice_spritesheet.py` is referenced by nothing. If it is useful
 it becomes a `pyguara` CLI command beside `atlas`; if not it goes.
@@ -195,6 +195,15 @@ otherwise send one to files that are gone.
 ## Order
 
 1. Archive tag, then the history deletions. No code depends on any of it.
+   *Done 2026-11-18: tag `archive/pre-alpha-history` on `ce25a4a`;
+   `REFACTOR_STATE.md` became `docs/guides/contributing.md` in the same
+   pull request. Still owed from the table above, each needing a read
+   rather than a deletion: `future/systems_improvement.md` and
+   `technical_debt_cleanup.md` checked against open issues, `rust_core.md`
+   checked against the ADRs, `DEPENDENCY_MAP.md` regenerated or dropped,
+   and `slice_spritesheet.py` kept as a command or removed. `main.py` goes
+   with step 3, since `tests/integration/test_bootstrap.py` and `make run`
+   still use it.*
 2. The documentation extractions, in the same pull request as the
    deletion each one replaces.
 3. `games/` to `examples/`, game-rule tests and design documents beside

@@ -121,7 +121,8 @@ where 400 ns does not matter.
 ### Measured: where the `Vector2` traffic actually is
 
 Counted with `tools/count_vector_ops.py`, which wraps the operators and
-tallies them.
+tallies them. It ran against the pymunk `Vector2` and was retired with it;
+it is in the tag `archive/pre-alpha-history`.
 
 **The Python code that runs every frame barely touches `Vector2`.** Across
 every demo that runs without a GL context: **1–8 operations per frame**,
@@ -497,7 +498,8 @@ smuggled in as a consequence of a maths optimisation. **D stays rejected.**
   future pymunk rather than trusted from a document written against 7.2.0.
   Deleted with pymunk itself (roadmap 6f); it is in git history.
 - `tools/count_vector_ops.py` — the `Vector2` frame-traffic measurement that
-  decides Marco 1.
+  decides Marco 1. Retired with the pymunk `Vector2`; in the tag
+  `archive/pre-alpha-history`.
 - `Cargo.toml`, `rust/src/` — the Marco 3 pools, standalone so `uv sync`
   still works without Rust: `particles.rs` and `sparks.rs`.
 - `tools/bench_native_pool.py` — Marco 3's numbers, for both pools and

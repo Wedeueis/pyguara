@@ -142,4 +142,5 @@ is the worst of both.
 - `project/backlog/active/engine_completion_roadmap.md`, phases 3, 4
   and 6.
 - `docs/core/dependency-injection.md`, which this replaces when accepted.
-- `REFACTOR_STATE.md`, the DI iteration, for the missing-lock finding.
+- `REFACTOR_STATE.md`, the DI iteration, for the missing-lock finding
+  (`git show archive/pre-alpha-history:REFACTOR_STATE.md`).
