@@ -27,7 +27,7 @@ uv run python tools/studio_demo.py guara_falcao --mode ask
 uv run python tools/studio_demo.py guara_falcao --borderless
 ```
 
-`main.py` and the remaining demos run on the Pygame backend, where Studio
+A demo that selects the Pygame backend runs without Studio, which
 declines rather than half-installing.
 
 `attach_studio` builds on `attach_editor`, so it needs wgpu for the

@@ -162,7 +162,6 @@ exclude = [
     "config/**",
     "docs/**",
     "games/**",
-    "main.py",
     "mkdocs.yml",
     "project/**",
     "tests/**",

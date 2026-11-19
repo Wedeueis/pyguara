@@ -24,8 +24,10 @@ pre-commit-install: ## Install git hooks
 	uv run pre-commit install
 
 # --- Development ---
-run:  ## Run the main game
-	uv run main.py
+DEMO ?= guara_falcao
+
+run:  ## Run a demo: make run DEMO=guara_falcao
+	uv run python -m games.$(DEMO).main
 
 version:  ## Show current version
 	uv run python -c "from pyguara import __version__; print(__version__)"
