@@ -11,7 +11,6 @@ docs/guides/agent-visual-inspection.md.
 
 from __future__ import annotations
 
-import importlib
 import sys
 from pathlib import Path
 
@@ -22,6 +21,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tools.agent_view import DEMOS, capture_frame, is_blank  # noqa: E402
+from tools.demo_list import DEMO_ROOT, load_demo  # noqa: E402
 
 # boot_process only opens a window and draws nothing; that is its whole point
 # as tutorial module 1, so a flat frame there is correct rather than a defect.
@@ -46,9 +46,7 @@ def render_demo(demo: str):
     from pyguara.events.dispatcher import EventDispatcher
     from pyguara.graphics.window import Window
 
-    bootstrap_mod, scenes_mod, scene_name = DEMOS[demo]
-    configure = importlib.import_module(bootstrap_mod).configure_game_container
-    scene_class = getattr(importlib.import_module(scenes_mod), scene_name)
+    configure, scene_class = load_demo(demo)
 
     container = configure()
     app = container.get(Application)
@@ -84,8 +82,9 @@ def render_demo(demo: str):
 
 @pytest.mark.integration
 @pytest.mark.parametrize("demo", DEMOS_THAT_DRAW)
-def test_the_demo_draws_something(demo: str) -> None:
+def test_the_demo_draws_something(demo: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """The demo's frame is not a single flat colour."""
+    monkeypatch.chdir(DEMO_ROOT)
     surface = render_demo(demo)
 
     assert not is_blank(surface), (

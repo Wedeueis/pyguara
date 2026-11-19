@@ -8,7 +8,6 @@ the module that tried.
 
 from __future__ import annotations
 
-import importlib
 import os
 import sys
 from pathlib import Path
@@ -23,12 +22,12 @@ def main() -> None:
     demo, frames = sys.argv[1], int(sys.argv[2])
     from pyguara.application.application import Application
     from pyguara.events.dispatcher import EventDispatcher
-    from tools.demo_list import DEMOS
+    from tools.demo_list import DEMO_ROOT, load_demo
 
-    bootstrap_module, scenes_module, scene_name = DEMOS[demo]
-    container = importlib.import_module(bootstrap_module).configure_game_container()
+    configure, scene = load_demo(demo)
+    os.chdir(DEMO_ROOT)
+    container = configure()
     app = container.get(Application)
-    scene = getattr(importlib.import_module(scenes_module), scene_name)
     ran = 0
     original = app._render
 

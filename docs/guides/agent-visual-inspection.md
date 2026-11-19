@@ -252,18 +252,32 @@ engine for a WSLg display fault.
 
 ## Adding a demo
 
-Add one line to `DEMOS` in `tools/agent_view.py`:
+Add one line to `_SCENES` in `tools/demo_list.py`, naming the demo's package
+and its starting scene:
 
 ```python
-"my_demo": ("examples.my_demo.bootstrap", "examples.my_demo.scenes", "MyScene"),
+"my_demo": "MyScene",
 ```
 
 The registry is explicit rather than discovered, so a broken demo names itself
 instead of failing during discovery.
 
+## Demos from another checkout
+
+The demos are `examples/` in this repository unless `PYGUARA_EXAMPLES` names
+another folder. The capture tools and the pixel tests then boot the demos
+there, with the folder above it as the working directory, since demos name
+their assets relative to it:
+
+```bash
+PYGUARA_EXAMPLES=../pyguara-examples/showcase uv run pytest tests/integration
+```
+
+The folder's name is the package the demos import as. A package of that name
+already imported from somewhere else is refused rather than booted in its
+place.
+
 ## Related
 
 - `examples/validate_demos.py` — boots four capstone demos for 30 frames each and
   reports pass/fail. Faster than this tool when you only need "does it crash".
-- Issue #19 — GPU-dependent graphics code (framebuffers, passes, materials,
-  effects) has no headless coverage. This tool exercises the pygame path only.

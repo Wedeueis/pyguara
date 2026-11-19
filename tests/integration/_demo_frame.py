@@ -38,7 +38,10 @@ def main() -> None:
 
     import test_demos_render
 
-    demo, out = sys.argv[1], sys.argv[2]
+    from tools.demo_list import DEMO_ROOT
+
+    demo, out = sys.argv[1], str(Path(sys.argv[2]).resolve())
+    os.chdir(DEMO_ROOT)
     surface = test_demos_render.render_demo(demo)
     width, height = surface.get_size()
     Path(out).write_bytes(

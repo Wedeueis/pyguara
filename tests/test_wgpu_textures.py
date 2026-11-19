@@ -20,6 +20,7 @@ from pyguara.graphics.backends.wgpu.textures import (
     NativeImageLoader,
 )
 from pyguara.resources.meta import TextureMeta
+from tools.demo_list import EXAMPLES_DIR
 
 try:
     extension: Any = native.require_extension("tests")
@@ -31,8 +32,8 @@ pytestmark = pytest.mark.skipif(extension is None, reason="extension not built")
 ROOT = Path(__file__).resolve().parent.parent
 PNGS = sorted(
     path
-    for folder in ("examples", "assets")
-    for path in (ROOT / folder).rglob("*.png")
+    for folder in (EXAMPLES_DIR, ROOT / "assets")
+    for path in folder.rglob("*.png")
     if ".agent-view" not in path.parts
 )
 JPEGS = sorted((ROOT / "assets").rglob("*.jpg"))

@@ -13,7 +13,6 @@ a warm-up, in milliseconds, and the sprites submitted per frame.
 from __future__ import annotations
 
 import argparse
-import importlib
 import os
 import sys
 import time
@@ -24,7 +23,7 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from tools.demo_list import DEMOS  # noqa: E402
+from tools.demo_list import DEMO_ROOT, DEMOS, load_demo  # noqa: E402
 
 WARM_UP = 60
 
@@ -36,9 +35,7 @@ def probe(demo: str, frames: int) -> dict[str, float]:
     from pyguara.graphics.pipeline.render_system import RenderSystem
     from pyguara.scene.base import Scene
 
-    bootstrap_mod, scenes_mod, scene_name = DEMOS[demo]
-    configure = importlib.import_module(bootstrap_mod).configure_game_container
-    scene_class = getattr(importlib.import_module(scenes_mod), scene_name)
+    configure, scene_class = load_demo(demo)
     container = configure()
     app = container.get(Application)
 
@@ -105,6 +102,7 @@ def main() -> None:
     parser.add_argument("demo", nargs="?")
     parser.add_argument("--frames", type=int, default=300)
     arguments = parser.parse_args()
+    os.chdir(DEMO_ROOT)
     demos = [arguments.demo] if arguments.demo else list(DEMOS)
     header = f"{'demo':<22}{'work':>8}{'fixed':>8}{'update':>8}{'render':>8}{'sprites':>9}{'count':>8}"
     print(header)
