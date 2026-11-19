@@ -126,7 +126,7 @@ telling the truth about itself.
    before the merge; its fork-era lines (banner, clone line, default
    renderer, where CI runs) corrected after it.*
 4. **One status word** across `AGENTS.md`, README and the classifier.
-   *Done: "alpha, 0.7.0" in all three.*
+   *Done: "alpha, 0.8.0" in all three.*
 
 **Done when** a new reader's first ten minutes with the README contain
 no statement the code contradicts.
