@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
+from tools.demo_list import EXAMPLES_DIR
 
 BOOTSTRAPS = sorted(EXAMPLES_DIR.glob("*/bootstrap.py"))
 

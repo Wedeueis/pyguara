@@ -26,8 +26,7 @@ FRAME = 39
 
 def main() -> None:
     """Capture the frame and exit."""
-    backend, demo, out = sys.argv[1], sys.argv[2], sys.argv[3]
-    os.chdir(ROOT)
+    backend, demo, out = sys.argv[1], sys.argv[2], str(Path(sys.argv[3]).resolve())
     sys.path.insert(0, str(ROOT))
 
     from pyguara.application.clock import WallClock
@@ -77,7 +76,7 @@ def main() -> None:
 
     bootstrap.create_container = forced  # type: ignore[assignment]
     sys.argv = [
-        "tools/agent_view.py",
+        str(ROOT / "tools" / "agent_view.py"),
         demo,
         "--frames",
         str(FRAME + 1),
@@ -86,7 +85,7 @@ def main() -> None:
         "--out",
         out,
     ]
-    runpy.run_path("tools/agent_view.py", run_name="__main__")
+    runpy.run_path(str(ROOT / "tools" / "agent_view.py"), run_name="__main__")
 
 
 if __name__ == "__main__":

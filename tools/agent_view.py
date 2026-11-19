@@ -31,7 +31,6 @@ frame is the most common way this silently tells you nothing.
 from __future__ import annotations
 
 import argparse
-import importlib
 import os
 import sys
 from dataclasses import dataclass, field
@@ -54,7 +53,7 @@ import pygame  # noqa: E402  (must follow the driver selection above)
 
 DEFAULT_OUT = REPO_ROOT / ".agent-view"
 
-from tools.demo_list import DEMOS  # noqa: E402
+from tools.demo_list import DEMO_ROOT, DEMOS, load_demo  # noqa: E402
 
 
 @dataclass
@@ -233,9 +232,7 @@ def run(demo: str, script: Script, out_dir: Path) -> int:
         MouseMotionEvent,
     )
 
-    bootstrap_mod, scenes_mod, scene_name = DEMOS[demo]
-    configure = importlib.import_module(bootstrap_mod).configure_game_container
-    scene_class = getattr(importlib.import_module(scenes_mod), scene_name)
+    configure, scene_class = load_demo(demo)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     container = configure()
@@ -430,7 +427,10 @@ def main(argv: list[str] | None = None) -> int:
             except ValueError:
                 raise SystemExit(f"--{flag}: expected X,Y@TICK, got {raw!r}") from None
 
-    return run(args.demo, script, args.out)
+    # Demos name their assets relative to the folder above them.
+    out = args.out.resolve()
+    os.chdir(DEMO_ROOT)
+    return run(args.demo, script, out)
 
 
 if __name__ == "__main__":

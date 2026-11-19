@@ -12,6 +12,7 @@ so a new effect is covered the moment it exists.
 from __future__ import annotations
 
 import importlib
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ from pyguara.graphics.pipeline.device import (
     InstancedShader,
     SpriteShader,
 )
+from tools.demo_list import DEMO_ROOT, EXAMPLES_DIR
 
 
 def _modules() -> list[str]:
@@ -32,12 +34,17 @@ def _modules() -> list[str]:
     a directory with no `__init__.py` -- and `graphics/pipeline` and
     `graphics/backends` have none, so the walk silently missed every pass.
     """
-    root = Path(pyguara.__file__).resolve().parent.parent
+    engine = Path(pyguara.__file__).resolve().parent.parent
     names = []
-    for folder in (root / "pyguara" / "graphics", root / "examples"):
+    for root, folder in (
+        (engine, engine / "pyguara" / "graphics"),
+        (DEMO_ROOT, EXAMPLES_DIR),
+    ):
         for path in sorted(folder.rglob("*.py")):
             relative = path.relative_to(root).with_suffix("")
             names.append(".".join(relative.parts))
+    if str(DEMO_ROOT) not in sys.path:
+        sys.path.insert(0, str(DEMO_ROOT))
     return names
 
 

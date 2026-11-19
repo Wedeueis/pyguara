@@ -142,6 +142,16 @@ do not, the corpus goes red and gets ignored. So, in order:
 2. **Still in place:** make the pixel tests discover demos through
    `demo_list` rather than importing `games.*`, so they can run against
    a checkout of another repository.
+   *Done 2026-11-19: `tools/demo_list.py` reads the demos from
+   `PYGUARA_EXAMPLES` (default `examples/`), and the capture tools, the
+   pixel and golden tests and the shader and texture scans all go through
+   it; a run against a copy outside the repository passes. Still naming a
+   demo directly, to be carried or replaced at the move:
+   `tests/studio/_harness_scenarios.py` and `_attach_scenarios.py`
+   (`guara_falcao` as the game Studio attaches to),
+   `tests/integration/test_net_demo.py` (`net_horde`'s own rules, so it
+   belongs in `examples/net_horde/tests/`), `test_audio_placeholder.py`
+   and `test_packed_assets.py` (one demo's assets each).*
 3. **At beta:** move them. The engine's CI runs `pyguara-examples` as a
    downstream job, the way Reclaimer is checked by hand today. Two or
    three compact scenes stay behind as `tests/fixtures/`, chosen to keep
@@ -222,7 +232,8 @@ otherwise send one to files that are gone.
    test docstring rules; seven design documents to
    `examples/<name>/DESIGN.md`, emptying `project/demos/`. Not yet done
    from the in-place list: the pixel tests discovering demos through
-   `demo_list` instead of importing `examples.*`.*
+   `demo_list` instead of importing `examples.*`* -- since done; see
+   the in-place list above.
 4. After PyPI: create `pyguara-examples`; tutorials to `tutorials/`,
    `docs/design_system/` to `design_system/`.
 5. At beta: capstones to `showcase/`, fixtures left behind, `project/`

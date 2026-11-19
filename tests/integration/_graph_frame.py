@@ -265,12 +265,14 @@ def storm(backend: Backend) -> Any:
 
 def chain(backend: Backend) -> Any:
     """Three effects through the stack's ping-pong buffers, then copied out."""
-    from examples.quintal_cerrado.soil_health_effect import SoilHealthEffect
     from pyguara.graphics.vfx.effects import BloomEffect, VignetteEffect
+    from tools.demo_list import demo_module
 
     return _post_process(
         backend,
-        SoilHealthEffect(health=0.2, strength=0.8),
+        demo_module("quintal_cerrado", "soil_health_effect").SoilHealthEffect(
+            health=0.2, strength=0.8
+        ),
         BloomEffect(backend.graph.fbo_manager, threshold=0.6, blur_passes=1),
         VignetteEffect(),
     )
@@ -285,12 +287,14 @@ def passthrough(backend: Backend) -> Any:
 
 def pulse(backend: Backend) -> Any:
     """`mourisco_ressonancia`'s wavefront rings, added over a lit light map."""
-    from examples.mourisco_ressonancia.pulse_pass import PulsePass, PulseRing
     from pyguara.common.types import Vector2
     from pyguara.graphics.components.camera import Camera2D
     from pyguara.graphics.pipeline.buffers import LIGHT_FBO_NAME
     from pyguara.graphics.pipeline.viewport import Viewport
+    from tools.demo_list import demo_module
 
+    pulse_pass = demo_module("mourisco_ressonancia", "pulse_pass")
+    PulsePass, PulseRing = pulse_pass.PulsePass, pulse_pass.PulseRing
     lights(backend)
     camera = Camera2D(WIDTH, HEIGHT)
     camera.position = Vector2(WIDTH / 2, HEIGHT / 2)
