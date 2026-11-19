@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-18
+
+### Changed
+- **Upgrading from 0.7.0:** the engine is one Rust core with Python as its interface (ADR 0011), and four things a game may notice change. `pip install pyguara` no longer installs pygame: install `pyguara[pygame]` for the software renderer or the pygame audio backend. The native extension is required, with no setting or environment variable that runs without it. Rapier is the only physics engine: `physics.backend: pymunk` raises `RetiredBackendError`, and Chipmunk's `physics.penetration_recovery` and `physics.sleep_time_threshold` are unknown keys. And `Vector2`'s components are always floats, and it is no longer a `tuple`, though it still equals, hashes, unpacks and indexes as `(x, y)`.
+- **Breaking: pygame is an optional extra.** `pygame-ce` is no longer a dependency. Without `pyguara[pygame]`, choosing `display.backend = "pygame"` or the pygame audio backend raises `MissingExtraError` at startup. `create_headless_application()` uses `NullInputBackend`, which reports no gamepads.
+- **Breaking: the native extension is required**, and every wheel ships it. `FlowFieldService`, `Sparks`, `ParticleSystem`, `FlockingSystem` and `SpatialHash` run in Rust only: their `accelerate=` argument and `accelerated` property are removed. `pyguara.native.status()` returns `loaded` and `source`, and Studio's `project_overview` and crash reports name the extension's location.
+- **Breaking: Rapier is the physics engine.** It covers everything the pymunk backend did, including every joint type, one-way platforms, sensors, collision events, every query, and `CharacterMover` and `TopDownSystem` moves, which run natively and end exactly where the Python loop does. Rigid-body stacks settle differently from Chipmunk's, so replays and golden frames containing them change once. See `docs/physics/simulation.md`. A `max_force` on a joint other than a motor is refused. Bootstrap logs the engine and its substep count.
+- **Breaking: `Vector2` is a native value type.** Its components are always floats, and a non-number raises `TypeError` at construction. Arithmetic is 3 to 8x faster, reading `v.x` 1.6x faster, and unpacking `x, y = v` 1.7x slower. Flocking ticks are 1.2 to 1.36x faster and the sprite batcher 1.3x. See `docs/guides/performance.md`.
+- **Breaking: `Renderable` requires `flip_x` and `flip_y`.** A game's own renderable class must define both.
+- **`SpatialHash` no longer rebuilds its grid on every write.** A loop that alternates `insert` and a query is about 20x faster at 4,000 keys.
+- **A network guest blends replicated state natively.** At 200 moving entities, replication costs 0.26 ms a frame instead of 0.68.
+- **Eight packages under `pyguara/` are regular packages** with an `__init__.py` (`common`, `graphics.backends`, `graphics.pipeline`, `physics.backends`, `audio.backends` and three below them). Imports are unchanged.
+- **The demos no longer edit `sys.path`.** They rely on the editable install, and also start as modules, `python -m games.<name>.main`.
+
+### Removed
+- **Breaking: the pymunk physics engine and the `pymunk` dependency.** `PymunkEngine`, the native static-solid mirror and `tools/preflight_pymunk_vector.py` are gone.
+- **Breaking: the native/Python store switch.** `PerformanceConfig.native_acceleration`, the `PYGUARA_NO_NATIVE` environment variable, and `pyguara.native.NativeAcceleration`, `configure`, `resolved` and `in_use`.
+- **Breaking: `pyguara.graphics.components.Particle`.** The particle pool has no per-particle objects.
+- **Breaking: `Vector2.get_length_sqrd`, `get_dist_sqrd`, `count` and `index`.** Use `length_squared` and `get_distance_squared`.
+
+### Added
+- **`pyguara.run(MyScene)`**, a whole entry point in one call. It takes a scene or a `Scene` subclass, plus the `configure`, `register_sections` and `setup` hooks. A `Scene` no longer needs a name or an event dispatcher: the name defaults to the class name, and the engine supplies the application's dispatcher.
+- **`pyguara new <name>`** creates a project that runs: one scene, an entry point on `pyguara.run()`, a `pyproject.toml`, an assets folder, and `AGENTS.md` for coding agents. `cd <name> && python -m <package>` starts it.
+- **`Application.quit()`** ends the loop once the current frame is done and dispatches `QuitEvent`. From a scene, `self.application.quit()`.
+- **A frame profiler for shipped builds.** `debug.enable_profiler`, or `Application.enable_frame_profiler()`, shows how long each phase of a frame took: wait, input, events, fixed, update and render. `profiler.stats()` gives the same as numbers.
+- **`pyguara.graphics.aseprite.load_aseprite()`** imports an Aseprite sprite sheet export as textures and one `AnimationClip` per tag, keeping direction, repeat count and each frame's duration. `AnimationClip.frame_durations` holds seconds per frame for a clip whose frames differ in length.
+- **`pyguara.graphics.primitives.draw_rects`, `draw_circles` and `draw_lines`** draw an array of primitives in one call. On wgpu, handing over 4,000 rectangles takes about 9x less time, and the frame is identical to drawing them one at a time. `PrimitiveArrayRenderer` is the capability protocol, and `WgpuRenderer` implements it.
+- **Studio: a Config panel and a `config` operation** (`get`, `set`, `save`), and **a Resources panel and a `resources` operation** (`list`, `preview`, `spawn`, `reload`), both undoable and journaled (#330). `ConfigManager.check_setting()` says why a value would be refused, and `ConfigManager.pinned_by()` names the active profile that owns a setting.
+- **`pyguara.physics.create_physics_engine(config)`** builds the engine the configuration describes, for a game's own physics worlds.
+- **`pyguara.columnar.render`**: `ColumnarSprite`, `ColumnarTransform` and `ColumnarSpriteRenderer` draw a columnar world's sprites in one native call per frame. Building a 20,000-sprite frame takes 1.7 ms, against 51 ms through the object path. This is a spike beside the ECS (ADR 0008), not wired into it.
+- **An API reference on the documentation site**, generated from the docstrings: one page per public module.
+- **`PYGUARA_WINDOW_SYSTEM=x11|wayland`** chooses the Linux window system, and the window logs which one it opened on.
+- `SpatialHash.cell_size` and `len(SpatialHash)`; `NativeGpu.pending_instance_bytes`; `pyguara.common.extras.MissingExtraError` and `require_pygame()`; `pyguara.input.backends.NullInputBackend`; `tools/frame_probe.py`, which breaks each demo's frame into phases.
+
+### Fixed
+- **`Sprite.flip_x` and `flip_y` mirror the sprite.** Before, nothing read them. A negative scale in a `RenderBatch` no longer raises on the pygame renderer, and lands in the right place on wgpu.
+- **A letterboxed game letterboxes its UI and mouse.** With `display.keep_aspect` (the default), the UI is scaled and placed with the world when the window is resized, and mouse positions reach the game in its render pixels instead of window pixels.
+- **A wgpu process no longer segfaults on exit under a software GPU driver** (#436). Closing the window waits for the GPU to finish its last frame, whether or not it draws to a surface.
+- **Closing the window from game code inside a frame no longer crashes** that frame's render on the software renderer.
+- **Under WSLg the wgpu window opens on X11**, removing the garbage band Wayland drew round the window. A missing `libxkbcommon` or `libxkbcommon-x11` is a `RuntimeError` naming the package to install, not a Rust panic.
+- **`FlockingSystem(integrate=False)` steers by the positions it was given.** It used positions the solver had advanced internally and then discarded.
+- **On Rapier, `raycast_all` reports a body with several shapes once**, at its nearest shape.
+- **Studio's Play works on a scene with physics bodies**, and a duplicated entity gets its own physics body instead of a copy of the original's.
+- **`ConfigManager.save()` no longer writes an active profile's overrides** into the config file, and Studio's `config save` works while a profile is active.
+- **`ConfigManager.update_setting()` accepts `None` only where a field is optional**, so `debug.rng_seed` can be cleared once set.
+- **`Animator.is_finished` is true for a `LOOP_TIMES` clip that has played its loops**, so a state machine waiting on `ANIMATION_END` leaves it.
+- **A `PYGUARA_<SECTION>_<FIELD>` variable naming a retired enum value is refused**, as the same value in a config file is, instead of being ignored with a warning.
+- **Log output no longer reaches `pyguara studio ops`'s protocol stream** when a logger existed before the command reserved stdout.
+
 ## [0.7.0] - 2026-11-16
 
 ### Changed

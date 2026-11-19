@@ -135,11 +135,11 @@ no statement the code contradicts.
 
 | Item | What | Size |
 | --- | --- | --- |
-| **`pyguara new <name>`** | A project that runs: `pyproject.toml`, a scene, config, an assets folder, `AGENTS.md` from `pyguara studio instructions`. No `sys.path` edits | M |
-| **A one-call entry point** | `pyguara.run(MyScene)`, with the scene's dispatcher supplied by the engine. The explicit bootstrap stays for those who want it | S |
-| **Demos as installed code** | Drop the `sys.path.append` from every `games/*/main.py`; run them as modules | S |
-| **PyPI release** | 0.6.0 is published (2026-11-01). *Next: 0.7.0 at the end of phase 2, with the merged engine; phase 6 ends in its own 0.8.0 (the user's call, 2026-11-16)* | S |
-| **Hosted docs with an API reference** | Deploy the mkdocs site; generate the reference from docstrings, which are already there | M |
+| **`pyguara new <name>`** | A project that runs: `pyproject.toml`, a scene, config, an assets folder, `AGENTS.md` from `pyguara studio instructions`. No `sys.path` edits. **Done** (#456) | M |
+| **A one-call entry point** | `pyguara.run(MyScene)`, with the scene's dispatcher supplied by the engine. The explicit bootstrap stays for those who want it. **Done** (#454, with `Application.quit()` in #453) | S |
+| **Demos as installed code** | Drop the `sys.path.append` from every `games/*/main.py`; run them as modules. **Done** (#455): no demo edits `sys.path`, and the documented script form stays, since the editable install makes both work | S |
+| **PyPI release** | 0.6.0 (2026-11-01) and 0.7.0 (2026-11-16) are published. *0.8.0 closes phase 6* | S |
+| **Hosted docs with an API reference** | Deploy the mkdocs site; generate the reference from docstrings, which are already there. **Done** (#457, deploy fixed in #451) | M |
 
 **Done when** `pip install pyguara && pyguara new demo && cd demo &&
 python -m demo` opens a window on a machine that has never seen the
@@ -149,9 +149,9 @@ repository.
 
 Each is its own issue and none blocks a release.
 
-- Aseprite import into the animation system (#37, #53).
-- Studio's config editor and resource browser (#330).
-- A frame profiler overlay that works in a shipped build.
+- Aseprite import into the animation system (#37, #53). **Done** (#462).
+- Studio's config editor and resource browser (#330). **Done** (#463, #465).
+- A frame profiler overlay that works in a shipped build. **Done** (#461).
 - The input production layer (#73) and audio production layer (#72),
   when Reclaimer's plan asks for them.
 
