@@ -14,9 +14,9 @@ os.environ["SDL_AUDIODRIVER"] = "dummy"
 import pygame
 import pytest
 
-from games.boot_process.scenes import BootScene
 from pyguara.application.application import Application
 from pyguara.application.bootstrap import create_application
+from tests.integration._scenes import ClearScene
 
 
 @pytest.fixture(autouse=True)
@@ -35,14 +35,14 @@ class _FakeClock:
         return next(self._it, 16)
 
 
-def _boot(app: Application) -> BootScene:
-    scene = BootScene(app._event_dispatcher)
+def _boot(app: Application) -> ClearScene:
+    scene = ClearScene(app._event_dispatcher)
     app._scene_manager.register(scene)
     app._scene_manager.switch_to(scene.name)
     return scene
 
 
-def _run_frames(app: Application, scene: BootScene, n: int) -> None:
+def _run_frames(app: Application, scene: ClearScene, n: int) -> None:
     """Drive `app.run()` for exactly `n` frames by stopping it from `_render`."""
     remaining = n
     real_render = app._render

@@ -2,20 +2,17 @@
 
 `_setup_container()`/`create_application()` never ran end to end before these
 fixes: the Pygame backend, then the default, crashed on the first render, the
-documented `python main.py` entry point raised before a window opened, and
-the component registry silently lost every registration.
+entry point raised before a window opened, and the component registry
+silently lost every registration.
 """
 
 import os
-import subprocess
-import sys
 
 import pygame
 import pytest
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
-from games.boot_process.scenes import BootScene
 from pyguara.application.bootstrap import (
     NoGraphicsAdapterError,
     _setup_container,
@@ -27,6 +24,7 @@ from pyguara.config.manager import ConfigManager
 from pyguara.config.types import GameConfig, RenderingBackend
 from pyguara.prefabs.registry import ComponentRegistry
 from pyguara.random.service import RandomService
+from tests.integration._scenes import ClearScene
 
 
 @pytest.fixture
@@ -177,17 +175,9 @@ def test_render_completes_without_raising_on_default_backend(app):
 
 
 @pytest.mark.integration
-def test_boot_scene_constructs_with_dispatcher_only(app):
-    """BOOT-2: `BootScene` takes only a dispatcher, matching `main.py`'s call."""
-    scene = BootScene(app._event_dispatcher)
-
-    assert scene.event_dispatcher is app._event_dispatcher
-
-
-@pytest.mark.integration
 def test_documented_entry_point_boots_and_runs(app):
-    """`python main.py` (BOOT-1 + BOOT-2 + BOOT-3 combined) starts and ticks."""
-    scene = BootScene(app._event_dispatcher)
+    """A bootstrapped application runs a scene and ticks (BOOT-1 to BOOT-3)."""
+    scene = ClearScene(app._event_dispatcher)
 
     ticks = 0
     original_update = app._update
@@ -221,28 +211,3 @@ def test_scene_manager_gets_real_window_dimensions_at_init(app):
     # this assertion would catch it.
     assert transition_manager.screen_width != 800
     assert transition_manager.screen_height != 600
-
-
-@pytest.mark.integration
-def test_main_py_starts_without_crashing():
-    """BOOT-2: `python main.py` must not raise before a window opens.
-
-    `main.py` has no built-in way to stop the loop, so we run it as a
-    subprocess and treat "still running after the timeout" as success. A
-    crash (BOOT-1/2/3 regressing) exits early with a non-zero code instead.
-    """
-    env = {**os.environ, "SDL_VIDEODRIVER": "dummy", "SDL_AUDIODRIVER": "dummy"}
-
-    proc = subprocess.Popen(
-        [sys.executable, "main.py"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        env=env,
-    )
-    try:
-        _, stderr = proc.communicate(timeout=2)
-        pytest.fail(f"main.py exited early (code {proc.returncode}):\n{stderr}")
-    except subprocess.TimeoutExpired:
-        proc.terminate()
-        proc.wait(timeout=5)

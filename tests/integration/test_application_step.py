@@ -16,9 +16,9 @@ os.environ["SDL_AUDIODRIVER"] = "dummy"
 import pygame
 import pytest
 
-from games.boot_process.scenes import BootScene
 from pyguara.application.application import Application
 from pyguara.application.bootstrap import create_headless_application
+from tests.integration._scenes import ClearScene
 
 
 @pytest.fixture(autouse=True)
@@ -32,8 +32,8 @@ def app() -> Application:
     return create_headless_application()
 
 
-def _scene(app: Application) -> BootScene:
-    return BootScene(app._event_dispatcher)
+def _scene(app: Application) -> ClearScene:
+    return ClearScene(app._event_dispatcher)
 
 
 @pytest.mark.integration

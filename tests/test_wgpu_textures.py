@@ -31,7 +31,7 @@ pytestmark = pytest.mark.skipif(extension is None, reason="extension not built")
 ROOT = Path(__file__).resolve().parent.parent
 PNGS = sorted(
     path
-    for folder in ("games", "assets")
+    for folder in ("examples", "assets")
     for path in (ROOT / folder).rglob("*.png")
     if ".agent-view" not in path.parts
 )

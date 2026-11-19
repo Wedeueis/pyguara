@@ -56,7 +56,7 @@ def _application() -> object:
 
 def _scene(app: object) -> object:
     """Build a real demo scene."""
-    from games.guara_falcao.scenes import GameScene
+    from examples.guara_falcao.scenes import GameScene
 
     return GameScene(app._event_dispatcher)  # type: ignore[attr-defined]
 

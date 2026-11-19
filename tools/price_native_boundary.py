@@ -322,7 +322,7 @@ def price_projectiles(live: int) -> Row:
     # it -- but it is a small part of the whole: see the docstring.
     pinned = full - integrate
 
-    # Not opaque: `get_active()` is public and `games/protocolo_bandeira`
+    # Not opaque: `get_active()` is public and `examples/protocolo_bandeira`
     # reads `.position`/`.velocity` off it every frame, so a native pool
     # has to rebuild the `Vector2`s it removed.
     mirrors = [Projectile(active=True) for _ in range(live)]

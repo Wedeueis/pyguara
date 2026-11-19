@@ -111,7 +111,7 @@ The mitigation is the wheel matrix itself: the platforms a PyGuara game
 actually ships on are covered, so almost nobody performs a source build.
 
 The sdist also needed trimming. maturin's default is the whole git
-checkout -- **1156 files**, including `assets/`, `games/`, `docs/`,
+checkout -- **1156 files**, including `assets/`, `examples/`, `docs/`,
 `tests/` and two agent scratch directories, where hatchling shipped 404.
 `[tool.maturin] exclude` brings it to 414: the package, the crate,
 `Cargo.toml`, `Cargo.lock`, `pyproject.toml`, the readme, the licence and

@@ -89,7 +89,7 @@ material batches with its original.
 | --- | --- | --- | --- |
 | `pyguara/` | Yes | `DS001` to `DS007` | `DS002`, `DS004`, `DS005` |
 | `tests/` | No | `DS001` and `DS003`. A regression test may name its issue and tell the bug's story, briefly | No |
-| `games/`, `tools/` | No | No | No |
+| `examples/`, `tools/` | No | No | No |
 
 ## Comments
 

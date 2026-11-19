@@ -3,7 +3,7 @@
 Genre-specific to squad/pack-tactics games, not any one animal or demo:
 role tagging, group commands, threat/retreat bookkeeping, and per-member
 flanking-vector assignment, all read/write helpers over a shared
-`pyguara.ai.blackboard.Blackboard`. `games/vinagre_matilha` is this kit's
+`pyguara.ai.blackboard.Blackboard`. `examples/vinagre_matilha` is this kit's
 first consumer.
 """
 

@@ -17,8 +17,8 @@ from pyguara.studio.agent.harness import open_headless
 
 def _open(out_dir: Path):
     """Open a harness over the Guará Falcão demo."""
-    from games.guara_falcao.bootstrap import configure_game_container
-    from games.guara_falcao.scenes import GameScene
+    from examples.guara_falcao.bootstrap import configure_game_container
+    from examples.guara_falcao.scenes import GameScene
 
     return open_headless(
         GameScene,

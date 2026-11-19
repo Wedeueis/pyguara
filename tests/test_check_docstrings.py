@@ -134,22 +134,31 @@ def test_a_key_does_not_move_when_lines_do() -> None:
 def _tree(tmp_path: Path) -> Path:
     (tmp_path / "pyguara").mkdir()
     (tmp_path / "tests").mkdir()
-    (tmp_path / "games").mkdir()
+    (tmp_path / "examples" / "demo" / "tests").mkdir(parents=True)
     story = '"""Summary.\n\nThis used to be **slow** (#46).\n"""\n'
-    for name in ("pyguara", "tests", "games"):
+    for name in ("pyguara", "tests", "examples/demo", "examples/demo/tests"):
         (tmp_path / name / "mod.py").write_text(story, encoding="utf-8")
     return tmp_path
 
 
-def test_tests_get_length_and_emphasis_only_and_games_nothing(tmp_path: Path) -> None:
+def test_tests_get_length_and_emphasis_only_and_examples_nothing(
+    tmp_path: Path,
+) -> None:
     root = _tree(tmp_path)
-    findings = check.check_paths([Path("pyguara"), Path("tests"), Path("games")], root)
-    assert [(f.path, f.rule) for f in findings] == [
+    findings = check.check_paths(
+        [Path("pyguara"), Path("tests"), Path("examples")], root
+    )
+    assert sorted((f.path, f.rule) for f in findings) == [
+        ("examples/demo/tests/mod.py", "DS003"),
         ("pyguara/mod.py", "DS002"),
         ("pyguara/mod.py", "DS003"),
         ("pyguara/mod.py", "DS004"),
         ("tests/mod.py", "DS003"),
     ]
+
+
+def test_a_whole_tree_run_reaches_an_examples_tests_folder() -> None:
+    assert Path("examples") in check.DEFAULT_PATHS
 
 
 @pytest.fixture
@@ -199,7 +208,10 @@ def test_a_fixed_docstring_left_in_the_baseline_fails_until_pruned(
     assert "matches nothing; remove it" in capsys.readouterr().out
 
     assert check.main(["--prune-baseline"]) == 0
-    assert check.read_keys(check.BASELINE_PATH) == {"DS003 tests/mod.py <module>"}
+    assert check.read_keys(check.BASELINE_PATH) == {
+        "DS003 tests/mod.py <module>",
+        "DS003 examples/demo/tests/mod.py <module>",
+    }
     assert check.main([]) == 0
 
 

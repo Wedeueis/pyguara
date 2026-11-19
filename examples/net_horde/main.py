@@ -1,0 +1,58 @@
+"""Net Horde: see replication running.
+
+    uv run python examples/net_horde/main.py                      # both sides, one window
+    uv run python examples/net_horde/main.py --host               # first window
+    uv run python examples/net_horde/main.py --join "pyguara://"  # second window
+
+The host simulates everything. A client draws what arrives, about 100 ms behind, except
+its own character, which it runs at once. WASD or the arrows steer. To feel a worse link:
+
+    uv run python examples/net_horde/main.py --latency-ms 100 --loss 0.05
+"""
+
+from __future__ import annotations
+
+import argparse
+
+from examples.net_horde.bootstrap import configure_game_container
+from examples.net_horde.scenes import HostScene, JoinScene, SideBySideScene
+from pyguara.application.application import Application
+from pyguara.events.dispatcher import EventDispatcher
+
+
+def main() -> None:
+    """Parse the command line and run."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--host", action="store_true", help="host over a real socket")
+    parser.add_argument("--join", metavar="INVITE", help="join using an invite")
+    parser.add_argument("--port", type=int, default=7777)
+    parser.add_argument(
+        "--public-host",
+        default="127.0.0.1",
+        help="the address other machines reach this one at",
+    )
+    parser.add_argument(
+        "--latency-ms",
+        type=float,
+        default=50.0,
+        help="one-window mode: simulated delay each way",
+    )
+    parser.add_argument(
+        "--loss", type=float, default=0.02, help="one-window mode: packets lost, 0 to 1"
+    )
+    args = parser.parse_args()
+
+    container = configure_game_container()
+    app = container.get(Application)
+    dispatcher = container.get(EventDispatcher)
+    if args.host:
+        scene = HostScene(dispatcher, args.port, args.public_host)
+    elif args.join:
+        scene = JoinScene(dispatcher, args.join)
+    else:
+        scene = SideBySideScene(dispatcher, args.latency_ms / 1000, args.loss)
+    app.run(starting_scene=scene)
+
+
+if __name__ == "__main__":
+    main()

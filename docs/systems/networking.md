@@ -146,9 +146,9 @@ app.add_step_hook(ClientDriver(session, replication, on_event=handle_game_messag
 Run nothing that simulates on a client: no AI, flocking or spawning. To see all of this running:
 
 ```bash
-uv run python games/net_horde/main.py                      # both sides, one window
-uv run python games/net_horde/main.py --host               # one window
-uv run python games/net_horde/main.py --join "pyguara://"  # the other
+uv run python examples/net_horde/main.py                      # both sides, one window
+uv run python examples/net_horde/main.py --host               # one window
+uv run python examples/net_horde/main.py --join "pyguara://"  # the other
 ```
 
 Things that will catch you out:
@@ -377,7 +377,7 @@ Over 30 seconds of walking and hitting walls, with five seeds, after the first 3
 | 160 ms, 30 ms jitter, 20% loss | 0 | 2-6 | 10-12 ticks |
 
 A simulated network proves the logic. **Whether it feels immediate has to be judged by a person**,
-which is what `games/net_horde` is for.
+which is what `examples/net_horde` is for.
 
 ## Everything from the network is untrusted
 

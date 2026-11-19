@@ -6,7 +6,7 @@
 ## Context
 
 Game code had no single way to reach a service. Scenes called
-`self.container.get(T)` 173 times in `games/`, and 118 of those asked for one
+`self.container.get(T)` 173 times in `examples/`, and 118 of those asked for one
 of five services: `UIManager` (35), `SceneManager` (33), `Application` (24),
 `EventDispatcher` (16) and `InputManager` (10). The repository's own
 `main.py` read the private `app._container`, although `Application.container`
@@ -34,17 +34,17 @@ code asks, which is what this ADR settles, ahead of the rest.
 5. **`Application.container` is the public way in from outside a scene.**
    Nothing in the repository reads `app._container`.
 
-The demos in `games/` use the accessors throughout.
+The demos in `examples/` use the accessors throughout.
 
 ## Consequences
 
 - No breaking change. `self.container.get(UIManager)` still works; the
   accessor is the documented spelling.
-- 86 lookups in `games/` became attribute reads, and the scene code they sit
+- 86 lookups in `examples/` became attribute reads, and the scene code they sit
   in names its dependency by type annotation, so an IDE completes it.
 - A scene subclass that defines its own attribute named `application`,
   `scene_manager`, `ui_manager` or `input_manager` now collides with a
-  read-only property. None in `games/` or Reclaimer does.
+  read-only property. None in `examples/` or Reclaimer does.
 - The scene constructor still took the event dispatcher when this was
   accepted. It is optional now: the engine supplies the application's own
   in `resolve_dependencies()`, which is what `pyguara.run(MyScene)` needs.

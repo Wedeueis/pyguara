@@ -2,7 +2,7 @@
 
 How to lay out a game built on PyGuara. The engine does not enforce any of
 this, and there is no project scaffold command yet; this is the shape the
-demos under `games/` use, and it separates the three things an ECS game is
+demos under `examples/` use, and it separates the three things an ECS game is
 made of: **data** (components), **logic** (systems) and **composition**
 (scenes and prefabs).
 

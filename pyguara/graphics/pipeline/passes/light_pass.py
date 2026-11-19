@@ -119,7 +119,7 @@ class LightPass(BaseRenderPass):
     2. Renders each light as a radial gradient quad
     3. Uses additive blending so overlapping lights combine
 
-    `games/mourisco_ressonancia/pulse_pass.py` copies the shape of this
+    `examples/mourisco_ressonancia/pulse_pass.py` copies the shape of this
     pass but is not bound to it: it draws its own rings into the same
     light map, additively.
     """

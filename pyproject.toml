@@ -161,8 +161,7 @@ exclude = [
     "assets/**",
     "config/**",
     "docs/**",
-    "games/**",
-    "main.py",
+    "examples/**",
     "mkdocs.yml",
     "project/**",
     "tests/**",
@@ -179,7 +178,7 @@ addopts = [
     "--strict-config",
     "--snapshot-warn-unused"
 ]
-testpaths = ["tests"]
+testpaths = ["tests", "examples"]
 # Exclude deprecated test directories
 norecursedirs = [
     "deprecated_tests",
@@ -212,7 +211,7 @@ markers = [
 # this repository is the engine.
 # No content inventory here. This repository is the engine, not a game: it
 # has no scenes or prefabs to list, and the asset counts would change with
-# every image added anywhere in `games/` or `docs/`, churning AGENTS.md for
+# every image added anywhere in `examples/` or `docs/`, churning AGENTS.md for
 # no gain. A game project leaves this on.
 inventory = false
 
@@ -221,7 +220,7 @@ PyGuara is a code-first 2D game engine for Python 3.12+: an \
 Entity-Component-System core with inverted-index queries, a \
 reflection-based dependency-injection container, an event bus, and \
 backend-agnostic rendering over pygame-ce and wgpu. This repository is \
-the engine itself, not a game built on it -- `games/` holds the demos and \
+the engine itself, not a game built on it -- `examples/` holds the demos and \
 tutorials."""
 
 [tool.ruff]
@@ -312,11 +311,11 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 # Docstring rules cover the engine package only, which is exactly the scope
 # the standalone pydocstyle hook had (`files: ^pyguara/.*\.py$`). Selecting
-# `D` globally would newly fail 3,429 findings across tests/, games/ and
+# `D` globally would newly fail 3,429 findings across tests/, examples/ and
 # tools/ -- widening the standard, which is a separate decision from
 # swapping which tool enforces it.
 "tests/**" = ["D", "DOC"]
-"games/**" = ["D", "DOC"]
+"examples/**" = ["D", "DOC"]
 "tools/**" = ["D", "DOC"]
 "main.py" = ["D", "DOC"]
 

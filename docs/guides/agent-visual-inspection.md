@@ -255,7 +255,7 @@ engine for a WSLg display fault.
 Add one line to `DEMOS` in `tools/agent_view.py`:
 
 ```python
-"my_demo": ("games.my_demo.bootstrap", "games.my_demo.scenes", "MyScene"),
+"my_demo": ("examples.my_demo.bootstrap", "examples.my_demo.scenes", "MyScene"),
 ```
 
 The registry is explicit rather than discovered, so a broken demo names itself
@@ -263,7 +263,7 @@ instead of failing during discovery.
 
 ## Related
 
-- `games/validate_demos.py` — boots four capstone demos for 30 frames each and
+- `examples/validate_demos.py` — boots four capstone demos for 30 frames each and
   reports pass/fail. Faster than this tool when you only need "does it crash".
 - Issue #19 — GPU-dependent graphics code (framebuffers, passes, materials,
   effects) has no headless coverage. This tool exercises the pygame path only.

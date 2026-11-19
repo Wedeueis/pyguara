@@ -24,8 +24,10 @@ pre-commit-install: ## Install git hooks
 	uv run pre-commit install
 
 # --- Development ---
-run:  ## Run the main game
-	uv run main.py
+DEMO ?= guara_falcao
+
+run:  ## Run a demo: make run DEMO=guara_falcao
+	uv run python -m games.$(DEMO).main
 
 version:  ## Show current version
 	uv run python -c "from pyguara import __version__; print(__version__)"
@@ -46,7 +48,7 @@ test:  ## Run standard tests (skips slow/perf)
 	uv run pytest $(PARALLEL) -m "not performance and not slow"
 
 test-unit:  ## Run fast unit tests
-	uv run pytest $(PARALLEL) tests/ -m "not slow and not integration"
+	uv run pytest $(PARALLEL) tests/ examples/ -m "not slow and not integration"
 
 perf-guard:  ## Run the complexity-class guards (cheap; no wall-clock asserts)
 	uv run pytest -m "performance and not slow" --no-cov

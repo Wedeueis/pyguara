@@ -6,7 +6,7 @@ audio driver writes the mixed output stream to a file instead of handing it
 to a device, so what the mixer produced can be measured the way
 `tools/agent_view.py` measures frames.
 
-    uv run python tools/audio_capture.py --asset games/quintal_cerrado/assets/audio/seed.wav
+    uv run python tools/audio_capture.py --asset examples/quintal_cerrado/assets/audio/seed.wav
     uv run python tools/audio_capture.py --asset <path> --wav
     uv run python tools/audio_capture.py --seam --laps 5
 

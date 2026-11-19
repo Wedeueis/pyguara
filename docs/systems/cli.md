@@ -69,11 +69,11 @@ Compiles an entry script and its assets into a distributable bundle.
 
 ```bash
 # onedir bundle (default) into dist/
-pyguara build games/guara_falcao/main.py --output dist/guara_falcao
+pyguara build examples/guara_falcao/main.py --output dist/guara_falcao
 
 # one self-contained file, custom name and icon
-pyguara build games/true_coral/main.py --onefile --name TrueCoral \
-    --icon games/true_coral/assets/icon.ico
+pyguara build examples/true_coral/main.py --onefile --name TrueCoral \
+    --icon examples/true_coral/assets/icon.ico
 ```
 
 ### How it runs

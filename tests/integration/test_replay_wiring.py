@@ -18,7 +18,6 @@ os.environ["SDL_AUDIODRIVER"] = "dummy"
 import pygame
 import pytest
 
-from games.boot_process.scenes import BootScene
 from pyguara.application.application import Application
 from pyguara.application.bootstrap import create_application
 from pyguara.common.components import Transform
@@ -28,6 +27,7 @@ from pyguara.events.input import KeyDownEvent, KeyUpEvent
 from pyguara.input import keys as key_codes
 from pyguara.input.events import OnActionEvent
 from pyguara.input.types import ActionType, InputContext, InputDevice
+from tests.integration._scenes import ClearScene
 
 MOVE_KEY = key_codes.D
 MOVE_STEP = 10.0
@@ -73,8 +73,8 @@ def _wire_move_right(app: Application, entity: Entity) -> None:
     )
 
 
-def _boot(app: Application) -> BootScene:
-    scene = BootScene(app._event_dispatcher)
+def _boot(app: Application) -> ClearScene:
+    scene = ClearScene(app._event_dispatcher)
     app._scene_manager.register(scene)
     app._scene_manager.switch_to(scene.name)
     return scene
@@ -96,7 +96,7 @@ class _FakeClock:
         return next(self._it, 16)
 
 
-def _run_frames(app: Application, scene: BootScene, n: int) -> None:
+def _run_frames(app: Application, scene: ClearScene, n: int) -> None:
     """Drive `app.run()` for exactly `n` frames by stopping it from `_render`."""
     remaining = n
     real_render = app._render

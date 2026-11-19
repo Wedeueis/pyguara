@@ -16,7 +16,7 @@ from pyguara.audio import placeholder as ph
 from pyguara.audio.placeholder import RecipeError, build_placeholder, build_placeholders
 from pyguara.cli import main as cli
 
-DEMO_AUDIO = Path(__file__).parent.parent / "games/quintal_cerrado/assets/audio"
+DEMO_AUDIO = Path(__file__).parent.parent / "examples/quintal_cerrado/assets/audio"
 
 HIT = {
     "envelope": {
