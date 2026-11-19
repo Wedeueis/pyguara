@@ -242,3 +242,19 @@ collection, only in some orders, is this until shown otherwise.
 See `docs/adr/0003-native-core-spike.md` for why this is an accelerator
 rather than a rewrite, and `0006-shipping-the-native-extension.md` for why
 it ships in the wheel and what that costs.
+
+**Unsafe code says why it is sound.** The crate denies
+`unsafe_op_in_unsafe_fn` and warns on `clippy::undocumented_unsafe_blocks`;
+`make lint-rust`, run in CI, makes the second an error. Each `unsafe` block
+and `unsafe impl` carries a `// SAFETY:` comment naming the invariant it
+relies on. Most of the crate's `unsafe` is in two places:
+
+- `steam.rs` reads structs Steam hands back, some of whose contents another
+  player wrote. Every layout it reads is checked against the Steamworks
+  headers by `tools/steam_offsets.cpp`, and
+  `tests/test_native_steam_hostile.py` loads a stand-in `steam_api`
+  (`tests/fakes/fake_steam_api.c`) that returns short callbacks,
+  unterminated strings, nulls and a message count past the buffer. A new
+  callback or accessor gets a case there.
+- `mixer.rs` shares its state with the audio thread only through one
+  `Mutex`, and the ALSA handle is owned by one thread at a time.

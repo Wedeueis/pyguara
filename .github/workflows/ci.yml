@@ -66,6 +66,8 @@ jobs:
       # cache is what keeps that from costing a minute each time.
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - uses: Swatinem/rust-cache@v2
 
@@ -85,6 +87,9 @@ jobs:
 
       - name: Linting (Ruff)
         run: make lint
+
+      - name: Unsafe blocks say why (Clippy)
+        run: make lint-rust
 
       - name: Type Checking (Mypy)
         run: make type-check

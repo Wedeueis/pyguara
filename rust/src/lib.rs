@@ -56,6 +56,11 @@
 //! that seed, so drawing in Rust would stop a recording reproducing), and
 //! any Python object a slot refers to, such as a texture.
 
+// Every unsafe operation sits in its own `unsafe` block, and each block and
+// `unsafe impl` says which invariant makes it sound (`make lint-rust`).
+#![deny(unsafe_op_in_unsafe_fn)]
+#![warn(clippy::undocumented_unsafe_blocks)]
+
 use pyo3::prelude::*;
 
 mod audio;

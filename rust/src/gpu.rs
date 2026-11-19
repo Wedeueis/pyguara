@@ -249,9 +249,10 @@ fn fragment(in: Varying) -> @location(0) vec4<f32> {
 #[derive(Debug)]
 struct Display(wgpu::rwh::RawDisplayHandle);
 
-// The handle is a pointer the windowing system owns for the life of the
-// window. It is only ever read, and only from the thread that drew.
+// SAFETY: the handle is a pointer the windowing system owns for the life of
+// the window. It is only ever read, and only from the thread that drew.
 unsafe impl Send for Display {}
+// SAFETY: as `Send`: shared references only read the handle.
 unsafe impl Sync for Display {}
 
 impl wgpu::rwh::HasDisplayHandle for Display {
