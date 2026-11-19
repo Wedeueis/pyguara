@@ -1,0 +1,12 @@
+/* Hard offset shadows only — no blur in game surfaces. Pixel art reads as
+   stamped, not floating. The engine's retro preset is offset 4/4, blur 0. */
+:root{
+--shadow-none:none;
+--shadow-stamp:2px 2px 0 var(--shadow-color);
+--shadow-stamp-lg:4px 4px 0 var(--shadow-color);
+--shadow-inset-top:inset 0 2px 0 rgba(255,255,255,.18);
+--shadow-inset-bottom:inset 0 -2px 0 rgba(0,0,0,.35);
+--shadow-bevel:inset 0 2px 0 rgba(255,255,255,.18),inset 0 -2px 0 rgba(0,0,0,.35);
+--shadow-panel:0 2px 0 rgba(0,0,0,.45);
+--shadow-glow-focus:0 0 0 2px var(--focus-ring);
+}

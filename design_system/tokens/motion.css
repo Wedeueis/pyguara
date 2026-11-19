@@ -1,0 +1,17 @@
+/* The engine ships an easing library (pyguara/animation/easing.py) and a
+   tween system. UI motion is short and stepped — nothing eases for long. */
+:root{
+--dur-instant:60ms; /* @kind other */
+--dur-fast:120ms; /* @kind other */
+--dur-normal:200ms; /* @kind other */
+--dur-slow:320ms; /* @kind other */
+--dur-scene:500ms; /* @kind other */
+
+--ease-linear:linear; /* @kind other */
+--ease-out-quad:cubic-bezier(.5,1,.89,1); /* @kind other */
+--ease-in-out-quad:cubic-bezier(.45,0,.55,1); /* @kind other */
+--ease-out-back:cubic-bezier(.34,1.56,.64,1); /* @kind other */
+--ease-steps:steps(4,end); /* @kind other */
+
+--anim-sprite-fps:12; /* @kind other */
+}

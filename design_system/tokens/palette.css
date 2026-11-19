@@ -1,0 +1,98 @@
+/* Raw brand palette. Hexes sampled from the current key art
+   (uploads/Gemini_Generated_Image_5sk5055sk5055sk5.png — the solarpunk
+   revision; lossless PNG, so these are exact). Do not alias these directly in
+   product code — use tokens/semantic.css. */
+:root{
+/* --- Guara (the mane wolf: the hero, the brand primary) --- */
+--guara-500:#e2621f;
+--guara-600:#b94a15;
+--guara-700:#8a3512;
+--guara-400:#ec7225;
+--guara-300:#eba666;
+--guara-mane:#331a1e;
+--guara-cream:#fccc85;
+
+/* --- Cerrado light (the amber sky is the system's dominant value) --- */
+--sand-100:#fdecbe;
+--sand-200:#fde3a9;
+--sand-300:#fad373;
+--sand-400:#fac375;
+--sand-500:#dfa33f;
+--rock-400:#ca693e;
+--rock-500:#b5674a;
+--rock-600:#944639;
+
+/* --- Worked wood (carved, oiled, Art Nouveau joinery) --- */
+--wood-400:#bb6c3e;
+--wood-500:#8c5135;
+--wood-600:#64352b;
+--wood-700:#3b1c14;
+
+/* --- Vegetation & fruit --- */
+--verde-300:#c2cd8a;
+--verde-500:#8ab332;
+--verde-600:#597e3a;
+--lime-500:#9cbc53;
+--gold-500:#e4b509;
+
+/* --- Verdant core (sage & colonial green: the mechanism kept alive, not
+   rusting. This is the system's only cool-neutral ramp, and it is a plant
+   colour, not a machine colour.) --- */
+--sage-100:#dfe6cf;
+--sage-200:#c6d1b0;
+--sage-300:#a7b98d;
+--sage-400:#869a6a;
+--sage-500:#656d49;
+--sage-600:#475132;
+--colonial-400:#4c835c;
+--colonial-500:#3f6b4c;
+--colonial-600:#334e40;
+--colonial-700:#24382e;
+
+/* --- Warm earth accents (worked clay, not corrosion) --- */
+--ochre-500:#966c53;
+--terra-500:#8e5a30;
+
+/* --- Roxo (ipe-roxo: the Cerrado's purple flowering season, and the colour
+   dusk actually goes. Used as the dark theme's ground tint and cool accent.) --- */
+--roxo-300:#c39ad6;
+--roxo-400:#9a6bbf;
+--roxo-500:#7a4c9e;
+--roxo-600:#5a3576;
+--roxo-700:#3c2452;
+--roxo-900:#241531;
+
+/* --- Water & leaf-glass (the cool light in the world: spouts, basins, the
+   solar leaf panels) --- */
+--water-300:#8fd3d2;
+--water-400:#64b5ae;
+--water-500:#4a8c9e;
+--water-600:#38707f;
+--glass-500:#44756a;
+
+/* --- Falcao (the companion falcon: slate) --- */
+--falcao-400:#7c7b86;
+--falcao-500:#5c5b62;
+--falcao-600:#413f48;
+
+/* --- Sky (amber, not blue: the art's sky is late light) --- */
+--sky-300:#fdecbe;
+--sky-400:#fad373;
+--sky-500:#fac375;
+
+/* --- Ink (outlines are dark brown, never pure black) --- */
+--ink-900:#1e120c;
+--ink-800:#2b1810;
+--ink-700:#3b1c14;
+--ink-600:#44221a;
+
+/* --- Engine debug colors, verbatim from pyguara/common/palette.py --- */
+--dbg-collider-active:rgba(0,255,0,.588);
+--dbg-collider-sleeping:rgba(128,128,128,.588);
+--dbg-collider-contact:rgba(255,0,0,.706);
+--dbg-raycast:#ffff00;
+--dbg-pathfinding:rgba(0,255,255,.392);
+--dbg-ui-border:#ff00ff;
+--dbg-fps-ok:#64ff64;
+--dbg-fps-bad:#ff3232;
+}

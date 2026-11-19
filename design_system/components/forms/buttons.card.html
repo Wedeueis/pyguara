@@ -1,0 +1,23 @@
+<!-- @dsCard group="Components" viewport="700x300" name="Buttons" subtitle="Five skins, three sizes, disabled and focused states" -->
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Buttons<\/title>
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js"><\/script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"><\/script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"><\/script>
+<script src="../../_ds_bundle.js"><\/script>
+<style>html,body{margin:0}body{background:var(--surface-page);color:var(--text-body);font-family:var(--font-body);padding:16px}.row{display:flex;flex-wrap:wrap;align-items:center;gap:16px}.col{display:flex;flex-direction:column;gap:10px}.cap{font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint)}a{color:var(--text-link)}a:hover{color:var(--text-link-hover)}<\/style><\/head><body><div id="root"><\/div>
+<script type="text/babel">
+const { Button } = window.PyguaraDesignSystem_ca79d7;
+const Card = () => (<div className="col" style={{gap:18}}>
+  <div><div className="cap">Skins<\/div><div className="row" style={{marginTop:8}}>
+    <Button text="Play" /><Button text="Options" variant="secondary" /><Button text="Quit" variant="wood" /><Button text="Hover" variant="sage" /><Button text="Cancel" variant="ghost" />
+  <\/div><\/div>
+  <div><div className="cap">Sizes — 30 / 40 / 52<\/div><div className="row" style={{marginTop:8}}>
+    <Button text="Small" size="small" variant="sage" /><Button text="Normal" variant="sage" /><Button text="Large" size="large" variant="sage" />
+  <\/div><\/div>
+  <div><div className="cap">States<\/div><div className="row" style={{marginTop:8}}>
+    <Button text="Normal" /><Button text="Focused" focused /><Button text="Disabled" disabled /><Button text="Flat" bevel={false} variant="wood" />
+  <\/div><\/div>
+<\/div>);
+ReactDOM.createRoot(document.getElementById('root')).render(<Card />);
+<\/script><\/body><\/html>

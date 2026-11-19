@@ -1,0 +1,17 @@
+/* Pixel art has no antialiased curves. Radius is 0 almost everywhere;
+   the engine's own dark preset sets radius 0 and the light preset radius 4. */
+:root{
+--radius-0:0;
+--radius-1:2px;
+--radius-2:4px;
+--radius-3:8px;
+--radius-pill:999px;
+
+--border-1:1px;
+--border-2:2px;
+--border-3:3px;
+
+--border-hairline:1px solid var(--edge);
+--border-frame:2px solid var(--edge-strong);
+--border-chunky:3px solid var(--ink-900);
+}

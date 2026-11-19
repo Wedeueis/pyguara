@@ -1,0 +1,11 @@
+@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&family=Pixelify+Sans:wght@400..700&family=JetBrains+Mono:wght@400;500;700&display=swap");
+/* SUBSTITUTION NOTICE — the source art uses hand-drawn pixel lettering, not a font file.
+   These four Google families are the closest matches and are flagged in readme.md.
+   Replace with real .ttf/.woff2 files + @font-face rules here when available. */
+:root{
+--font-display:"Press Start 2P",monospace;
+--font-pixel:"Silkscreen","Press Start 2P",monospace;
+--font-body:"Pixelify Sans",system-ui,sans-serif;
+--font-mono:"JetBrains Mono",ui-monospace,monospace;
+--font-engine-default:Arial,Helvetica,system-ui,sans-serif;
+}
