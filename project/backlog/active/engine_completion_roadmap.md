@@ -58,6 +58,10 @@ Every finding from the evaluation, and the phase that answers it.
 | pygame and pymunk are required dependencies; `Vector2` is a `pymunk.Vec2d`, so every position depends on a physics library | coherence | 6 |
 | DI offers three lifetimes and scopes for what is mostly singleton lookup | overbuilt | 6 |
 | About half the non-blank lines in `pyguara/` are docstrings and comments; `REFACTOR_STATE.md` is 4,080 lines | overbuilt | 6 |
+| `steam.rs` (71 `unsafe`) and `mixer.rs` (18) have had no focused review; Steam callbacks are network-reachable | shipping | 7 |
+| No GPU in a windowed build: `NoGraphicsAdapterError` is reported on stderr, which a windowed build lacks, so the player sees nothing | shipping | 7 |
+| A built game probably bundles `pyguara/studio/` through a lazy import in `application.py` | shipping | 7 |
+| The offscreen-to-swapchain copy and Rapier's 4 substeps (a pymunk-era default) are unmeasured on low-end GPUs | performance | 7 |
 | Desktop only: no web, mobile or console | ceiling | not planned |
 | One maintainer | risk | not planned |
 
@@ -235,6 +239,29 @@ against the Python interface before phase 6 still runs.
    above.
 2. **Process history** (`REFACTOR_STATE.md` and the rest): see
    `repo_cleanup_plan.md`.
+
+### Phase 7. Hardening before launch
+
+From an external review of 0.8.0 on 2026-11-18, checked against the code
+the same day. What it raised that this roadmap already answers is left
+where it was: #402 (its checklist now names relay traversal and recovery
+under packet loss), columnar components (6g, postponed), the desktop
+ceiling, and API stability, which waits for a team outside the project.
+
+| Item | What | Size |
+| --- | --- | --- |
+| **Unsafe audit** ([#503](https://github.com/Wedeueis/pyguara/issues/503)) | Every `unsafe` block in `steam.rs` and `mixer.rs` documented and checked; Steam-sourced lengths and layouts bounds-checked, each finding a hostile-input test first | M |
+| **No-GPU message** ([#504](https://github.com/Wedeueis/pyguara/issues/504)) | A native dialog when a windowed build dies at startup, and one supported way for a game to opt in to the software renderer. The engine still never falls back on its own | M |
+| **Studio out of builds** ([#505](https://github.com/Wedeueis/pyguara/issues/505)) | `pyguara build` excludes `pyguara.studio` by default; the runtime survives its absence | S |
+| **Two measurements** ([#506](https://github.com/Wedeueis/pyguara/issues/506)) | The swapchain copy's cost per frame, and physics at 1, 2 and 4 substeps. Change either only on the numbers | S |
+
+**Large files** are split when work next touches them, not on their own:
+`gpu.rs` with the swapchain item, `bootstrap.py`'s `_setup_container`
+with ADR 0010, `studio/ops/builtin.py` by operation domain whenever it is
+convenient.
+
+**Done when** the four issues are closed, and a build on a machine with
+no usable GPU says why it cannot start.
 
 ## What is not in this roadmap
 
