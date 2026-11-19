@@ -241,3 +241,34 @@ def test_cli_build_dry_run_auto_detects_assets(tmp_path):
     assert "Auto-detected assets folder" in result.output
     assert "--add-data" in result.output
     assert str((tmp_path / "assets").resolve()) in result.output
+
+
+def _default_args(tmp_path, **overrides):
+    kwargs = dict(
+        entry_point=tmp_path / "main.py",
+        output_dir=tmp_path / "dist",
+        name=None,
+        onefile=False,
+        windowed=True,
+        icon=None,
+        assets_dirs=[],
+        extra_data=[],
+        hidden_imports=[],
+        clean=False,
+        debug=False,
+    )
+    kwargs.update(overrides)
+    return _build_pyinstaller_args(**kwargs)
+
+
+def test_studio_is_excluded_by_default(tmp_path):
+    """A shipped game does not carry the editor."""
+    args = _default_args(tmp_path)
+    i = args.index("--exclude-module")
+    assert args[i + 1] == "pyguara.studio"
+
+
+def test_studio_is_kept_when_asked(tmp_path):
+    """A build that wants the editor in it can keep it."""
+    args = _default_args(tmp_path, include_studio=True)
+    assert "pyguara.studio" not in args
