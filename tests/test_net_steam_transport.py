@@ -337,3 +337,18 @@ def test_shutting_down_leaves_the_lobby_so_the_host_drops_the_player() -> None:
     run(clock, host, seconds=0.2)
 
     assert len(of(PlayerLeft, host.events)) == 1
+
+
+@pytest.mark.parametrize(
+    ("language", "locale"),
+    [("german", "de"), ("schinese", "zh-Hans"), ("klingon", None), (None, None)],
+)
+def test_the_game_locale_is_what_the_player_chose_in_steam(
+    language: str | None, locale: str | None
+) -> None:
+    from pyguara.net.steam import SteamNetwork
+
+    cloud = SimulatedSteamCloud()
+    network = SteamNetwork(cloud.add_player(1001, game_language=language))
+
+    assert network.game_locale == locale

@@ -89,14 +89,20 @@ The locale asked for is narrowed to the closest one there is a file for:
 an exact match, then (for Chinese) the same script, then the same language
 in another region (`pt-PT` gets `pt-BR`), and otherwise the source.
 
-A game on Steam should use the language the player chose there:
+A game on Steam should use the language the player chose there for it,
+which Steam knows once it is open. Startup has already chosen from
+`locale` or the system's; switch after opening Steam, unless the player
+picked a language in the game's own settings:
 
 ```python
-from pyguara.i18n import best_locale, locale_from_steam
-
-steam_locale = locale_from_steam(steam_language)        # "schinese" -> "zh-Hans"
-translator.locale = best_locale(steam_locale or "", translator.available, source="en")
+network = SteamNetwork.open()
+if not config.i18n.locale and network.game_locale is not None:
+    translator.choose(network.game_locale)        # "schinese" -> "zh-Hans"
 ```
+
+`game_locale` is None when Steam does not say, or names a language with no
+locale. `Translator.choose` narrows a locale as startup does and switches
+to it, so a settings menu can use it too.
 
 Setting `translator.locale` while the game runs dispatches `LocaleChanged`;
 a screen built from keys rebuilds its text when it hears it. Case changes

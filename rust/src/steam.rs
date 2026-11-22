@@ -146,6 +146,8 @@ struct Api {
     set_rich_presence: unsafe extern "C" fn(Interface, *const c_char, *const c_char) -> bool,
     clear_rich_presence: unsafe extern "C" fn(Interface),
     invite_dialog: unsafe extern "C" fn(Interface, u64),
+    apps: unsafe extern "C" fn() -> Interface,
+    game_language: unsafe extern "C" fn(Interface) -> *const c_char,
 }
 
 impl Api {
@@ -197,6 +199,8 @@ impl Api {
                 set_rich_presence: symbol!(b"SteamAPI_ISteamFriends_SetRichPresence\0"),
                 clear_rich_presence: symbol!(b"SteamAPI_ISteamFriends_ClearRichPresence\0"),
                 invite_dialog: symbol!(b"SteamAPI_ISteamFriends_ActivateGameOverlayInviteDialog\0"),
+                apps: symbol!(b"SteamAPI_SteamApps_v009\0"),
+                game_language: symbol!(b"SteamAPI_ISteamApps_GetCurrentGameLanguage\0"),
                 _library: library,
             })
         }
@@ -303,6 +307,8 @@ pub struct NativeSteam {
     friends: Interface,
     matchmaking: Interface,
     utils: Interface,
+    /// Null if this steam_api has none: only the game language needs it.
+    apps: Interface,
     steam_id: u64,
     pending: RefCell<Vec<(u64, Pending)>>,
 }
@@ -452,10 +458,21 @@ impl NativeSteam {
                 unsafe { (api.shutdown)() };
                 return Err("this steam_api lacks the interfaces the engine uses".into());
             }
+            // SAFETY: Steam is open, as above.
+            let apps = unsafe { (api.apps)() };
             // SAFETY: `user` is a live interface, checked above.
             let steam_id = unsafe { (api.user_steam_id)(user) };
             let pending = RefCell::new(Vec::new());
-            Ok(Self { api: Some(api), messages, friends, matchmaking, utils, steam_id, pending })
+            Ok(Self {
+                api: Some(api),
+                messages,
+                friends,
+                matchmaking,
+                utils,
+                apps,
+                steam_id,
+                pending,
+            })
         })();
         opened.map_err(|reason| {
             OPEN.store(false, Ordering::SeqCst);
@@ -481,6 +498,25 @@ impl NativeSteam {
         }
         // SAFETY: non-null, and NUL-terminated by Steam.
         Ok(unsafe { CStr::from_ptr(name) }.to_string_lossy().into_owned())
+    }
+
+    /// The language the player chose for this game in Steam, as Steam names
+    /// it (`"german"`, `"schinese"`), or None if Steam does not say.
+    #[getter]
+    fn game_language(&self) -> PyResult<Option<String>> {
+        let api = self.api()?;
+        if self.apps.is_null() {
+            return Ok(None);
+        }
+        // SAFETY: Steam is open and `apps` is not null; Steam returns a
+        // string it owns, or null.
+        let language = unsafe { (api.game_language)(self.apps) };
+        if language.is_null() {
+            return Ok(None);
+        }
+        // SAFETY: non-null, and NUL-terminated by Steam.
+        let text = unsafe { CStr::from_ptr(language) }.to_string_lossy().into_owned();
+        Ok(if text.is_empty() { None } else { Some(text) })
     }
 
     /// Start reaching Valve's relay network now, rather than on first send.

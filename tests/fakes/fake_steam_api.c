@@ -44,7 +44,9 @@ static int reads_while_held;
 static int released;
 static int receive_extra;
 static int received_messages;
-static bool null_user, null_utils, null_persona;
+static bool null_user, null_utils, null_persona, null_apps;
+static char language_buffer[128] = "english";
+static const char *language = language_buffer;
 
 static uint64_t next_call = 100;
 static int result_size;
@@ -52,10 +54,24 @@ static uint8_t result[MAX_PARAM];
 
 /* What the test controls. */
 
+/* The game language Steam reports, or NULL; and whether ISteamApps is null. */
+EXPORT void fake_language(const char *name, int null_interface) {
+    if (name == NULL) {
+        language = NULL;
+    } else {
+        strncpy(language_buffer, name, sizeof language_buffer - 1);
+        language_buffer[sizeof language_buffer - 1] = '\0';
+        language = language_buffer;
+    }
+    null_apps = null_interface;
+}
+
 EXPORT void fake_reset(void) {
     queued = next_callback = frees = reads_while_held = released = 0;
     receive_extra = received_messages = result_size = 0;
-    holding = null_user = null_utils = null_persona = false;
+    holding = null_user = null_utils = null_persona = null_apps = false;
+    strcpy(language_buffer, "english");
+    language = language_buffer;
     next_call = 100;
 }
 
@@ -218,4 +234,10 @@ EXPORT bool SteamAPI_ISteamFriends_SetRichPresence(void *self, const char *key, 
 EXPORT void SteamAPI_ISteamFriends_ClearRichPresence(void *self) { (void)self; }
 EXPORT void SteamAPI_ISteamFriends_ActivateGameOverlayInviteDialog(void *self, uint64_t lobby) {
     (void)self; (void)lobby;
+}
+
+EXPORT void *SteamAPI_SteamApps_v009(void) { return null_apps ? NULL : INTERFACE; }
+EXPORT const char *SteamAPI_ISteamApps_GetCurrentGameLanguage(void *self) {
+    (void)self;
+    return language;
 }

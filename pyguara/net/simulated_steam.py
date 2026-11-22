@@ -40,9 +40,15 @@ class SimulatedSteamCloud:
         self._lobbies: dict[int, _Lobby] = {}
         self._next_lobby = _FIRST_LOBBY
 
-    def add_player(self, steam_id: int, persona_name: str = "") -> SimulatedSteam:
+    def add_player(
+        self,
+        steam_id: int,
+        persona_name: str = "",
+        game_language: str | None = "english",
+    ) -> SimulatedSteam:
         """Bring a player online and return their Steam."""
         steam = SimulatedSteam(self, steam_id, persona_name or f"player {steam_id}")
+        steam.game_language = game_language
         self.players[steam_id] = steam
         return steam
 
@@ -97,6 +103,7 @@ class SimulatedSteam:
     Attributes:
         steam_id: This player's Steam ID.
         persona_name: Their Steam name.
+        game_language: Their language for the game, as Steam names it.
         callbacks: Waiting for `run_callbacks`; a test may add its own.
         rich_presence: What friends would see.
         accepted_sessions: Every `accept_session`, in order.
@@ -111,6 +118,7 @@ class SimulatedSteam:
         self._cloud = cloud
         self.steam_id = steam_id
         self.persona_name = persona_name
+        self.game_language: str | None = "english"
         self.callbacks: list[tuple[Any, ...]] = []
         self.rich_presence: dict[str, str] = {}
         self.accepted_sessions: list[int] = []

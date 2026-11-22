@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from pyguara import assets
+from pyguara.i18n.locales import best_locale
 from pyguara.i18n.plurals import plural_category
 from pyguara.i18n.table import LocaleTable, locale_files
 from pyguara.log import get_logger
@@ -123,6 +124,18 @@ class Translator:
         self._locale = value
         for listener in list(self._listeners):
             listener(value)
+
+    def choose(self, wanted: str) -> str:
+        """Switch to the available locale closest to `wanted`, and return it.
+
+        As startup chooses: `pt-PT` gets `pt-BR`, an unsupported language
+        the source. For a locale from Steam or a settings menu.
+
+        Args:
+            wanted: A locale as anything spells it, such as `"de_DE"`.
+        """
+        self.locale = best_locale(wanted, self.available, source=self._source)
+        return self._locale
 
     def on_change(self, listener: Callable[[str], None]) -> None:
         """Call `listener(locale)` whenever the locale changes.

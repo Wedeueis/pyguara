@@ -181,3 +181,26 @@ def test_a_session_failure_reads_its_reason_and_bounded_detail(
     _queue(fake, SESSION_FAILED, bytes(info))
 
     assert steam.run_callbacks() == [("session_failed", peer, 4002, "x" * 128)]
+
+
+def test_the_game_language_is_what_steam_reports(steam: Any, fake: Any) -> None:
+    fake.fake_language(b"schinese", 0)
+    assert steam.game_language == "schinese"
+
+
+@pytest.mark.parametrize(
+    ("name", "null_interface"),
+    [(None, 0), (b"", 0), (b"german", 1)],
+    ids=["null string", "empty string", "no ISteamApps"],
+)
+def test_a_game_language_steam_does_not_give_is_none(
+    library: Path, fake: Any, name: bytes | None, null_interface: int
+) -> None:
+    """Never a guessed language: the caller falls back to the system's."""
+    fake.fake_language(name, null_interface)
+    extension: Any = native.require_extension("tests")
+    opened = extension.NativeSteam(str(library))
+    try:
+        assert opened.game_language is None
+    finally:
+        opened.shutdown()

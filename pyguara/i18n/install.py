@@ -8,7 +8,7 @@ from pyguara import assets
 from pyguara.config.types import I18nConfig
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.i18n.events import LocaleChanged
-from pyguara.i18n.locales import best_locale, system_locale
+from pyguara.i18n.locales import system_locale
 from pyguara.i18n.translator import Translator
 from pyguara.log import get_logger
 from pyguara.ui.text_case import set_case_language
@@ -49,7 +49,7 @@ def install_translator(
         directory, locale=config.source, source=config.source
     )
     wanted = config.locale or system_locale()
-    probe.locale = best_locale(wanted, probe.available, source=config.source)
+    probe.choose(wanted)
 
     def announce(locale: str) -> None:
         set_case_language(locale)

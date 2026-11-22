@@ -72,6 +72,11 @@ class SteamMessagesApi(Protocol):
 class SteamApi(SteamLobbyApi, SteamMessagesApi, Protocol):
     """Everything `SteamNetwork` uses: `NativeSteam`, or a fake in tests."""
 
+    @property
+    def game_language(self) -> str | None:
+        """The player's language for this game, as Steam names it."""
+        ...
+
     def run_callbacks(self) -> list[tuple[Any, ...]]:
         """Drain Steam's callbacks."""
         ...
@@ -356,6 +361,19 @@ class SteamNetwork:
         steam = core.NativeSteam(str(find_steam_api(library)))
         steam.init_relay()
         return cls(steam)
+
+    @property
+    def game_locale(self) -> str | None:
+        """The locale the player chose for this game in Steam, as `"de"`.
+
+        None when Steam does not say, or names a language with no locale;
+        fall back to the system's then. Apply it with `Translator.choose`.
+        """
+        # Here, not at the top: `pyguara.i18n` brings the config and events.
+        from pyguara.i18n.locales import locale_from_steam
+
+        language = self.steam.game_language
+        return None if language is None else locale_from_steam(language)
 
     def update(self) -> list[LobbyEvent]:
         """Drain Steam's callbacks; call once a frame, before the session.
