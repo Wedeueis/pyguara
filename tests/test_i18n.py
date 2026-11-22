@@ -313,3 +313,15 @@ def test_an_unknown_steam_language_is_none() -> None:
     from pyguara.i18n import locale_from_steam
 
     assert locale_from_steam("klingon") is None
+
+
+def test_choose_narrows_to_the_closest_locale_and_switches() -> None:
+    """For a locale from Steam or a settings menu, as startup chooses."""
+    tr = Translator(_tables(en=EN, ru=RU), locale="en")
+    heard: list[str] = []
+    tr.on_change(heard.append)
+
+    assert tr.choose("ru_RU") == "ru"
+    assert tr.locale == "ru"
+    assert heard == ["ru"]
+    assert tr.choose("klingon") == "en"
