@@ -850,3 +850,23 @@ class TestPhases:
         assert ai == Phase.AI
         assert Phase.AI < audio_source < Phase.LOGIC
         assert Phase.AI < animation < Phase.LOGIC
+
+
+def test_add_key_reaches_the_same_system_and_unregister_drops_every_key() -> None:
+    class Moves:
+        def update(self, dt: float) -> None:
+            pass
+
+    class Alias:
+        pass
+
+    manager = SystemManager()
+    system = Moves()
+    manager.register(system)
+
+    assert manager.add_key(Alias, Moves) is True
+    assert manager.get_system(Alias) is system
+    assert manager.add_key(Alias, int) is False
+
+    manager.unregister(Moves)
+    assert manager.get_system(Alias) is None

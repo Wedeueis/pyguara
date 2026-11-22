@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
 
@@ -20,6 +21,7 @@ from pyguara.application.memory import settle_memory
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.config.manager import ConfigManager
 from pyguara.dev.asset_reload import AssetReloadWatcher
+from pyguara.dev.code_reload import SystemCodeReloader
 from pyguara.di.container import DIContainer
 from pyguara.di.exceptions import ServiceNotFoundException
 from pyguara.events.dispatcher import EventDispatcher
@@ -209,6 +211,7 @@ class Application:
         # Asset hot-reload (dev only). Idle unless enable_asset_hot_reload()
         # is called; SandboxApplication calls it automatically.
         self._asset_reload_watcher: AssetReloadWatcher | None = None
+        self._code_reloader: SystemCodeReloader | None = None
 
         # The editor layer, looked up once on first use. `attach_editor()`
         # runs after this constructor, so the lookup cannot happen here.
@@ -286,6 +289,34 @@ class Application:
         )
         self._asset_reload_watcher.start()
         self.logger.info("Asset hot-reload enabled")
+
+    def enable_code_hot_reload(self, poll_interval: float = 0.5) -> None:
+        """Watch the game's system modules and run their new code on change.
+
+        Development aid: edit a system and the running game uses the new
+        code from the next frame, each system keeping its state. Only a
+        module that defines nothing but systems is watched; a reload that
+        fails is put back, keeps running what ran before, and logs why. Idempotent.
+
+        Args:
+            poll_interval: Seconds between file-modification polls.
+
+        Raises:
+            RuntimeError: In a frozen build, which has no source to reload.
+        """
+        if getattr(sys, "frozen", False):
+            raise RuntimeError(
+                "Code hot-reload is a development tool: a built game has no "
+                "source to reload."
+            )
+        if self._code_reloader is not None:
+            return
+        self._code_reloader = SystemCodeReloader(
+            lambda: [scene.system_manager for scene in self._scene_manager.scenes],
+            poll_interval=poll_interval,
+        )
+        self._code_reloader.start()
+        self.logger.info("Code hot-reload enabled")
 
     @property
     def fixed_tick(self) -> int:
@@ -959,6 +990,10 @@ class Application:
                 # `drain()` always returned these keys; nothing used them.
                 self._event_dispatcher.dispatch(ResourceReloaded(key, source=self))
 
+        # Changed system code (dev only), between frames like the assets.
+        if self._code_reloader is not None:
+            self._code_reloader.drain()
+
         # Finish a slice of any queued asynchronous loads. Device uploads
         # happen here because this is the thread that owns the context; the
         # decode half already ran on a worker for loaders that opted in.
@@ -1129,6 +1164,8 @@ class Application:
         ]
         if self._asset_reload_watcher is not None:
             steps.insert(0, ("asset hot-reload stop", self._asset_reload_watcher.stop))
+        if self._code_reloader is not None:
+            steps.insert(0, ("code hot-reload stop", self._code_reloader.stop))
 
         # Worker threads outlive the loop otherwise. Idempotent, and a no-op
         # when nothing ever loaded asynchronously.

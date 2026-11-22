@@ -1,13 +1,45 @@
 # Dev Tools
 
-`pyguara.dev` holds development-only helpers. Today that is **asset
-hot-reload**: edit a texture, tilemap or data file on disk and the running
-game re-imports it without a restart.
+`pyguara.dev` holds development-only helpers: **asset hot-reload**, where
+an edited texture, tilemap or data file is re-imported by the running game,
+and **code hot-reload** for a game's systems.
 
-It does **not** hot-reload Python code. An earlier `HotReloadManager` that
-reloaded modules at runtime was removed — it was never wired into the loop,
-reloaded on a background thread, and could not migrate instance state. Live
-code reload is a product decision the engine has not taken.
+## Code hot-reload
+
+Edit a system and the running game uses the new code from the next frame,
+without replaying it back to the state you were tuning.
+
+```python
+app = create_application()
+app.enable_code_hot_reload()       # optional poll_interval, default 0.5s
+app.run(MyScene())
+```
+
+Off by default, and refused in a frozen build. `SandboxApplication` does
+not turn it on.
+
+- **What is watched.** The source file of every game module that defines
+  a registered system, in every scene, kept in step as systems are
+  registered. Engine modules are never watched.
+- **Only a module of nothing but systems.** Every class the module defines
+  must have an `update` method. A component, event or enum defined beside
+  a system has instances elsewhere that would keep the old class, so a
+  query or an `is` check would quietly stop matching; such a module is not
+  watched, and the log says which class to move out.
+- **What happens on a change.** Between frames, on the main thread, the
+  module is re-imported and each live system of one of its classes becomes
+  an instance of the new class. Its attributes stay: its state, and the
+  services it was constructed with. A system the new code needs to set up
+  differently defines `on_reload(self)`, which is called after the swap.
+  `get_system()` finds it by the old class or the new one.
+- **When it fails.** A syntax error, an exception while importing, a
+  non-system class added, or an `on_reload()` that raises: the module and
+  every system are put back as they were, the old code keeps running, and
+  the error is logged with the file and line. Fix the file and save again.
+
+Not reloaded: scenes, components, and any other module. A function the
+system's module imports from elsewhere keeps its old code until that
+module is reloaded by a restart.
 
 ## Asset hot-reload
 

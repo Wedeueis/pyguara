@@ -112,10 +112,33 @@ class SystemManager:
             return None
 
         self._systems = [(p, s) for p, s in self._systems if s is not system]
+        # And any other key reaching it, from `add_key()`.
+        for key in [k for k, s in self._systems_by_type.items() if s is system]:
+            del self._systems_by_type[key]
         self._disabled.discard(id(system))
         if isinstance(system, CleanupSystem):
             system.cleanup()
         return system
+
+    def add_key(self, key: type[Any], existing: type[Any]) -> bool:
+        """Make the system registered under `existing` reachable as `key` too.
+
+        For code reload, where a system's class is replaced by a new one of
+        the same name: game code may look it up by either. Unregistering
+        under any of its keys removes it under all of them.
+
+        Args:
+            key: The additional key.
+            existing: A key the system is registered under.
+
+        Returns:
+            False if nothing is registered under `existing`.
+        """
+        system = self._systems_by_type.get(existing)
+        if system is None:
+            return False
+        self._systems_by_type[key] = system
+        return True
 
     def get_system(self, system_type: type[_S]) -> _S | None:
         """Retrieve a system by the key it was registered under.

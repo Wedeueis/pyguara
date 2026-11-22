@@ -89,6 +89,11 @@ class SceneManager:
         """Get the currently active scene."""
         return self._current_scene
 
+    @property
+    def scenes(self) -> tuple[Scene, ...]:
+        """Every registered scene, active or not, in registration order."""
+        return tuple(self._scenes.values())
+
     def register(self, scene: Scene) -> None:
         """Add a scene under its name, wiring it if the container is available.
 
