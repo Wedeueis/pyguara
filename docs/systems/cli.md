@@ -189,6 +189,9 @@ machine, home directory included, so it is theirs to send.
 | `--windowed / --console` | `--windowed` | Hide the OS console on launch. |
 | `--icon` | — | Any format Pillow reads; converted to the host's. |
 | `--bundle-id` | — | macOS bundle identifier, e.g. `com.studio.game`. |
+| `--game-version` | `pyproject.toml`'s | The version in the Windows file details. |
+| `--company` | — | Company name in the Windows file details. |
+| `--copyright` | — | Copyright line in the Windows file details. |
 | `-a, --assets` | auto-detect | Repeatable. Asset directories to bundle. |
 | `--add-data` | — | Repeatable. Raw `src<sep>dst` PyInstaller spec. |
 | `--hidden-import` | — | Repeatable. Extra modules to force-include. |
@@ -196,6 +199,19 @@ machine, home directory included, so it is theirs to send.
 | `--debug` | off | `--debug=all`. |
 | `--pack` | off | Bake the asset folders into one `<name>.pak` instead of bundling them loose. |
 | `--dry-run` | off | Print the PyInstaller command and stop. |
+
+### Windows file details
+
+A Windows `.exe` carries a version resource, which Explorer shows on the
+file's Details tab and Task Manager uses for its name: product name,
+description, file and product version, company and copyright. `pyguara
+build` writes it from `--name`, the version and the two optional flags.
+The version is `--game-version`, else `[project].version` in the nearest
+`pyproject.toml` above the entry script, which a `pyguara new` project
+has. With neither, the build says so and the `.exe` has no details;
+`--company` or `--copyright` with no version is an error rather than
+dropped. Windows stores four 16-bit numbers, taken from the release part
+(`1.4.0rc2` is 1.4.0.0); the text fields keep the whole string.
 
 After a successful build, the generated `build/` work directory and the
 `<name>.spec` file are removed from `--output`. The reported `Output:` path
