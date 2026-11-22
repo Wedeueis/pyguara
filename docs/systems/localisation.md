@@ -106,6 +106,25 @@ change, so `upper("i")` is `"İ"` in Turkish.
 Outside a scene, take the `Translator` from the container,
 `app.container.get(Translator)`, and pass it to what needs it.
 
+## Longer translations
+
+German and Russian often run a third longer than English. Text that can
+wrap does so through `pyguara.ui.text_layout.wrap_text`. A line with
+nowhere to wrap to, such as a HUD label, shrinks instead:
+
+```python
+from pyguara.ui.text_layout import fitted_size
+
+size = fitted_size(
+    label, 24, 180, lambda text, s: ui.get_text_size(text, s)[0], minimum=12
+)
+ui.draw_text(label, position, color, size)
+```
+
+It returns the largest size up to 24 at which the line fits 180 px, and
+stops at `minimum`, where the text may overflow rather than become
+unreadable.
+
 ## Checking the files
 
 ```bash

@@ -12,10 +12,19 @@ agree.
 
 from collections.abc import Callable
 
-__all__ = ["break_offsets", "caret_index_at", "split_oversized_word", "wrap_text"]
+__all__ = [
+    "break_offsets",
+    "caret_index_at",
+    "fitted_size",
+    "split_oversized_word",
+    "wrap_text",
+]
 
 MeasureWidth = Callable[[str], int]
 """Returns the pixel width a string would be drawn at."""
+
+MeasureAtSize = Callable[[str, int], int]
+"""Returns the pixel width a string would be drawn at, at a font size."""
 
 
 # -- Breaking without spaces -------------------------------------------------
@@ -235,3 +244,47 @@ def caret_index_at(text: str, offset: int, measure: MeasureWidth) -> int:
             return index - 1
         previous = current
     return len(text)
+
+
+def fitted_size(
+    text: str, size: int, width: float, measure: MeasureAtSize, minimum: int = 8
+) -> int:
+    """Return the largest font size up to `size` at which one line fits `width`.
+
+    For a line with nowhere to wrap to, such as a HUD label that a long
+    translation would run off. At `minimum` it stops shrinking, and the
+    text may then overflow: below that it would be unreadable anyway.
+    Measures about log2(size - minimum) times, not once per size.
+
+    Args:
+        text: One line; a newline in it is measured as the renderer does.
+        size: The size the text is designed at.
+        width: The pixels available.
+        measure: Measures `text` at a size, as `UIRenderer.get_text_size`'s
+            width: `lambda t, s: renderer.get_text_size(t, s)[0]`.
+        minimum: The smallest size to shrink to.
+
+    Returns:
+        `size` if the text fits at it, else the largest smaller size that
+        was measured to fit, else `minimum`.
+
+    Raises:
+        ValueError: If `minimum` is below 1 or above `size`.
+    """
+    if not 1 <= minimum <= size:
+        raise ValueError(
+            f"need 1 <= minimum <= size, got minimum {minimum}, size {size}"
+        )
+    if measure(text, size) <= width:
+        return size
+    # Binary search for the largest size that fits. Only a size measured to
+    # fit is ever returned, so a font whose width is not quite monotonic in
+    # its size can cost a point, never an overflow.
+    best, low, high = minimum, minimum, size - 1
+    while low <= high:
+        middle = (low + high) // 2
+        if measure(text, middle) <= width:
+            best, low = middle, middle + 1
+        else:
+            high = middle - 1
+    return best
