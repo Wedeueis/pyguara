@@ -43,7 +43,7 @@ Before diving into individual systems, it's crucial to understand the three core
     | Audio | The native mixer | pygame's mixer (`PYGUARA_AUDIO_BACKEND=pygame`) |
     | Physics | pymunk (`PymunkEngine`) | none |
 
-    On a machine with no usable GPU the default renderer stops at startup with `NoGraphicsAdapterError`. It does not switch to the software renderer, because the two look different.
+    On a machine with no usable GPU the default renderer stops at startup with `NoGraphicsAdapterError`. It does not switch to the software renderer by itself, because the two look different; a game that accepts that sets `display.software_fallback`.
 *   **Design Pattern (Strategy/Bridge):** The `PhysicsSystem` does not know about pymunk; it knows `IPhysicsEngine`. The same game code runs on either renderer.
 *   **How to Use:** Code against the protocol or the manager (`IRenderer`, `AudioManager`, `InputManager`), resolved from the container. Never import a backend, and never `import pygame` in game code.
 

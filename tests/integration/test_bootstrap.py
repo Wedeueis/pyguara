@@ -152,6 +152,80 @@ def test_no_gpu_for_the_default_says_how_to_run_without_one(
         create_application()
 
 
+def _no_gpu(monkeypatch: pytest.MonkeyPatch, message: str) -> list[str]:
+    """Make the wgpu window open, then fail to find a device; record closes."""
+    from pyguara.graphics.backends.wgpu import window
+
+    closed: list[str] = []
+
+    class OpenedWindow:
+        def close(self) -> None:
+            closed.append("window")
+
+    def opened_then_no_gpu(self: window.WgpuWindow, config: object) -> bool:
+        self._window = OpenedWindow()
+        raise RuntimeError(message)
+
+    monkeypatch.setattr(window.WgpuWindow, "open", opened_then_no_gpu)
+    return closed
+
+
+def _fallback(config: GameConfig) -> None:
+    config.display.software_fallback = True
+
+
+@pytest.mark.integration
+def test_a_game_that_opts_in_starts_on_software_without_a_gpu(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from pyguara import crash
+    from pyguara.application.clock import Clock
+    from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
+    from pyguara.graphics.protocols import IRenderer
+    from pyguara.input.backends.pygame_backend import PygameInputBackend
+    from pyguara.input.protocols import IInputBackend
+
+    closed = _no_gpu(monkeypatch, "no graphics adapter is available: none found")
+
+    application = create_application(_fallback)
+    try:
+        container = application.container
+        assert closed == ["window"]
+        assert container.get(ConfigManager).config.display.backend is (
+            RenderingBackend.PYGAME
+        )
+        assert isinstance(container.get(IRenderer), PygameBackend)
+        assert isinstance(container.get(IInputBackend), PygameInputBackend)
+        assert type(container.get(Clock)).__name__ == "PygameClock"
+        assert "software fallback" in crash._notes["renderer"]
+        application._render()
+    finally:
+        pygame.quit()
+
+
+@pytest.mark.integration
+def test_a_device_that_cannot_open_is_a_missing_gpu_too(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _no_gpu(monkeypatch, "the graphics device could not be opened: lost")
+
+    with pytest.raises(NoGraphicsAdapterError, match="software_fallback"):
+        create_application()
+
+
+@pytest.mark.integration
+def test_the_fallback_without_pygame_installed_says_which_extra(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import sys
+
+    _no_gpu(monkeypatch, "no graphics adapter is available: none found")
+    monkeypatch.setitem(sys.modules, "pygame", None)
+
+    with pytest.raises(NoGraphicsAdapterError, match=r"pyguara\[pygame\]"):
+        create_application(_fallback)
+
+
 @pytest.mark.integration
 def test_other_window_failures_are_not_called_a_missing_gpu(
     monkeypatch: pytest.MonkeyPatch,

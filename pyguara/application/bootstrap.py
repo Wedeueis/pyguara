@@ -7,7 +7,7 @@ from pyguara.application.application import Application
 from pyguara.application.clock import Clock, FixedClock, WallClock
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.manager import AudioManager
-from pyguara.common.extras import require_pygame
+from pyguara.common.extras import MissingExtraError, require_pygame
 from pyguara.config.manager import ConfigManager
 from pyguara.config.types import (
     AudioBackend,
@@ -50,8 +50,18 @@ class NoGraphicsAdapterError(RuntimeError):
 
     Raised at startup rather than falling back to the software renderer:
     the two look different -- pygame has no lighting or post-processing --
-    so a silent switch would change how the game looks on that machine.
+    so a silent switch would change how the game looks on that machine. A
+    game that accepts the difference turns on `display.software_fallback`.
     """
+
+
+def _is_no_gpu(error: RuntimeError) -> bool:
+    """Whether the wgpu window failed for want of a GPU it can use."""
+    message = str(error)
+    return (
+        "no graphics adapter" in message
+        or "graphics device could not be opened" in message
+    )
 
 
 Configure = Callable[[GameConfig], None]
@@ -425,36 +435,58 @@ def _setup_container(
         try:
             window.create()
         except RuntimeError as error:
-            if "no graphics adapter" not in str(error):
+            if not _is_no_gpu(error):
                 raise
-            raise NoGraphicsAdapterError(
-                f"The wgpu renderer found no GPU it can use ({error}). Install "
-                f"or update the graphics driver, or set display.backend = "
-                f'"pygame" to run on the software renderer, which has no '
-                f"lighting or post-processing."
-            ) from error
-        container.register_instance(Window, window)
+            # The window may already be open: the device is made after it.
+            wgpu_window_backend.close()
+            if not disp_cfg.software_fallback:
+                raise NoGraphicsAdapterError(
+                    f"The wgpu renderer found no GPU it can use ({error}). "
+                    f"Install or update the graphics driver. The software "
+                    f"renderer has no lighting or post-processing; to use it, "
+                    f'set display.backend = "pygame", or '
+                    f"display.software_fallback to use it only on a machine "
+                    f"with no usable GPU."
+                ) from error
+            try:
+                require_pygame("display.software_fallback")
+            except MissingExtraError:
+                raise NoGraphicsAdapterError(
+                    f"The wgpu renderer found no GPU it can use ({error}), "
+                    f"and display.software_fallback is on, but the software "
+                    f"renderer is not installed: it is the pyguara[pygame] "
+                    f"extra. Install or update the graphics driver."
+                ) from error
+            logger.warning(
+                f"No usable GPU ({error}); starting on the software renderer, "
+                f"as display.software_fallback asks."
+            )
+            disp_cfg.backend = RenderingBackend.PYGAME
+            crash.note("renderer", "pygame (software fallback: no usable GPU)")
+        else:
+            container.register_instance(Window, window)
 
-        frame = wgpu_window_backend.frame
-        assert frame is not None  # `create()` opened it or raised
-        crash.note("gpu", frame.gpu.adapter)
-        container.register_instance(IRenderer, WgpuRenderer(frame))  # type: ignore[type-abstract]
-        container.register_instance(UIRenderer, WgpuUIRenderer(frame))  # type: ignore[type-abstract]
-        container.register_instance(TextureFactory, ImageTextureFactory())  # type: ignore[type-abstract]
+            frame = wgpu_window_backend.frame
+            assert frame is not None  # `create()` opened it or raised
+            crash.note("gpu", frame.gpu.adapter)
+            container.register_instance(IRenderer, WgpuRenderer(frame))  # type: ignore[type-abstract]
+            container.register_instance(UIRenderer, WgpuUIRenderer(frame))  # type: ignore[type-abstract]
+            container.register_instance(TextureFactory, ImageTextureFactory())  # type: ignore[type-abstract]
 
-        # A real render graph, on the native device: the world is drawn
-        # into its buffer and blitted to the window, so a game can add
-        # passes -- lighting, post-processing -- between the two.
-        from pyguara.graphics.pipeline.device import WgpuDevice
-        from pyguara.graphics.pipeline.passes import FinalPass
+            # A real render graph, on the native device: the world is drawn
+            # into its buffer and blitted to the window, so a game can add
+            # passes -- lighting, post-processing -- between the two.
+            from pyguara.graphics.pipeline.device import WgpuDevice
+            from pyguara.graphics.pipeline.passes import FinalPass
 
-        wgpu_graph = RenderGraph(
-            WgpuDevice(frame), disp_cfg.screen_width, disp_cfg.screen_height
-        )
-        container.register_instance(FramebufferManager, wgpu_graph.fbo_manager)
-        wgpu_graph.add_pass(FinalPass(input_fbo_name="world"))
-        container.register_instance(RenderGraph, wgpu_graph)
-    else:
+            wgpu_graph = RenderGraph(
+                WgpuDevice(frame), disp_cfg.screen_width, disp_cfg.screen_height
+            )
+            container.register_instance(FramebufferManager, wgpu_graph.fbo_manager)
+            wgpu_graph.add_pass(FinalPass(input_fbo_name="world"))
+            container.register_instance(RenderGraph, wgpu_graph)
+
+    if not headless and disp_cfg.backend == RenderingBackend.PYGAME:
         # The software Pygame backend. Imported here, not at the top, so a game on
         # wgpu never loads pygame at all.
         require_pygame('display.backend = "pygame"')

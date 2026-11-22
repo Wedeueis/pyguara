@@ -111,8 +111,9 @@ Reasons and the full procedure: `docs/agents/branching.md`.
 ModernGL is **retired**: `display.backend: moderngl` raises at startup.
 `display.backend` defaults to `wgpu`, which Studio and the render graph
 need; a machine with no usable GPU fails at startup with
-`NoGraphicsAdapterError` rather than switching renderer. `pygame` is the
-software renderer, chosen by name, and the reference the pixel tests use.
+`NoGraphicsAdapterError` rather than switching renderer, unless the game
+sets `display.software_fallback`. `pygame` is the software renderer,
+chosen by name, and the reference the pixel tests use.
 It is an extra (`pyguara[pygame]`), installed by `dev`; nothing outside
 the pygame backends, `tools/` and the tests may import it.
 

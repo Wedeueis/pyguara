@@ -221,3 +221,133 @@ def test_a_wgpu_start_notes_the_gpu_it_is_drawing_on() -> None:
         assert crash._notes["gpu"]
     finally:
         app.shutdown()
+
+
+# -- The dialog, for a build with no console ---------------------------------
+
+
+def test_a_console_run_shows_no_dialog_by_default(tmp_path: Path) -> None:
+    assert not crash.install_crash_reporter("Test Game", directory=tmp_path).dialog
+
+
+@pytest.mark.parametrize(
+    ("stderr_is_none", "frozen", "tty", "expected"),
+    [
+        (True, False, False, True),  # a windowed build: no stream at all
+        (False, True, False, True),  # frozen, started from a file manager
+        (False, True, True, False),  # frozen, started from a terminal
+        (False, False, False, False),  # from source, output piped somewhere
+    ],
+)
+def test_the_dialog_is_on_where_nobody_reads_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+    stderr_is_none: bool,
+    frozen: bool,
+    tty: bool,
+    expected: bool,
+) -> None:
+    class Stream:
+        def isatty(self) -> bool:
+            return tty
+
+    monkeypatch.setattr(sys, "stderr", None if stderr_is_none else Stream())
+    monkeypatch.setattr(sys, "frozen", frozen, raising=False)
+
+    assert crash._no_console() is expected
+
+
+def test_a_crash_shows_its_message_and_where_the_report_went(
+    tmp_path: Path, chained: list[BaseException], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    shown: list[tuple[str, str]] = []
+    monkeypatch.setattr(crash, "_show_dialog", lambda t, x: bool(shown.append((t, x))))
+    reporter = crash.install_crash_reporter(
+        "Test Game", directory=tmp_path, dialog=True
+    )
+
+    sys.excepthook(*_raised("The wgpu renderer found no GPU it can use"))
+
+    [(title, text)] = shown
+    assert title == "Test Game"
+    assert "The wgpu renderer found no GPU it can use" in text
+    assert str(reporter.last_report) in text
+    assert len(chained) == 1
+
+
+def test_a_dialog_still_shows_when_the_report_cannot_be_written(
+    tmp_path: Path, chained: list[BaseException], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    shown: list[str] = []
+    monkeypatch.setattr(crash, "_show_dialog", lambda t, x: bool(shown.append(x)))
+    blocked = tmp_path / "a file"
+    blocked.write_text("")
+    crash.install_crash_reporter("Test Game", directory=blocked, dialog=True)
+
+    sys.excepthook(*_raised())
+
+    assert "No crash report could be written" in shown[0]
+
+
+def test_a_long_message_is_cut_for_the_dialog() -> None:
+    text = crash._dialog_text("Test Game", ValueError("x" * 5000), None)
+    assert len(text) < 800
+    assert text.count("x") == 600
+
+
+def test_the_message_is_an_argument_never_markup_or_script(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hostile = 'quote " and <b>markup</b> and $(rm -rf ~)'
+    monkeypatch.setattr(sys, "platform", "darwin")
+    mac = crash._dialog_command("Game", hostile)
+    assert mac is not None
+    assert mac[-1] == hostile
+    assert all(hostile not in part for part in mac[:-1])
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(crash.shutil, "which", lambda name: f"/usr/bin/{name}")
+    linux = crash._dialog_command("Game", hostile)
+    assert linux is not None
+    assert "--no-markup" in linux
+    assert f"--text={hostile}" in linux
+
+
+def test_a_linux_desktop_without_a_dialog_tool_offers_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(crash.shutil, "which", lambda name: None)
+    assert crash._dialog_command("Game", "text") is None
+    assert crash._show_dialog("Game", "text") is False
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="a stand-in zenity on PATH")
+def test_a_real_windowed_process_that_dies_shows_the_dialog(tmp_path: Path) -> None:
+    """A process with no stderr, as a windowed build has, and zenity on PATH."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    called = tmp_path / "zenity-args"
+    zenity = bin_dir / "zenity"
+    zenity.write_text(f'#!/bin/sh\nprintf "%s\\n" "$@" > "{called}"\n')
+    zenity.chmod(0o755)
+    script = textwrap.dedent(
+        f"""
+        import sys
+        from pathlib import Path
+        sys.stderr = None
+        from pyguara.crash import install_crash_reporter
+        install_crash_reporter("Test Game", directory=Path({str(tmp_path)!r}))
+        raise RuntimeError("no GPU at all")
+        """
+    )
+    env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+
+    subprocess.run(
+        [sys.executable, "-c", script], env=env, capture_output=True, timeout=60
+    )
+
+    args = called.read_text(encoding="utf-8")
+    assert "--error" in args
+    assert "no GPU at all" in args
+    [report] = tmp_path.glob("crash-*.txt")
+    assert str(report) in args

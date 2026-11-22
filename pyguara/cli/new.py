@@ -44,6 +44,7 @@ _MAIN = '''\
 
 import pyguara
 from pyguara.config.types import GameConfig
+from pyguara.crash import install_crash_reporter
 
 from {package}.scenes import MainScene
 
@@ -57,6 +58,9 @@ def configure(config: GameConfig) -> None:
 
 def main() -> None:
     """Run the game until its window closes."""
+    # First, so a failure at startup -- no GPU, for one -- leaves a report,
+    # and a build with no console shows the player a dialog.
+    install_crash_reporter("{title}")
     pyguara.run(MainScene, configure=configure)
 
 

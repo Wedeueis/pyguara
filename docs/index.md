@@ -50,7 +50,8 @@ uv run python examples/guara_falcao/main.py     # a platformer
 
 - **wgpu**, the default: sprite batching, a render graph, 2D lighting,
   post-processing and sprite materials in WGSL. It needs a GPU; without
-  one, startup stops with `NoGraphicsAdapterError`.
+  one, startup stops with `NoGraphicsAdapterError`, unless the game
+  sets `display.software_fallback`.
 - **pygame**, chosen with `display.backend: pygame`: a software renderer
   that runs anywhere, with no lighting or post-processing. It is the
   reference the GPU renderer is tested against. It needs the `pygame`
