@@ -12,6 +12,7 @@ import pytest
 
 from pyguara.ui.text_layout import (
     caret_index_at,
+    fitted_size,
     split_oversized_word,
     wrap_text,
 )
@@ -178,3 +179,56 @@ class TestPlacingACaretFromAPixelOffset:
         with. Consistent, and the only answer available.
         """
         assert caret_index_at("abc", 50, lambda _text: 0) == 3
+
+
+class TestFittingOneLine:
+    """`fitted_size`: a HUD line that shrinks rather than overflows."""
+
+    @staticmethod
+    def _measure(calls: list[int] | None = None):  # type: ignore[no-untyped-def]
+        def measure(text: str, size: int) -> int:
+            if calls is not None:
+                calls.append(size)
+            return len(text) * size // 2  # half the size per character
+
+        return measure
+
+    def test_a_line_that_fits_keeps_its_size(self) -> None:
+        assert fitted_size("Salvage", 24, 1000, self._measure()) == 24
+
+    def test_a_long_translation_gets_the_largest_size_that_fits(self) -> None:
+        # 20 characters at size s are 10 s px wide; 150 px fits size 15.
+        assert fitted_size("x" * 20, 24, 150, self._measure()) == 15
+
+    def test_the_size_found_is_the_largest(self) -> None:
+        measure = self._measure()
+        for width in range(80, 260, 7):
+            size = fitted_size("x" * 20, 24, width, measure, minimum=4)
+            assert measure("x" * 20, size) <= width or size == 4
+            if size < 24:
+                assert measure("x" * 20, size + 1) > width
+
+    def test_it_stops_at_the_minimum_even_if_that_overflows(self) -> None:
+        assert fitted_size("x" * 200, 24, 10, self._measure(), minimum=9) == 9
+
+    def test_it_measures_a_handful_of_times_not_once_per_size(self) -> None:
+        calls: list[int] = []
+        fitted_size("x" * 20, 200, 150, self._measure(calls), minimum=1)
+        assert len(calls) <= 9
+
+    def test_a_width_that_is_not_monotonic_never_returns_an_overflow(self) -> None:
+        """Hinting can make one size a pixel wider than the next one up."""
+
+        def bumpy(text: str, size: int) -> int:
+            return 10 * size + (15 if size % 3 == 0 else 0)
+
+        for width in range(50, 250, 5):
+            size = fitted_size("x", 24, width, bumpy, minimum=1)
+            assert bumpy("x", size) <= width or size == 1
+
+    @pytest.mark.parametrize(("minimum", "size"), [(0, 24), (25, 24)])
+    def test_a_minimum_outside_one_to_size_is_refused(
+        self, minimum: int, size: int
+    ) -> None:
+        with pytest.raises(ValueError, match="minimum"):
+            fitted_size("x", size, 100, self._measure(), minimum=minimum)
