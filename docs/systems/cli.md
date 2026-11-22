@@ -17,7 +17,7 @@ sub-commands:
 | `pyguara new`    | Create a project that runs: one scene, an entry point, an assets folder. |
 | `pyguara build`  | Package a game into a standalone executable (wraps PyInstaller). |
 | `pyguara dist`   | Generate per-store upload scripts and platform icons. |
-| `pyguara atlas`  | Pack a folder of sprites into one texture atlas + JSON metadata. |
+| `pyguara atlas`  | Pack a folder of sprites into atlas pages + JSON metadata, optionally trimmed. |
 | `pyguara sounds` | Build placeholder sound effects from a JSON recipe file, one `.wav` each. |
 | `pyguara studio` | Studio's agent surface: `ops`, `mcp` and `instructions`. See [Studio](studio.md) and [Agent Integration](../guides/agent-integration.md). |
 
@@ -306,14 +306,15 @@ the host platform's name is used.
 
 ## `pyguara atlas`
 
-Packs every image in a directory into one atlas texture using a
-shelf-packing algorithm (sprites sorted tallest-first, laid into horizontal
-rows), and writes JSON metadata the engine's `ResourceManager.load_atlas`
-reads back.
+Packs every image in a directory into atlas pages using a shelf-packing
+algorithm (sprites sorted tallest-first, laid into horizontal rows), and
+writes JSON metadata the engine's `ResourceManager.load_atlas` reads back.
 
 ```bash
 pyguara atlas -i assets/sprites/ -o build/atlas.png -m build/atlas.json
 pyguara atlas -i assets/sprites/ -o build/atlas.png -s 4096 -p 4
+pyguara atlas -i assets/sprites/ -o build/atlas.png -m build/atlas.json \
+  -s 2048x1024 --trim --fit pot
 ```
 
 Supported inputs: `.png`, `.jpg`, `.jpeg`, `.bmp`, `.tga` (non-`RGBA` images
@@ -326,8 +327,33 @@ are converted). The scan is **one directory deep**, not recursive.
 | `-i, --input` | *(required)* | Directory of source sprites. |
 | `-o, --output` | *(required)* | Atlas PNG path. |
 | `-m, --metadata` | — | JSON metadata path. Omit to skip. |
-| `-s, --size` | `2048` | Atlas is a square `size × size`. |
+| `-s, --size` | `2048` | Largest page: `2048` is square, `2048x1024` is not. |
 | `-p, --padding` | `2` | Transparent gutter around each sprite. |
+| `--trim` | off | Cut each sprite's fully transparent border off before packing. |
+| `--fit` | `fixed` | Page size: `fixed` is the full `--size`, `tight` crops to what the page holds, `pot` crops and rounds each side up to a power of two, never past `--size`. |
+
+### Trimming
+
+With `--trim`, a sprite that is mostly transparent border takes only its
+opaque part's room. The region's `width` and `height` are the kept part,
+`original_size` is the source image, and `offset` is where the kept part
+sat in it. A wholly transparent image keeps one transparent pixel. At run
+time `AtlasRegion.trimmed` says whether a region was cut, and
+`AtlasRegion.center_offset` is what to add to a centred draw position so
+the region lands where the whole image would have. Off by default, because
+trimming changes each region's size, and code that draws a region at its
+rect's size would draw it smaller.
+
+### Pages
+
+Sprites that overflow a page go on the next one. Page 0 is the `-o` file,
+and later pages sit beside it as `atlas_1.png`, `atlas_2.png` and so on.
+Several pages need `-m`, since only the metadata says which page holds a
+sprite. Without it, an overflow is an error. `load_atlas(path, metadata)`
+loads every page: `Atlas.pages` lists them, page 0 is `Atlas.texture`, and
+`Atlas.texture_of(name)` is the one a region is on. Rerunning into the
+sprite folder ingests none of the previous run's pages, and deletes a page
+the new run no longer needs.
 
 ### Metadata shape
 
@@ -336,15 +362,22 @@ are converted). The scan is **one directory deep**, not recursive.
   "atlas_size": [2048, 2048],
   "padding": 2,
   "sprite_count": 3,
+  "pages": [
+    { "image": "atlas.png", "size": [2048, 2048] },
+    { "image": "atlas_1.png", "size": [2048, 2048] }
+  ],
   "regions": {
-    "player": { "x": 2, "y": 2, "width": 64, "height": 64,
-                "original_size": [64, 64] }
+    "player": { "x": 2, "y": 2, "width": 40, "height": 58,
+                "original_size": [64, 64], "offset": [12, 6], "page": 0 }
   }
 }
 ```
 
 A region's name is the source filename **without extension**. `sprite_count`
-always equals `len(regions)`.
+always equals `len(regions)`. `atlas_size` is page 0's size. Metadata
+without `pages`, `offset` or `page`, as older versions wrote it, loads as
+one untrimmed page. A page `image` must be a bare file name; a path is
+refused, since the metadata travels with the game's assets.
 
 ### Failures are loud
 
@@ -355,8 +388,8 @@ subtly wrong atlas:
   the region name `hero`. This raises `ValueError` naming the offending
   files — rename or remove one.
 - **Sprite doesn't fit.** A sprite larger than `--size` in *either*
-  dimension (plus padding) raises — increase `--size` or shrink the sprite.
-  (Width used to slip through and get silently cropped.)
+  dimension (plus padding) raises, because no page could hold it. Increase
+  `--size` or shrink the sprite.
 - **Output inside the input.** `generate()` excludes the resolved `-o`/`-m`
   paths from its own scan, so re-running with the atlas written back into the
   sprite folder does not ingest the previous atlas. Still cleaner to keep
@@ -394,4 +427,5 @@ shared by every sound; change it to reroll their noise.
 missing-PyInstaller paths with Click's `CliRunner` (a real PyInstaller run is
 not exercised). `tests/test_atlas_tool.py` covers `load_images` / `pack` /
 `generate`, the collision and size guards, and round-tripping the metadata
-through `ResourceManager.load_atlas`.
+through `ResourceManager.load_atlas`. `tests/test_atlas_pages.py` covers
+trimming, `--fit`, pages, and loading them back.

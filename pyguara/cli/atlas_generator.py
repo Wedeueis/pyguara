@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Sprite Atlas Generator CLI Tool.
 
-Pack multiple sprite images into a single texture atlas using a shelf-packing
-algorithm. Generate both the packed image and JSON metadata for runtime loading.
+Pack multiple sprite images into texture atlas pages using a shelf-packing
+algorithm. Generate both the packed images and JSON metadata for runtime loading.
 
 Usage:
     pyguara atlas -i assets/sprites/ -o atlas.png -m atlas.json
@@ -37,16 +37,22 @@ class PackedSprite:
         y: int,
         width: int,
         height: int,
+        page: int = 0,
+        offset: tuple[int, int] = (0, 0),
+        original_size: tuple[int, int] | None = None,
     ):
         """Initialize packed sprite data.
 
         Args:
             name (str): Sprite identifier (filename without extension).
-            image (Image.Image): The sprite image.
-            x (int): X position in atlas.
-            y (int): Y position in atlas.
+            image (Image.Image): The sprite image, trimmed if trimming is on.
+            x (int): X position in its page.
+            y (int): Y position in its page.
             width (int): Sprite width.
             height (int): Sprite height.
+            page: Which page it is on.
+            offset: Where the trimmed image sat in the source image.
+            original_size: The source image's size. None means untrimmed.
         """
         self.name = name
         self.image = image
@@ -54,6 +60,9 @@ class PackedSprite:
         self.y = y
         self.width = width
         self.height = height
+        self.page = page
+        self.offset = offset
+        self.original_size = original_size or (width, height)
 
 
 class Shelf:
@@ -98,26 +107,53 @@ class Shelf:
         return x
 
 
+FITS = ("fixed", "tight", "pot")
+"""How a page is sized once packed: the full `--size`, cropped to what it
+holds, or cropped and rounded up to a power of two."""
+
+
 class AtlasGenerator:
     """Generates sprite atlases using a shelf-packing algorithm.
 
     The algorithm sorts sprites by height (descending) and packs them
-    into horizontal shelves, creating new shelves as needed.
+    into horizontal shelves, creating new shelves as needed, and a new page
+    once a page is full.
     """
 
     def __init__(
         self,
         atlas_size: int = 2048,
         padding: int = 2,
+        *,
+        atlas_height: int | None = None,
+        trim: bool = False,
+        fit: str = "fixed",
     ):
         """Initialize the atlas generator.
 
         Args:
-            atlas_size (int): Maximum atlas dimension (width and height).
+            atlas_size (int): Maximum page width, and height unless
+                `atlas_height` is given.
             padding (int): Padding between sprites to prevent bleeding.
+            atlas_height: Maximum page height, for a page that is not square.
+            trim: Cut each sprite's transparent border off before packing.
+            fit: One of `FITS`.
+
+        Raises:
+            ValueError: If a size is not positive, padding is negative, or
+                `fit` is not one of `FITS`.
         """
+        if atlas_size <= 0 or (atlas_height is not None and atlas_height <= 0):
+            raise ValueError("an atlas page must be at least 1x1 pixel")
+        if padding < 0:
+            raise ValueError(f"padding cannot be negative, got {padding}")
+        if fit not in FITS:
+            raise ValueError(f"fit must be one of {', '.join(FITS)}, not {fit!r}")
         self.atlas_size = atlas_size
+        self.atlas_height = atlas_height if atlas_height is not None else atlas_size
         self.padding = padding
+        self.trim = trim
+        self.fit = fit
 
     def load_images(
         self,
@@ -188,7 +224,7 @@ class AtlasGenerator:
     def pack(
         self, images: list[tuple[str, Image.Image]]
     ) -> tuple[Image.Image, dict[str, Any]]:
-        """Pack images into an atlas using shelf-packing algorithm.
+        """Pack images into a one-page atlas.
 
         Args:
             images (List[Tuple[str, Image.Image]]): List of (name, image) tuples.
@@ -197,8 +233,33 @@ class AtlasGenerator:
             Tuple[Image.Image, Dict[str, Any]]: The atlas image and metadata dict.
 
         Raises:
+            ValueError: If two sprites share a name, a sprite does not fit a
+                page in either dimension, or the sprites need several pages.
+        """
+        pages, metadata = self.pack_pages(images)
+        if len(pages) > 1:
+            raise ValueError(
+                f"Atlas size {self.atlas_size}x{self.atlas_height} is too small "
+                f"to fit all sprites on one page: they need {len(pages)}. "
+                f"Increase --size, or write metadata (-m) to get several pages."
+            )
+        return pages[0], metadata
+
+    def pack_pages(
+        self, images: list[tuple[str, Image.Image]]
+    ) -> tuple[list[Image.Image], dict[str, Any]]:
+        """Pack images into as many pages as they need.
+
+        Args:
+            images: List of (name, image) tuples.
+
+        Returns:
+            The page images, and the metadata. Each region names its page;
+            `pages` lists each page's size, and `generate()` adds its file.
+
+        Raises:
             ValueError: If two sprites share a name, or a sprite does not fit
-                the atlas in either dimension.
+                a page in either dimension.
         """
         names = [name for name, _ in images]
         dupes = sorted({n for n in names if names.count(n) > 1})
@@ -208,88 +269,94 @@ class AtlasGenerator:
                 f"Region names must be unique."
             )
 
-        # Sort images by height (descending) for better packing
-        sorted_images = sorted(images, key=lambda x: x[1].height, reverse=True)
+        sources = [
+            (*(_trimmed(img) if self.trim else (img, (0, 0))), name, img.size)
+            for name, img in images
+        ]
+        # Sort images by height (descending) for better packing; the name
+        # breaks ties so the layout does not depend on the input order.
+        sources.sort(key=lambda source: (-source[0].height, source[2]))
 
-        # Create blank atlas with transparency
-        atlas = Image.new("RGBA", (self.atlas_size, self.atlas_size), (0, 0, 0, 0))
-
+        page = 0
         shelves: list[Shelf] = []
         packed_sprites: list[PackedSprite] = []
         current_y = 0
 
-        for name, img in sorted_images:
+        for img, offset, name, original_size in sources:
             width = img.width + self.padding * 2
             height = img.height + self.padding * 2
-
-            # Try to fit on existing shelves
-            placed = False
-            for shelf in shelves:
-                if shelf.can_fit(width, height):
-                    x = shelf.add(width)
-                    packed_sprites.append(
-                        PackedSprite(
-                            name,
-                            img,
-                            x + self.padding,
-                            shelf.y + self.padding,
-                            img.width,
-                            img.height,
-                        )
-                    )
-                    placed = True
-                    break
-
-            # Create new shelf if needed
-            if not placed:
-                # Guard both dimensions: a sprite wider than the atlas used to
-                # slip past this check (only height was tested) and get silently
-                # clipped by Image.paste while its metadata kept the full width.
-                if width > self.atlas_size or current_y + height > self.atlas_size:
-                    raise ValueError(
-                        f"Atlas size {self.atlas_size}x{self.atlas_size} "
-                        f"is too small to fit all sprites "
-                        f"(sprite {name!r} needs {width}x{height}px including "
-                        f"padding). Try increasing --size or reducing sprite count."
-                    )
-
-                shelf = Shelf(current_y, height, self.atlas_size)
-                x = shelf.add(width)
-                packed_sprites.append(
-                    PackedSprite(
-                        name,
-                        img,
-                        x + self.padding,
-                        current_y + self.padding,
-                        img.width,
-                        img.height,
-                    )
+            if width > self.atlas_size or height > self.atlas_height:
+                # Both dimensions: a sprite wider than the atlas would
+                # otherwise be clipped by Image.paste while its metadata kept
+                # the full width.
+                raise ValueError(
+                    f"Atlas size {self.atlas_size}x{self.atlas_height} "
+                    f"is too small to fit all sprites "
+                    f"(sprite {name!r} needs {width}x{height}px including "
+                    f"padding). Try increasing --size or reducing sprite count."
                 )
+
+            shelf = next((s for s in shelves if s.can_fit(width, height)), None)
+            if shelf is None:
+                if current_y + height > self.atlas_height:
+                    page += 1
+                    shelves = []
+                    current_y = 0
+                shelf = Shelf(current_y, height, self.atlas_size)
                 shelves.append(shelf)
                 current_y += height
+            x = shelf.add(width)
+            packed_sprites.append(
+                PackedSprite(
+                    name,
+                    img,
+                    x + self.padding,
+                    shelf.y + self.padding,
+                    img.width,
+                    img.height,
+                    page=page,
+                    offset=offset,
+                    original_size=original_size,
+                )
+            )
 
-        # Paste sprites into atlas
+        sizes = [self._page_size(packed_sprites, index) for index in range(page + 1)]
+        pages = [Image.new("RGBA", size, (0, 0, 0, 0)) for size in sizes]
         for sprite in packed_sprites:
-            atlas.paste(sprite.image, (sprite.x, sprite.y), sprite.image)
+            pages[sprite.page].paste(sprite.image, (sprite.x, sprite.y), sprite.image)
 
-        # Build metadata dictionary
         metadata = {
-            "atlas_size": [self.atlas_size, self.atlas_size],
+            "atlas_size": list(sizes[0]),
             "padding": self.padding,
             "sprite_count": len(packed_sprites),
+            "pages": [{"size": list(size)} for size in sizes],
             "regions": {
                 sprite.name: {
                     "x": sprite.x,
                     "y": sprite.y,
                     "width": sprite.width,
                     "height": sprite.height,
-                    "original_size": [sprite.width, sprite.height],
+                    "original_size": list(sprite.original_size),
+                    "offset": list(sprite.offset),
+                    "page": sprite.page,
                 }
-                for sprite in packed_sprites
+                for sprite in sorted(packed_sprites, key=lambda s: s.name)
             },
         }
 
-        return atlas, metadata
+        return pages, metadata
+
+    def _page_size(self, sprites: list[PackedSprite], page: int) -> tuple[int, int]:
+        """Return the size page `page` is written at, given `fit`."""
+        if self.fit == "fixed":
+            return self.atlas_size, self.atlas_height
+        on_page = [sprite for sprite in sprites if sprite.page == page]
+        width = max(sprite.x + sprite.width + self.padding for sprite in on_page)
+        height = max(sprite.y + sprite.height + self.padding for sprite in on_page)
+        if self.fit == "pot":
+            width = min(_power_of_two(width), self.atlas_size)
+            height = min(_power_of_two(height), self.atlas_height)
+        return width, height
 
     def generate(
         self,
@@ -299,14 +366,24 @@ class AtlasGenerator:
     ) -> None:
         """Generate atlas from input directory.
 
+        A second page and later are written beside `output_path` as
+        `<name>_1.png`, `<name>_2.png` and so on, and need `metadata_path`,
+        since only the metadata says which page holds a sprite.
+
         Args:
             input_path (Path): Directory containing sprite images.
             output_path (Path): Path for output atlas image.
             metadata_path (Optional[Path]): Path for JSON metadata file.
+
+        Raises:
+            ValueError: If the sprites need several pages and there is no
+                `metadata_path`, or `pack_pages()` refuses them.
         """
         # Never re-ingest our own output when it is written back into the
-        # input directory (a common -i/-o overlap).
-        exclude = {output_path.resolve()}
+        # input directory (a common -i/-o overlap), including the extra pages
+        # a previous run wrote.
+        previous_pages = _previous_pages(output_path, metadata_path)
+        exclude = {output_path.resolve(), *(p.resolve() for p in previous_pages)}
         if metadata_path is not None:
             exclude.add(metadata_path.resolve())
 
@@ -315,14 +392,29 @@ class AtlasGenerator:
         print(f"Loaded {len(images)} images")
 
         print("Packing atlas...")
-        atlas_image, metadata = self.pack(images)
+        if metadata_path is None:
+            atlas_image, metadata = self.pack(images)
+            page_images = [atlas_image]
+        else:
+            page_images, metadata = self.pack_pages(images)
+
+        page_paths = [output_path] + [
+            output_path.with_name(f"{output_path.stem}_{index}.png")
+            for index in range(1, len(page_images))
+        ]
+        for entry, path in zip(metadata["pages"], page_paths, strict=True):
+            entry["image"] = path.name
 
         # Create output directory if needed
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Save atlas image
-        print(f"Saving atlas to: {output_path}")
-        atlas_image.save(output_path, "PNG")
+        for image, path in zip(page_images, page_paths, strict=True):
+            print(f"Saving atlas page to: {path}")
+            image.save(path, "PNG")
+        # A page the previous run wrote and this one did not would be
+        # mistaken for a sprite by the next run.
+        for stale in set(previous_pages) - set(page_paths):
+            stale.unlink(missing_ok=True)
 
         # Save metadata if requested
         if metadata_path:
@@ -331,7 +423,58 @@ class AtlasGenerator:
             with open(metadata_path, "w", encoding="utf-8") as f:
                 json.dump(metadata, f, indent=2)
 
-        print(f"Atlas generation complete: {metadata['sprite_count']} sprites packed")
+        print(
+            f"Atlas generation complete: {metadata['sprite_count']} sprites "
+            f"packed on {len(page_images)} page(s)"
+        )
+
+
+def _trimmed(image: Image.Image) -> tuple[Image.Image, tuple[int, int]]:
+    """Cut `image`'s fully transparent border off, keeping where it was.
+
+    A wholly transparent image keeps one transparent pixel, so it still has
+    a region to look up.
+    """
+    box = image.getchannel("A").getbbox()
+    if box is None:
+        return image.crop((0, 0, 1, 1)), (0, 0)
+    return image.crop(box), (box[0], box[1])
+
+
+def _power_of_two(value: int) -> int:
+    return 1 << max(value - 1, 0).bit_length()
+
+
+def _previous_pages(output_path: Path, metadata_path: Path | None) -> list[Path]:
+    """Return the extra pages an earlier run recorded in `metadata_path`."""
+    if metadata_path is None or not metadata_path.is_file():
+        return []
+    try:
+        previous = json.loads(metadata_path.read_text(encoding="utf-8"))
+        entries = previous.get("pages", [])[1:]
+        names = [entry["image"] for entry in entries]
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return []
+    return [
+        output_path.with_name(name)
+        for name in names
+        if isinstance(name, str) and name == Path(name).name
+    ]
+
+
+def _parse_size(
+    _ctx: click.Context, _param: click.Parameter, value: str
+) -> tuple[int, int]:
+    width, _, height = value.lower().partition("x")
+    try:
+        size = (int(width), int(height or width))
+    except ValueError:
+        raise click.BadParameter(
+            f"expected a size such as 2048 or 2048x1024, not {value!r}"
+        ) from None
+    if min(size) <= 0:
+        raise click.BadParameter(f"a page must be at least 1x1, not {value!r}")
+    return size
 
 
 @click.command()
@@ -360,9 +503,9 @@ class AtlasGenerator:
 @click.option(
     "-s",
     "--size",
-    type=int,
-    default=2048,
-    help="Atlas size (width and height, default: 2048)",
+    default="2048",
+    callback=_parse_size,
+    help="Largest page: 2048 for a square, or 2048x1024 (default: 2048)",
 )
 @click.option(
     "-p",
@@ -371,17 +514,32 @@ class AtlasGenerator:
     default=2,
     help="Padding between sprites (default: 2)",
 )
+@click.option(
+    "--trim/--no-trim",
+    default=False,
+    help="Cut each sprite's transparent border off, recording the offset",
+)
+@click.option(
+    "--fit",
+    type=click.Choice(FITS),
+    default="fixed",
+    help="Page size: the full --size, tight to what it holds, or tight "
+    "rounded up to a power of two (default: fixed)",
+)
 def atlas(
     input_dir: Path,
     output: Path,
     metadata: Path | None,
-    size: int,
+    size: tuple[int, int],
     padding: int,
+    trim: bool,
+    fit: str,
 ) -> None:  # noqa: D301  (\b is Click's no-wrap marker; r""" would defeat it)
     """Generate a sprite atlas from multiple images.
 
-    Pack sprites from INPUT directory into a single texture atlas using
-    shelf-packing algorithm.
+    Pack sprites from INPUT directory into a texture atlas using a
+    shelf-packing algorithm. Sprites that overflow a page go on the next,
+    which needs metadata (-m) to say which page holds each sprite.
 
     \b
     Examples:
@@ -391,11 +549,17 @@ def atlas(
       pyguara atlas -i assets/sprites/ -o atlas.png -m atlas.json
       # Custom size and padding
       pyguara atlas -i assets/sprites/ -o atlas.png -s 4096 -p 4
+      # Trimmed, on 1024x512 pages cropped to a power of two
+      pyguara atlas -i sprites/ -o atlas.png -m atlas.json -s 1024x512 \\
+        --trim --fit pot
     """
     try:
         generator = AtlasGenerator(
-            atlas_size=size,
+            atlas_size=size[0],
             padding=padding,
+            atlas_height=size[1],
+            trim=trim,
+            fit=fit,
         )
         generator.generate(
             input_path=input_dir,
