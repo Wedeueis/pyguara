@@ -34,6 +34,7 @@ from pyguara.net.schema import (
 )
 from pyguara.net.session import (
     ClientSession,
+    EndCode,
     HostSession,
     Invite,
     Joined,
@@ -59,6 +60,7 @@ __all__ = [
     "ClientDriver",
     "ClientSession",
     "CommandSchema",
+    "EndCode",
     "EntityRef",
     "EnumField",
     "EventRelay",

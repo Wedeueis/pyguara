@@ -46,6 +46,20 @@ A player whose engine version, game version, content hash or protocol differs is
 and `Refused.reason` names both sides. A wrong invite is deliberately silent at the network
 layer, so it shows up as `Left` after 10 seconds, with a message saying to check the invite.
 
+`Refused`, `Left`, `PlayerLeft` and `SessionFailed` each carry a `code`, an `EndCode`, beside
+the English `reason`. A localised game shows text keyed on the code, whose values are stable
+strings such as `"game_differs"` or `"no_answer"`, and keeps `reason` for logs:
+
+```python
+elif isinstance(event, Refused | Left | SessionFailed):
+    key = f"session.{event.code}"
+    show(tr(key) if tr.has(key) else event.reason)   # tr: the game's Translator
+```
+
+`EndCode.UNKNOWN` means none of the named reasons, including a refusal from a host built
+before codes existed. A refusal's code travels in its own message ahead of the text, so an
+older client ignores it and still reads the reason.
+
 **An invite is a secret.** Anyone holding it can join, and anyone who also recorded the
 session's handshake can read that session. Make a new one per session. `repr(invite)` leaves
 the key out, so it does not end up in a log by accident. Players also see each other's IP
