@@ -19,6 +19,7 @@ from pathlib import Path
 
 import click
 
+from pyguara.cli import version_resource
 from pyguara.cli.pack import bake_pack
 from pyguara.log import get_logger
 from pyguara.native import _MODULE_NAME
@@ -110,6 +111,7 @@ def _build_pyinstaller_args(
     debug: bool,
     bundle_id: str | None = None,
     include_studio: bool = False,
+    version_file: Path | None = None,
 ) -> list[str]:
     """Build the PyInstaller command arguments."""
     # Invoke via the running interpreter rather than a bare ``pyinstaller``
@@ -148,6 +150,11 @@ def _build_pyinstaller_args(
     # file generated on Linux quietly differed from the one on macOS.
     if bundle_id:
         args.extend(["--osx-bundle-identifier", bundle_id])
+
+    # The Windows version resource. Not host-gated either, for the same
+    # reason; PyInstaller warns and ignores it off Windows.
+    if version_file is not None:
+        args.extend(["--version-file", str(version_file)])
 
     # Assets directories
     for assets_dir in assets_dirs:
@@ -203,6 +210,47 @@ def _build_pyinstaller_args(
     args.append("--noconfirm")
 
     return args
+
+
+def _write_version_file(
+    entry_point: Path,
+    workdir: Path,
+    product: str,
+    version: str | None,
+    company: str | None,
+    copyright_line: str | None,
+) -> Path | None:
+    """Write the Windows version resource, or return None with no version.
+
+    The version is `--game-version`, else the game's `pyproject.toml`.
+
+    Raises:
+        click.UsageError: If a company or copyright is given with no
+            version to carry it, or the version is not one Windows stores.
+    """
+    version = version or version_resource.project_version(entry_point.parent)
+    if version is None:
+        if company or copyright_line:
+            raise click.UsageError(
+                "--company and --copyright go in the Windows file details, "
+                "which need a version: pass --game-version, or set "
+                "[project].version in the game's pyproject.toml."
+            )
+        click.echo(
+            "No version found (--game-version or pyproject.toml), so a "
+            "Windows build will have no file details."
+        )
+        return None
+    try:
+        text = version_resource.render(
+            version_resource.VersionInfo(product, version, company, copyright_line)
+        )
+    except ValueError as error:
+        raise click.UsageError(f"--game-version: {error}") from error
+    workdir.mkdir(parents=True, exist_ok=True)
+    path = workdir / "version_info.txt"
+    path.write_text(text, encoding="utf-8")
+    return path
 
 
 def _path_separator() -> str:
@@ -286,6 +334,25 @@ def _path_separator() -> str:
     help="macOS bundle identifier, e.g. com.studio.mygame",
 )
 @click.option(
+    "--game-version",
+    type=str,
+    default=None,
+    help="Version for the Windows file details (default: pyproject.toml's)",
+)
+@click.option(
+    "--company",
+    type=str,
+    default=None,
+    help="Company name for the Windows file details",
+)
+@click.option(
+    "--copyright",
+    "copyright_line",
+    type=str,
+    default=None,
+    help='Copyright line for the Windows file details, e.g. "(c) 2026 Studio"',
+)
+@click.option(
     "--pack",
     is_flag=True,
     default=False,
@@ -317,6 +384,9 @@ def build(
     clean: bool,
     debug: bool,
     bundle_id: str | None,
+    game_version: str | None,
+    company: str | None,
+    copyright_line: str | None,
     pack: bool,
     include_studio: bool,
     dry_run: bool,
@@ -372,6 +442,15 @@ def build(
         data_specs.append(f"{report.path}{_path_separator()}.")
         assets_list = []
 
+    version_file = _write_version_file(
+        entry_point,
+        output / "build",
+        name or entry_point.stem,
+        game_version,
+        company,
+        copyright_line,
+    )
+
     # Build command arguments
     args = _build_pyinstaller_args(
         entry_point=entry_point,
@@ -387,6 +466,7 @@ def build(
         debug=debug,
         bundle_id=bundle_id,
         include_studio=include_studio,
+        version_file=version_file,
     )
 
     if dry_run:
