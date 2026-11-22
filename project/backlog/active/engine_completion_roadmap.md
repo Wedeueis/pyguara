@@ -251,7 +251,7 @@ ceiling, and API stability, which waits for a team outside the project.
 
 | Item | What | Size |
 | --- | --- | --- |
-| **Unsafe audit** ([#503](https://github.com/Wedeueis/pyguara/issues/503)) | Every `unsafe` block in `steam.rs` and `mixer.rs` documented and checked; Steam-sourced lengths and layouts bounds-checked, each finding a hostile-input test first | M |
+| **Unsafe audit** ([#503](https://github.com/Wedeueis/pyguara/issues/503)) | Every `unsafe` block in `steam.rs` and `mixer.rs` documented and checked; Steam-sourced lengths and layouts bounds-checked, each finding a hostile-input test first. **Done** (#516): offsets checked against the SDK headers, four defects fixed against a fake `steam_api`, `mixer.rs` clean, `// SAFETY:` comments enforced by Clippy in CI | M |
 | **No-GPU message** ([#504](https://github.com/Wedeueis/pyguara/issues/504)) | A native dialog when a windowed build dies at startup, and one supported way for a game to opt in to the software renderer. The engine still never falls back on its own | M |
 | **Studio out of builds** ([#505](https://github.com/Wedeueis/pyguara/issues/505)) | `pyguara build` excludes `pyguara.studio` by default; the runtime survives its absence | S |
 | **Two measurements** ([#506](https://github.com/Wedeueis/pyguara/issues/506)) | The swapchain copy's cost per frame, and physics at 1, 2 and 4 substeps. Change either only on the numbers. *Measured 2026-11-19: the copy is 94/152 us at 1080p/1440p on an RTX 3050, so no direct path; 4 substeps stay, since joints need them and Reclaimer never steps the solver. Open: the copy on a real integrated GPU* | S |
@@ -263,6 +263,45 @@ convenient.
 
 **Done when** the four issues are closed, and a build on a machine with
 no usable GPU says why it cannot start.
+
+### Phase 8. The rest of the tracker, in order
+
+Agreed with the user 2026-11-22, from every open issue. Ordered by what a
+professional game needs, then by how little each needs decided by the
+user. Where an issue left a choice open and the repository already
+answers it, the choice is made in the PR and logged under `## Decisions`.
+
+**Tier 1. What shipping a game needs**
+
+| Order | Issue | The decision taken |
+| --- | --- | --- |
+| 1 | No-GPU message and opt-in fallback ([#504](https://github.com/Wedeueis/pyguara/issues/504)) | The message comes from `pyguara.crash`, so it works when the extension does not load: `MessageBoxW` on Windows, `osascript` on macOS, `zenity` or `kdialog` on Linux when present, stderr otherwise. The fallback is a `display.fallback_backend` setting, off by default, so the engine still never switches on its own; `pyguara build` bundles pygame-ce only when it is set |
+| 2 | Windows version resource ([#354](https://github.com/Wedeueis/pyguara/issues/354)) | Unblocked: CI now has a Windows job, which checks the generated file |
+| 3 | Reason codes on session ends ([#447](https://github.com/Wedeueis/pyguara/issues/447)) | A `code` enum beside `reason`, which stays as the English fallback |
+| 4 | Fit one line to a width ([#448](https://github.com/Wedeueis/pyguara/issues/448)) | Reclaimer's `draw_fitted`, as `fitted_size` in `pyguara.ui.text_layout` |
+| 5 | The game language from Steam ([#446](https://github.com/Wedeueis/pyguara/issues/446)) | Tested against the fake `steam_api`; the real client is checked in #402 |
+
+**Tier 2. What a professional developer expects**
+
+| Order | Issue | The decision taken |
+| --- | --- | --- |
+| 6 | Reload a system's code while running ([#512](https://github.com/Wedeueis/pyguara/issues/512)) | Dev only and opt-in; only modules that define nothing but systems; no state carried, `on_enter` runs again; a failed reload keeps the old system and reports |
+| 7 | Replay library and scrubbing ([#58](https://github.com/Wedeueis/pyguara/issues/58)) | The library API first, after checking a flock replay reproduces; scrubbing joins the profiler overlay |
+| 8 | Atlas trimming and pages ([#61](https://github.com/Wedeueis/pyguara/issues/61)) | Trimming with the offset in `original_size`, and non-square and multiple pages; build versioning and cross-compiling stay out |
+
+**Waiting for their trigger**, as each issue says: the resource
+dependency graph (#272) and prefabs (#51) until a game uses prefabs;
+visibility culling (#161) until a large scrolling world; non-square
+tiles (#346), kept; columnar components (6g); the audio and input
+production layers (#72, #73) until Reclaimer asks. The docstring rules
+for tests (#267) are proposed for closing as not planned.
+
+**Needs a person or hardware:** the Steam playtest (#402), audio on a
+Linux desktop and a window on a Mac, the present copy on an integrated
+GPU (#506), native speakers for the nine translations, and Nuitka (W29)
+if Reclaimer wants it.
+
+**Done when** tiers 1 and 2 are closed.
 
 ## What is not in this roadmap
 
