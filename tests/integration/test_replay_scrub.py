@@ -334,3 +334,16 @@ def test_a_long_seek_is_spread_over_frames(
     assert play.controls.frame == 60
     assert not play.controls.seeking
     assert play.flock.positions() == after[60]
+
+
+def test_pausing_the_player_itself_freezes_the_world_too(recording: Any) -> None:
+    """Rather than run on the wall clock with every input swallowed."""
+    path, after = recording
+    play = _Playback(path)
+    play.steps(10)
+    assert play.app._replay_player is not None
+    play.app._replay_player.pause_playback()
+
+    play.steps(20)
+
+    assert play.flock.positions() == after[10]
