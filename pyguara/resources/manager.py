@@ -919,7 +919,9 @@ class ResourceManager:
 
         This method loads both the atlas texture and its JSON metadata file,
         parsing the sprite regions and creating an Atlas object for convenient
-        access to packed sprites.
+        access to packed sprites. An atlas of several pages names the other
+        pages' images in its metadata, and they are loaded from beside
+        `atlas_path`.
 
         Args:
             atlas_path (str): Path to the atlas texture image.
@@ -963,27 +965,24 @@ class ResourceManager:
                 "Missing required 'regions' key",
             )
 
-        # Load the atlas texture using existing infrastructure
-        try:
-            texture = self.load(atlas_path, Texture)  # type: ignore[type-abstract]
-        except Exception as e:
-            raise ResourceLoadError(atlas_path, str(e)) from e
+        page_paths = _atlas_page_paths(atlas_path, metadata_path, metadata)
 
         # Parse regions from metadata with detailed error reporting
         regions: dict[str, AtlasRegion] = {}
         for name, region_data in metadata["regions"].items():
             try:
-                # Extract region properties
-                x = region_data["x"]
-                y = region_data["y"]
-                width = region_data["width"]
-                height = region_data["height"]
-                original_size = tuple(region_data["original_size"])
-
-                # Create region object
-                rect = Rect(x, y, width, height)
-                region = AtlasRegion(name=name, rect=rect, original_size=original_size)
-                regions[name] = region
+                region = AtlasRegion(
+                    name=name,
+                    rect=Rect(
+                        region_data["x"],
+                        region_data["y"],
+                        region_data["width"],
+                        region_data["height"],
+                    ),
+                    original_size=_int_pair(region_data["original_size"]),
+                    offset=_int_pair(region_data.get("offset", (0, 0))),
+                    page=int(region_data.get("page", 0)),
+                )
             except KeyError as e:
                 raise InvalidMetadataError(
                     metadata_path,
@@ -994,15 +993,72 @@ class ResourceManager:
                     metadata_path,
                     f"Region '{name}' has invalid data: {e}",
                 ) from e
+            if not 0 <= region.page < len(page_paths):
+                raise InvalidMetadataError(
+                    metadata_path,
+                    f"Region '{name}' is on page {region.page}, but the atlas "
+                    f"has {len(page_paths)}",
+                )
+            regions[name] = region
 
-        # The Atlas holds the texture for its whole lifetime; pin it so
-        # unload_unused() cannot pull it out from under the atlas. Drop it
-        # with unload(atlas_path, force=True) when the atlas is finished.
-        self.acquire(atlas_path)
+        # Load the page textures using existing infrastructure
+        pages: list[Texture] = []
+        for page_path in page_paths:
+            try:
+                pages.append(self.load(page_path, Texture))  # type: ignore[type-abstract]
+            except Exception as e:
+                raise ResourceLoadError(page_path, str(e)) from e
 
-        # Create and return the atlas
-        atlas = Atlas(texture=texture, regions=regions)
+        # The Atlas holds its textures for its whole lifetime; pin them so
+        # unload_unused() cannot pull one out from under the atlas. Drop each
+        # with unload(path, force=True) when the atlas is finished.
+        for page_path in page_paths:
+            self.acquire(page_path)
+
+        atlas = Atlas(texture=pages[0], regions=regions, pages=pages)
 
         logger.debug("Loaded atlas '%s' with %d regions", atlas_path, len(regions))
 
         return atlas
+
+
+def _int_pair(value: Any) -> tuple[int, int]:
+    """Read a two-number list from atlas metadata, as integers."""
+    first, second = value
+    return int(first), int(second)
+
+
+def _atlas_page_paths(
+    atlas_path: str, metadata_path: str, metadata: dict[str, Any]
+) -> list[str]:
+    """Return every page's image path, `atlas_path` first.
+
+    A later page's file is named in the metadata and lives beside
+    `atlas_path`. A name that could reach anywhere else is refused.
+
+    Raises:
+        InvalidMetadataError: If `pages` is malformed or names a path.
+    """
+    pages = metadata.get("pages")
+    if pages is None:
+        return [atlas_path]
+    if not isinstance(pages, list) or not pages:
+        raise InvalidMetadataError(metadata_path, "'pages' must be a non-empty list")
+    folder = os.path.dirname(atlas_path)
+    paths = [atlas_path]
+    for index, page in enumerate(pages[1:], start=1):
+        image = page.get("image") if isinstance(page, dict) else None
+        if (
+            not isinstance(image, str)
+            or not image
+            or image != os.path.basename(image)
+            or "/" in image
+            or "\\" in image
+            or image in (".", "..")
+        ):
+            raise InvalidMetadataError(
+                metadata_path,
+                f"Page {index} must name an image file beside the atlas, not {image!r}",
+            )
+        paths.append(os.path.join(folder, image))
+    return paths
