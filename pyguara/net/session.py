@@ -16,6 +16,7 @@ import base64
 import secrets
 import struct
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from pyguara.net.transport import (
     HOST_PEER,
@@ -43,6 +44,59 @@ _MAX_MESSAGES_BEFORE_WELCOME = 16_384
 
 _WELCOME = b"\x01"
 _REFUSED = b"\x02"
+# Sent just before `_REFUSED`, on the same ordered channel: the refusal's code.
+# Separate, so a client older than codes ignores it and still reads the text.
+_REFUSAL_CODE = b"\x03"
+
+
+class EndCode(StrEnum):
+    """Why a player was refused, left, or lost the session, for a game to act on.
+
+    `reason` beside it is English, for logs and as a fallback. A localised
+    game keys its text on this; the values are stable, and safe as a key.
+    """
+
+    PROTOCOL_DIFFERS = "protocol_differs"
+    """Refused: the network protocol differs; one side must update."""
+    ENGINE_DIFFERS = "engine_differs"
+    """Refused: the engine version differs."""
+    GAME_DIFFERS = "game_differs"
+    """Refused: the game version differs."""
+    FILES_DIFFER = "files_differ"
+    """Refused: the game's files differ from the host's."""
+    UNREADABLE_VERSIONS = "unreadable_versions"
+    """Refused: the host could not read what the player is running."""
+    NO_ANSWER = "no_answer"
+    """Left: the host never answered. A stale invite looks like this."""
+    LOST_CONTACT = "lost_contact"
+    """Left, or a player left: the connection timed out."""
+    FULL = "full"
+    """Left: the game is full."""
+    HOST_ENDED = "host_ended"
+    """Left: the host ended the connection, or the session."""
+    PLAYER_LEFT = "player_left"
+    """On the host: the player disconnected."""
+    KICKED = "kicked"
+    """On the host: this host removed the player."""
+    DROPPED = "dropped"
+    """On the host: the player broke the protocol or flooded the host."""
+    TOO_MUCH_EARLY_DATA = "too_much_early_data"
+    """Failed: the host sent too much before admitting us."""
+    TRANSPORT_FAILED = "transport_failed"
+    """Failed: the transport stopped working."""
+    UNKNOWN = "unknown"
+    """None of these, such as a refusal from a host older than codes."""
+
+
+# The byte each refusal code travels as. Fixed: a new member gets a new byte.
+_REFUSAL_BYTES = {
+    EndCode.PROTOCOL_DIFFERS: 1,
+    EndCode.ENGINE_DIFFERS: 2,
+    EndCode.GAME_DIFFERS: 3,
+    EndCode.FILES_DIFFER: 4,
+    EndCode.UNREADABLE_VERSIONS: 5,
+}
+_REFUSAL_CODES = {byte: code for code, byte in _REFUSAL_BYTES.items()}
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,17 +250,35 @@ class Versions:
         Returns:
             A message for a player, or None if they match.
         """
+        found = self.difference(other)
+        return None if found is None else found[1]
+
+    def difference(self, other: Versions) -> tuple[EndCode, str] | None:
+        """Return how another machine differs, as a code and a message.
+
+        Args:
+            other: The other machine's versions.
+
+        Returns:
+            The first difference, or None if they match.
+        """
         if self.protocol != other.protocol:
-            return (
+            return EndCode.PROTOCOL_DIFFERS, (
                 f"Network protocol differs: host {self.protocol}, "
                 f"you {other.protocol}. Update the game."
             )
         if self.engine != other.engine:
-            return f"Engine differs: host {self.engine}, you {other.engine}."
+            return EndCode.ENGINE_DIFFERS, (
+                f"Engine differs: host {self.engine}, you {other.engine}."
+            )
         if self.game != other.game:
-            return f"Game version differs: host {self.game}, you {other.game}."
+            return EndCode.GAME_DIFFERS, (
+                f"Game version differs: host {self.game}, you {other.game}."
+            )
         if self.content_hash != other.content_hash:
-            return "Game files differ from the host's. Verify your installation."
+            return EndCode.FILES_DIFFER, (
+                "Game files differ from the host's. Verify your installation."
+            )
         return None
 
 
@@ -232,6 +304,7 @@ class PlayerLeft:
 
     peer: int
     reason: str
+    code: EndCode = EndCode.UNKNOWN
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,6 +323,7 @@ class Refused:
     """On a client: the host would not admit us, and said why."""
 
     reason: str
+    code: EndCode = EndCode.UNKNOWN
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,6 +331,7 @@ class Left:
     """On a client: the session is over."""
 
     reason: str
+    code: EndCode = EndCode.UNKNOWN
 
 
 @dataclass(frozen=True, slots=True)
@@ -273,6 +348,7 @@ class SessionFailed:
     """The transport stopped working. The session delivers nothing more."""
 
     reason: str
+    code: EndCode = EndCode.UNKNOWN
 
 
 SessionEvent = (
@@ -346,19 +422,25 @@ class HostSession:
             elif isinstance(event, PeerDisconnected):
                 if event.peer in self._players:
                     del self._players[event.peer]
-                    events.append(PlayerLeft(event.peer, event.reason))
+                    events.append(
+                        PlayerLeft(event.peer, event.reason, _code_for(event.reason))
+                    )
             elif isinstance(event, TransportFailed):
-                events.append(SessionFailed(event.reason))
+                events.append(SessionFailed(event.reason, EndCode.TRANSPORT_FAILED))
         return events
 
     def _admit(self, event: PeerConnected) -> PlayerJoined | None:
         theirs = Versions.decode(event.user_data)
         if theirs is None:
-            self._refuse(event.peer, "Could not read your version information.")
+            self._refuse(
+                event.peer,
+                EndCode.UNREADABLE_VERSIONS,
+                "Could not read your version information.",
+            )
             return None
-        mismatch = self._versions.mismatch(theirs)
-        if mismatch is not None:
-            self._refuse(event.peer, mismatch)
+        difference = self._versions.difference(theirs)
+        if difference is not None:
+            self._refuse(event.peer, *difference)
             return None
         taken = set(self._players.values())
         slot = next(s for s in range(1, len(taken) + 2) if s not in taken)
@@ -366,7 +448,9 @@ class HostSession:
         self._transport.send(event.peer, Channel.CONTROL, _WELCOME + bytes([slot]))
         return PlayerJoined(event.peer, theirs, slot)
 
-    def _refuse(self, peer: int, reason: str) -> None:
+    def _refuse(self, peer: int, code: EndCode, reason: str) -> None:
+        coded = _REFUSAL_CODE + bytes([_REFUSAL_BYTES[code]])
+        self._transport.send(peer, Channel.CONTROL, coded)
         message = _REFUSED + reason.encode()[:_MAX_REFUSAL_BYTES]
         self._transport.send(peer, Channel.CONTROL, message)
         self._transport.disconnect(peer, flush=True)
@@ -389,6 +473,7 @@ class ClientSession:
         self._transport = transport
         self._joined = False
         self._ended = False
+        self._refusal_code = EndCode.UNKNOWN
         # Channels aren't ordered against each other, so a reliable message can overtake
         # the welcome when the welcome's packet is lost. Dropping it would be permanent.
         self._early: list[MessageDelivered] = []
@@ -422,10 +507,10 @@ class ClientSession:
                 if not self._ended:
                     self._ended = True
                     self._joined = False
-                    events.append(Left(_explain(event.reason)))
+                    events.append(Left(_explain(event.reason), _code_for(event.reason)))
             elif isinstance(event, TransportFailed):
                 self._joined = False
-                events.append(SessionFailed(event.reason))
+                events.append(SessionFailed(event.reason, EndCode.TRANSPORT_FAILED))
         return events
 
     def _on_message(self, event: MessageDelivered, events: list[SessionEvent]) -> None:
@@ -437,7 +522,12 @@ class ClientSession:
                 if len(self._early) > _MAX_MESSAGES_BEFORE_WELCOME:
                     self._ended = True
                     self._early.clear()
-                    events.append(SessionFailed("Too much data before being admitted."))
+                    events.append(
+                        SessionFailed(
+                            "Too much data before being admitted.",
+                            EndCode.TOO_MUCH_EARLY_DATA,
+                        )
+                    )
             return
         if len(event.data) == 2 and event.data[:1] == _WELCOME and not self._joined:
             self._joined = True
@@ -446,15 +536,43 @@ class ClientSession:
                 MessageReceived(m.peer, m.channel, m.data) for m in self._early
             )
             self._early.clear()
+        elif event.data[:1] == _REFUSAL_CODE and not self._joined:
+            # Untrusted: a byte this does not know is simply no code.
+            byte = event.data[1] if len(event.data) == 2 else -1
+            self._refusal_code = _REFUSAL_CODES.get(byte, EndCode.UNKNOWN)
         elif event.data[:1] == _REFUSED and not self._joined:
             self._ended = True
             self._early.clear()
             raw = event.data[1 : 1 + _MAX_REFUSAL_BYTES]
-            events.append(Refused(raw.decode("utf-8", errors="replace")))
+            text = raw.decode("utf-8", errors="replace")
+            events.append(Refused(text, self._refusal_code))
 
     def close(self) -> None:
         """Leave the session."""
         self._transport.close()
+
+
+_TRANSPORT_CODES = {
+    "ConnectionRequestTimedOut": EndCode.NO_ANSWER,
+    "ConnectionResponseTimedOut": EndCode.NO_ANSWER,
+    "ConnectionTimedOut": EndCode.LOST_CONTACT,
+    "ConnectionDenied": EndCode.FULL,
+    "DisconnectedByServer": EndCode.HOST_ENDED,
+    "DisconnectedByClient": EndCode.PLAYER_LEFT,
+    # The host's own words, from `rust/src/net/core.rs` and `steam_core.rs`.
+    "left": EndCode.PLAYER_LEFT,
+    "timed out": EndCode.LOST_CONTACT,
+    "disconnected by the host": EndCode.KICKED,
+    "removed from the room": EndCode.KICKED,
+    "the host closed": EndCode.HOST_ENDED,
+}
+
+
+def _code_for(reason: str) -> EndCode:
+    """Name a transport's disconnect reason."""
+    if reason.startswith("dropped:"):
+        return EndCode.DROPPED
+    return _TRANSPORT_CODES.get(reason, EndCode.UNKNOWN)
 
 
 def _explain(reason: str) -> str:

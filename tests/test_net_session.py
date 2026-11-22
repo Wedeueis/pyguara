@@ -11,6 +11,7 @@ import pytest
 from pyguara.net import (
     Channel,
     ClientSession,
+    EndCode,
     HostSession,
     Invite,
     Joined,
@@ -441,3 +442,154 @@ def test_an_extension_older_than_networking_also_names_make_native(
 
     with pytest.raises(RuntimeError, match="make native"):
         load_core()
+
+
+# -- Codes, for a game that shows the reason in the player's language --------
+
+
+@pytest.mark.parametrize(
+    ("theirs", "code"),
+    [
+        (Versions("0.5.0", "1.0", b"h" * 32), EndCode.ENGINE_DIFFERS),
+        (Versions("0.6.0", "0.9", b"h" * 32), EndCode.GAME_DIFFERS),
+        (Versions("0.6.0", "1.0", b"x" * 32), EndCode.FILES_DIFFER),
+        (Versions("0.6.0", "1.0", b"h" * 32, protocol=99), EndCode.PROTOCOL_DIFFERS),
+    ],
+    ids=["engine", "game", "content", "protocol"],
+)
+def test_a_refusal_carries_its_code_across_the_network(
+    theirs: Versions, code: EndCode
+) -> None:
+    network, host, client = start(theirs)
+
+    _, heard_client = run(network, host, client, 2.0)
+
+    [refused] = [e for e in heard_client if isinstance(e, Refused)]
+    assert refused.code is code
+    assert refused.reason  # the English text still comes with it
+
+
+def test_an_unreadable_hello_is_refused_with_its_code() -> None:
+    network = SimulatedNetwork(seed=1)
+    key = secrets.token_bytes(32)
+    host_transport = network.add_host(key)
+    host = HostSession(host_transport, VERSIONS)
+    client = ClientSession(
+        network.add_client(key, network.address_of(host_transport), b"garbage")
+    )
+
+    _, heard = run(network, host, client, 2.0)
+
+    [refused] = [e for e in heard if isinstance(e, Refused)]
+    assert refused.code is EndCode.UNREADABLE_VERSIONS
+
+
+def test_a_refusal_from_a_host_older_than_codes_is_unknown_not_wrong() -> None:
+    transport = ScriptedTransport()
+    client = ClientSession(transport)  # type: ignore[arg-type]
+    transport.incoming = [MessageDelivered(0, Channel.CONTROL, b"\x02Old host.")]
+
+    assert client.poll() == [Refused("Old host.", EndCode.UNKNOWN)]
+
+
+@pytest.mark.parametrize(
+    "coded", [b"\x03", b"\x03\x00", b"\x03\xff", b"\x03\x01\x01"], ids=repr
+)
+def test_a_code_this_does_not_know_is_unknown_and_never_raises(coded: bytes) -> None:
+    """The host's bytes are untrusted, as everything from the network is."""
+    transport = ScriptedTransport()
+    client = ClientSession(transport)  # type: ignore[arg-type]
+    transport.incoming = [
+        MessageDelivered(0, Channel.CONTROL, coded),
+        MessageDelivered(0, Channel.CONTROL, b"\x02text"),
+    ]
+
+    assert client.poll() == [Refused("text", EndCode.UNKNOWN)]
+
+
+def test_the_code_alone_is_no_event() -> None:
+    """What lets a client older than codes ignore it and still read the text."""
+    transport = ScriptedTransport()
+    client = ClientSession(transport)  # type: ignore[arg-type]
+    transport.incoming = [MessageDelivered(0, Channel.CONTROL, b"\x03\x01")]
+
+    assert client.poll() == []
+    assert not client.joined
+
+
+def test_a_kick_is_a_kick_on_the_host_and_the_host_ending_it_on_the_client() -> None:
+    network, host, client = start()
+    run(network, host, client, 1.0)
+
+    host.kick(next(iter(host.players)))
+    heard_host, heard_client = run(network, host, client, 0.5)
+
+    [left] = [e for e in heard_client if isinstance(e, Left)]
+    assert left.code is EndCode.HOST_ENDED
+    [gone] = [e for e in heard_host if isinstance(e, PlayerLeft)]
+    assert gone.code is EndCode.KICKED
+
+
+@pytest.mark.parametrize(
+    ("reason", "code"),
+    [
+        ("dropped: sending far over the rate limit", EndCode.DROPPED),
+        ("dropped: a packet from this peer broke the protocol", EndCode.DROPPED),
+        ("timed out", EndCode.LOST_CONTACT),
+        ("ConnectionTimedOut", EndCode.LOST_CONTACT),
+        ("the host closed", EndCode.HOST_ENDED),
+        ("something new", EndCode.UNKNOWN),
+    ],
+)
+def test_the_transports_reasons_are_named(reason: str, code: EndCode) -> None:
+    from pyguara.net import session
+
+    assert session._code_for(reason) is code
+
+
+def test_a_player_who_disconnects_is_reported_as_leaving() -> None:
+    network, host, client = start()
+    run(network, host, client, 1.0)
+
+    client.close()
+    heard_host, _ = run(network, host, client, 0.5)
+
+    [left] = [e for e in heard_host if isinstance(e, PlayerLeft)]
+    assert left.code is EndCode.PLAYER_LEFT
+
+
+def test_a_stale_invite_is_no_answer() -> None:
+    network = SimulatedNetwork(seed=1)
+    host = network.add_host(secrets.token_bytes(32))
+    session = ClientSession(
+        network.add_client(
+            secrets.token_bytes(32), network.address_of(host), VERSIONS.encode()
+        )
+    )
+    heard: list[SessionEvent] = []
+    for _ in range(60 * 12):
+        network.advance(DT)
+        heard.extend(session.poll())
+
+    [left] = [e for e in heard if isinstance(e, Left)]
+    assert left.code is EndCode.NO_ANSWER
+
+
+def test_too_much_before_the_welcome_has_its_code() -> None:
+    transport = ScriptedTransport()
+    client = ClientSession(transport)  # type: ignore[arg-type]
+    transport.incoming = [
+        MessageDelivered(0, Channel.EVENTS, b"x") for _ in range(20_000)
+    ]
+
+    [failed] = client.poll()
+
+    assert isinstance(failed, SessionFailed)
+    assert failed.code is EndCode.TOO_MUCH_EARLY_DATA
+
+
+def test_every_refusal_code_has_its_own_byte() -> None:
+    from pyguara.net import session
+
+    assert len(set(session._REFUSAL_BYTES.values())) == len(session._REFUSAL_BYTES)
+    assert 0 not in session._REFUSAL_BYTES.values()
