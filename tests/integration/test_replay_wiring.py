@@ -205,8 +205,11 @@ def test_recorded_session_replays_to_the_same_entity_state(tmp_path):
     )
     assert playback_app.load_replay(replay_path)
 
+    # Playback runs whole recorded frames, input and simulation together,
+    # so the simulation needs the timestep `begin()` would have set.
+    playback_app._fixed_dt = FIXED_DT
     for _ in range(NUM_FRAMES):
-        playback_app._process_input(FIXED_DT)
+        playback_app._step_replay(FIXED_DT, None)
 
     assert playback_app._replay_player is None  # finished exactly on schedule
     playback_app.shutdown()

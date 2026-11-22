@@ -93,6 +93,20 @@ class ReplayPlayer:
         return 0
 
     @property
+    def duration(self) -> float:
+        """How long the recording runs, in seconds."""
+        if not self._data or not self._data.frames:
+            return 0.0
+        last = self._data.frames[-1]
+        return last.timestamp + last.delta_time
+
+    def timestamps(self) -> list[float]:
+        """Return when each frame begins, in seconds into the recording."""
+        if not self._data:
+            return []
+        return [frame.timestamp for frame in self._data.frames]
+
+    @property
     def playback_speed(self) -> float:
         """Get current playback speed multiplier."""
         return self._playback_speed
