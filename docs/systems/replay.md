@@ -112,6 +112,53 @@ than left out, and `load()` raises for it. A name is refused, with
 separators or `<>:"|?*`, no leading or trailing space or dot, not a name
 Windows reserves, at most 100 characters. Any script is fine.
 
+## Watching a replay: pause, step, speed and seek
+
+`load_replay()` gives the application a `ReplayControls`, as
+`app.replay_controls`. Setting `visible` draws a scrub bar along the bottom
+of the screen and lets these keys drive it:
+
+| Key | Does |
+| --- | --- |
+| Space | pause or resume |
+| `.` | play one frame, then hold |
+| `[` / `]` | slower / faster: 0.25x, 0.5x, 1x, 2x, 4x, 8x |
+| Left / Right | back / forward 5 seconds |
+| Home | back to the start |
+
+The same are methods (`pause`, `resume`, `step`, `slower`, `faster`,
+`seek(frame)`, `skip(seconds)`) for a game drawing its own buttons.
+
+```python
+def restart() -> None:
+    scene_manager.register(ArenaScene(dispatcher))  # a fresh copy
+    scene_manager.switch_to("ArenaScene")
+
+app.load_replay(str(library.path_of("boss rush")), restart=restart)
+app.replay_controls.visible = True
+```
+
+Every speed runs whole recorded frames, each with its own delta and input,
+so a replay watched at 4x or stepped frame by frame ends where it would at
+1x. Speed changes how many recorded frames run per displayed frame, not the
+size of a step. Seeking forward runs the frames in between without
+drawing them, 240 per displayed frame, so a long seek shows progress
+instead of freezing the window.
+
+**Seeking back needs `restart`.** A replay holds input, not world states, so
+the only way back is to replay from the start. `restart` puts the world back
+where the recording began, usually by switching to a fresh copy of the scene
+it started in.
+Before calling it the engine reseeds `RandomService` and resets its fixed-step
+accumulator. Without `restart`, seeking back raises `RuntimeError` and the
+back keys do nothing. Anything the game keeps outside the scene, and any
+event still waiting in `dispatch_after`, is not reset, so `restart` must
+reset the first, and the second carries across the rewind.
+
+While the bar is hidden, a replay that ends hands input back to the game,
+as it always has, and `replay_controls` becomes None. While it is shown,
+playback holds on the last frame, so the viewer can seek back.
+
 ## API surface
 
 | Call | Purpose |
@@ -119,7 +166,8 @@ Windows reserves, at most 100 characters. Any script is fine.
 | `Application.start_recording(seed=None, description="")` | begin capture; returns the seed |
 | `Application.stop_recording()` | end capture; returns `ReplayData` |
 | `Application.save_recording(data, path, compress=True)` | write to disk |
-| `Application.load_replay(path)` | load and start playback |
+| `Application.load_replay(path, restart=None)` | load and start playback |
+| `Application.replay_controls` | pause, step, speed and seek the replay; `visible` shows the scrub bar |
 | `save_replay(data, path, compress=True)` / `load_replay(path)` | module-level serializer helpers |
 | `ReplaySerializer.get_metadata(path)` | read the metadata block only |
 | `ReplayLibrary(directory)` / `ReplayLibrary.for_game(name)` | named replays in a folder: `entries`, `save`, `load`, `rename`, `delete`, `path_of` |

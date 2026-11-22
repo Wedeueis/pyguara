@@ -4,6 +4,7 @@ Provides tools for recording game input and playing it back deterministically,
 useful for debugging, testing, and sharing gameplay.
 """
 
+from pyguara.replay.controls import ReplayControls
 from pyguara.replay.library import ReplayEntry, ReplayLibrary
 from pyguara.replay.player import ReplayPlayer
 from pyguara.replay.recorder import ReplayRecorder
@@ -35,6 +36,7 @@ __all__ = [
     # Recorder
     "ReplayRecorder",
     # Player
+    "ReplayControls",
     "ReplayPlayer",
     # Serializer
     "ReplaySerializer",

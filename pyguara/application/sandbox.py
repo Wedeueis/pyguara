@@ -8,6 +8,7 @@ surface. Authoring (selecting, editing, undo) is `pyguara.studio`.
 
 from pyguara.application.application import Application
 from pyguara.di.container import DIContainer
+from pyguara.events.input import KeyDownEvent
 from pyguara.events.lifecycle import QuitEvent
 from pyguara.events.window import WindowResizeEvent
 from pyguara.input import keys
@@ -108,7 +109,10 @@ class SandboxApplication(Application):
             # 3. Game Input Manager (Normal Priority). While a replay drives
             # the game, real input is swallowed so both runs see the same
             # events (mirrors the base Application's behavior).
-            if self._replay_player is None:
+            if self._replay_controls is not None:
+                if isinstance(event, KeyDownEvent):
+                    self._replay_controls.handle_key(event.key_code)
+            elif self._replay_player is None:
                 self._input_manager.process_event(event)
 
         self._end_replay_frame(frame_time)

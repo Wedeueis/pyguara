@@ -25,7 +25,7 @@ from pyguara.dev.code_reload import SystemCodeReloader
 from pyguara.di.container import DIContainer
 from pyguara.di.exceptions import ServiceNotFoundException
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.events.input import MouseButtonEvent, MouseMotionEvent
+from pyguara.events.input import KeyDownEvent, MouseButtonEvent, MouseMotionEvent
 from pyguara.events.lifecycle import ApplicationStartEvent, QuitEvent
 from pyguara.events.resources import ResourceReloaded
 from pyguara.events.window import WindowResizeEvent
@@ -35,6 +35,11 @@ from pyguara.graphics.window import Window
 from pyguara.input.manager import InputManager
 from pyguara.log.manager import LogManager
 from pyguara.random.service import RandomService
+from pyguara.replay.controls import (
+    SEEK_FRAMES_PER_STEP,
+    ReplayControls,
+    draw_replay_controls,
+)
 from pyguara.replay.player import ReplayPlayer
 from pyguara.replay.recorder import ReplayRecorder
 from pyguara.replay.serializer import ReplaySerializer
@@ -205,6 +210,9 @@ class Application:
         self._replay_serializer = ReplaySerializer()
         self._replay_recorder: ReplayRecorder | None = None
         self._replay_player: ReplayPlayer | None = None
+        self._replay_controls: ReplayControls | None = None
+        self._replay_restart: Callable[[], None] | None = None
+        self._replay_start_accumulator = 0.0
         self._replay_frame_id = 0
         self._replay_clock = 0.0
 
@@ -505,27 +513,45 @@ class Application:
         if frame_time > self._max_frame_time:
             frame_time = self._max_frame_time
 
-        # While a replay drives the game, step the simulation by the
-        # recorded per-frame delta instead of wall-clock time, so the
-        # fixed-step count, tweens, particles and WaitForSeconds
-        # reproduce. clock.tick() above still throttles rendering to the
-        # display rate.
-        is_replay_driven = False
-        if self._replay_player is not None and self._replay_player.is_playing:
-            is_replay_driven = True
-            recorded_dt = self._replay_player.peek_delta()
-            if recorded_dt is not None:
-                frame_time = recorded_dt
+        first_tick = self._fixed_tick
+        # While a replay drives the game, it steps by the recorded deltas
+        # instead, as many frames as its controls say are due.
+        if self._replay_player is not None and self._replay_controls is not None:
+            self._step_replay(frame_time, profiler)
+        else:
+            # 2. Input (once per frame, before physics)
+            # Gamepad state must be fresh before poll_events() drains this
+            # frame's SDL events, since that pump is what keeps pygame's
+            # internal joystick device list current.
+            self._input_manager.update()
+            self._process_input(frame_time)
+            if profiler is not None:
+                profiler.mark("input")
+            self._simulate(frame_time * self._effective_time_scale(), profiler)
 
-        # 2. Input (once per frame, before physics)
-        # Gamepad state must be fresh before poll_events() drains this
-        # frame's SDL events, since that pump is what keeps pygame's
-        # internal joystick device list current.
-        self._input_manager.update()
-        self._process_input(frame_time)
+        # 6. Render at display framerate, interpolating between the
+        # last two fixed steps. Not when game code closed the window during
+        # this frame: there is nothing left to draw to.
+        if self._window_closed_during_frame():
+            return False
+        self._render()
         if profiler is not None:
-            profiler.mark("input")
+            profiler.mark("render")
+            profiler.end_frame(self._fixed_tick - first_tick)
 
+        # 7. After the first whole frame of new scenes, keep what they loaded
+        # out of the garbage collector's way.
+        self._settle_memory_if_scenes_changed()
+
+        return self._is_running and self._window.is_open
+
+    def _simulate(self, simulated_time: float, profiler: FrameProfiler | None) -> None:
+        """Run one frame's events, fixed updates and update, `simulated_time` long.
+
+        Args:
+            simulated_time: The frame's duration in game time.
+            profiler: The frame profiler, charged for each phase, if any.
+        """
         # 3. Drain queued events once per frame, before the fixed
         # updates that consume them. Not inside the accumulator loop:
         # the time budget exists to stop an event death spiral, and a
@@ -536,25 +562,14 @@ class Application:
             max_time_ms=self._event_queue_time_budget_ms
         )
 
-        # 4. Accumulate time and run fixed updates. time_scale/paused
-        # are ignored while a replay drives the game -- see step()'s
-        # docstring for why scaling recorded_dt would desync physics
-        # from what was actually recorded.
-        simulated_time = (
-            frame_time
-            if is_replay_driven
-            else frame_time * self._effective_time_scale()
-        )
-        # Delayed events run on the same scaled clock as physics,
-        # so a pending `dispatch_after` waits out a pause instead of
-        # firing into a frozen world.
+        # 4. Accumulate time and run fixed updates. Delayed events run on
+        # the same clock as physics, so a pending `dispatch_after` waits out
+        # a pause instead of firing into a frozen world.
         self._event_dispatcher.advance(simulated_time)
         if profiler is not None:
             profiler.mark("events")
 
         self._accumulator += simulated_time
-        first_tick = self._fixed_tick
-
         for hook in self._step_hooks:
             hook.before_fixed_updates(simulated_time)
 
@@ -574,21 +589,61 @@ class Application:
         if profiler is not None:
             profiler.mark("update")
 
-        # 6. Render at display framerate, interpolating between the
-        # last two fixed steps. Not when game code closed the window during
-        # this frame: there is nothing left to draw to.
-        if self._window_closed_during_frame():
-            return False
-        self._render()
+    def _step_replay(self, frame_time: float, profiler: FrameProfiler | None) -> None:
+        """Run the recorded frames due this displayed frame.
+
+        None while paused, one per frame at normal speed, several when fast
+        or seeking. Each runs exactly as it was recorded: its own delta, its
+        own input, then events, fixed updates and update. `time_scale` and
+        `paused` are ignored, because scaling a recorded delta would desync
+        the game from what was recorded.
+
+        Args:
+            frame_time: The displayed frame's real duration.
+            profiler: The frame profiler, charged for each phase, if any.
+        """
+        player = self._replay_player
+        controls = self._replay_controls
+        assert player is not None and controls is not None
+
+        self._input_manager.update()
+        self._process_input(frame_time)
         if profiler is not None:
-            profiler.mark("render")
-            profiler.end_frame(self._fixed_tick - first_tick)
+            profiler.mark("input")
 
-        # 7. After the first whole frame of new scenes, keep what they loaded
-        # out of the garbage collector's way.
-        self._settle_memory_if_scenes_changed()
+        target = controls.take_seek()
+        if target is None:
+            due = controls.frames_due()
+        else:
+            if target < player.current_frame:
+                self._rewind_replay()
+            due = min(target - player.current_frame, SEEK_FRAMES_PER_STEP)
+            if player.current_frame + due >= target:
+                controls.seek_done()
 
-        return self._is_running and self._window.is_open
+        for _ in range(due):
+            recorded_dt = player.peek_delta()
+            frame = player.advance_frame()
+            if recorded_dt is None or frame is None:
+                break
+            for recorded_event in frame.events:
+                self._input_manager.process_replayed_event(recorded_event)
+            self._simulate(recorded_dt, profiler)
+
+        if player.is_finished() and not controls.visible:
+            # Nobody is watching the controls, so the game takes over again,
+            # as it always has at the end of a replay.
+            self._replay_player = None
+            self._replay_controls = None
+
+    def _rewind_replay(self) -> None:
+        """Put the world back where the recording began, to replay from there."""
+        player = self._replay_player
+        assert player is not None and self._replay_restart is not None
+        self._rng().reseed(player.seed)
+        self._accumulator = self._replay_start_accumulator
+        self._replay_restart()
+        player.start_playback()
 
     def _window_closed_during_frame(self) -> bool:
         """Whether the window, open when this frame began, has been closed.
@@ -712,11 +767,23 @@ class Application:
         """
         return self._replay_serializer.save(data, path, compress=compress)
 
-    def load_replay(self, path: str, *, allow_store_mismatch: bool = False) -> bool:
+    def load_replay(
+        self,
+        path: str,
+        *,
+        allow_store_mismatch: bool = False,
+        restart: Callable[[], None] | None = None,
+    ) -> bool:
         """Load a saved replay from disk and start driving input from it.
+
+        `replay_controls` then pauses, steps, speeds and seeks it.
 
         Args:
             path: File path to load, as saved by `save_recording()`.
+            restart: Puts the world back where the recording began, usually
+                by switching to a fresh copy of its scene. Given it, the
+                controls can seek back; the engine reseeds `RandomService`
+                and resets its own clock before calling it.
             allow_store_mismatch: Play a replay recorded under the other
                 native store anyway. The default refuses, because such a
                 replay does not reproduce -- see the raise below. Pass
@@ -765,8 +832,23 @@ class Application:
 
         self._replay_player = ReplayPlayer(data)
         self._replay_player.start_playback()
+        self._replay_controls = ReplayControls(
+            self._replay_player, can_rewind=restart is not None
+        )
+        self._replay_restart = restart
+        self._replay_start_accumulator = self._accumulator
         self._replay_frame_id = 0
         return True
+
+    @property
+    def replay_controls(self) -> ReplayControls | None:
+        """The controls of the replay being played, or None.
+
+        A replay viewer sets their `visible` to draw the scrub bar and take
+        its keys. Once a replay ends with the bar hidden, the game takes
+        input again and this is None; with the bar shown it holds at the end.
+        """
+        return self._replay_controls
 
     def _begin_replay_frame(self, frame_time: float) -> None:
         """Open a recorder frame, if one is active. Call before polling input."""
@@ -776,19 +858,11 @@ class Application:
             )
 
     def _end_replay_frame(self, frame_time: float) -> None:
-        """Close the recorder frame and drive playback. Call after polling input."""
+        """Close the recorder frame, if one is active. Call after polling input."""
         if self._replay_recorder is not None and self._replay_recorder.is_recording:
             self._replay_recorder.end_frame()
             self._replay_clock += frame_time
             self._replay_frame_id += 1
-
-        if self._replay_player is not None and self._replay_player.is_playing:
-            frame = self._replay_player.advance_frame()
-            if frame is not None:
-                for recorded_event in frame.events:
-                    self._input_manager.process_replayed_event(recorded_event)
-            if self._replay_player.is_finished():
-                self._replay_player = None
 
     def _process_input(self, frame_time: float) -> None:
         """Poll system events, or feed replayed ones when a replay is active.
@@ -832,8 +906,12 @@ class Application:
                 continue
 
             # While a replay drives the game, real input is swallowed rather
-            # than dispatched, so both runs see exactly the same events.
-            if self._replay_player is None:
+            # than dispatched, so both runs see exactly the same events. The
+            # replay's own controls are the exception.
+            if self._replay_controls is not None:
+                if isinstance(event, KeyDownEvent):
+                    self._replay_controls.handle_key(event.key_code)
+            elif self._replay_player is None:
                 self._input_manager.process_event(self._in_game_pixels(event))
 
         self._end_replay_frame(frame_time)
@@ -1040,11 +1118,18 @@ class Application:
         """
 
     def _render_frame_profile(self) -> None:
-        """Draw the frame profiler's overlay, above everything else.
+        """Draw the replay's scrub bar and the profiler, above everything else.
 
         Separate from `_render_overlays()` so a subclass that overrides that
         hook keeps the profiler.
         """
+        if self._replay_controls is not None:
+            draw_replay_controls(
+                self._replay_controls,
+                self._ui_renderer,
+                self._window.width,
+                self._window.height,
+            )
         if self._frame_profiler is None:
             return
         budget_ms = 1000.0 / self._target_fps if self._target_fps > 0 else None
