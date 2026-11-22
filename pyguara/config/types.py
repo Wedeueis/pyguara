@@ -35,8 +35,8 @@ class RenderingBackend(Enum):
 
     WGPU: The default. GPU rendering through the native extension, on
           whichever of DX12, Metal, Vulkan or GL the machine has, with the
-          render graph and sprite materials. A machine with no usable GPU
-          fails at startup with `NoGraphicsAdapterError`.
+          render graph and sprite materials. With no usable GPU, startup
+          fails (`NoGraphicsAdapterError`) unless `software_fallback` is on.
 
     PYGAME: Software rendering through pygame: runs anywhere, more slowly,
             without lighting or post-processing. Also the reference the
@@ -94,6 +94,12 @@ class WindowConfig:
     default_color: Color = field(default_factory=lambda: Color(0, 0, 0))
     title: str = "Pyguara Engine"
     backend: RenderingBackend = RenderingBackend.WGPU
+    # Off by default: the software renderer has no lighting or
+    # post-processing, so switching to it changes how the game looks, and
+    # that is the game's decision, not the engine's. On, a machine where
+    # wgpu finds no usable GPU starts on `pygame` instead, which must be
+    # installed (`pyguara[pygame]`).
+    software_fallback: bool = False
 
 
 class AudioBackend(Enum):

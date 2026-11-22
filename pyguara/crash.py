@@ -1,9 +1,10 @@
 """Crash reports: an unhandled exception leaves a file behind, and says where.
 
 The report holds the traceback, the engine and Python versions, the
-platform, which native store was in force, and whatever the engine
-noted on the way, such as the renderer. It is written to the player's
-data directory, and holds paths from their machine.
+platform, the native store, and what the engine noted on the way, such
+as the renderer. It is written to the player's data directory, and holds
+paths from their machine. Without a console -- a windowed build -- the
+player is also shown a dialog naming the error and the report.
 
 Opt-in, because the directory is named after the game. Install it
 before the application is built, so a failure at startup is reported
@@ -23,6 +24,8 @@ import contextlib
 import datetime
 import os
 import platform
+import shutil
+import subprocess
 import sys
 import traceback
 from collections.abc import Callable
@@ -79,6 +82,7 @@ class CrashReporter:
         keep: How many reports to keep; older ones are deleted on write.
         previous_hook: The `sys.excepthook` this one replaced and calls
             after writing, so the traceback still reaches stderr.
+        dialog: Whether a crash is also shown in a native dialog.
         last_report: The most recent report written, or None.
     """
 
@@ -86,6 +90,7 @@ class CrashReporter:
     directory: Path
     keep: int
     previous_hook: ExceptHook
+    dialog: bool = False
     last_report: Path | None = field(default=None)
 
     def __call__(
@@ -101,11 +106,16 @@ class CrashReporter:
         stderr, and the previous hook runs regardless.
         """
         if not issubclass(exc_type, KeyboardInterrupt):
+            report: Path | None = None
             try:
-                self.last_report = self._write(exc_type, exc_value, exc_tb)
-                _say(f"The game crashed. A report was written to {self.last_report}")
+                report = self.last_report = self._write(exc_type, exc_value, exc_tb)
+                _say(f"The game crashed. A report was written to {report}")
             except Exception as error:  # noqa: BLE001 -- must not mask the crash
                 _say(f"The game crashed, and could not write a crash report: {error!r}")
+            if self.dialog:
+                _show_dialog(
+                    self.app_name, _dialog_text(self.app_name, exc_value, report)
+                )
         self.previous_hook(exc_type, exc_value, exc_tb)
 
     def _write(
@@ -143,6 +153,7 @@ def install_crash_reporter(
     *,
     directory: Path | None = None,
     keep: int = 20,
+    dialog: bool | None = None,
 ) -> CrashReporter:
     """Write a report for any exception that would otherwise end the program.
 
@@ -161,6 +172,9 @@ def install_crash_reporter(
         directory: Where to write, instead of `crashes/` in the per-user
             data directory.
         keep: How many reports to keep. At least 1.
+        dialog: Whether to show a crash in a native dialog too. By default,
+            only when there is no console to read it in: a frozen build
+            not started from a terminal, or one with no stderr at all.
 
     Returns:
         The installed reporter, whose `directory` says where reports go.
@@ -188,6 +202,7 @@ def install_crash_reporter(
         directory=directory,
         keep=keep,
         previous_hook=sys.excepthook,
+        dialog=_no_console() if dialog is None else dialog,
     )
     sys.excepthook = reporter
     _installed = reporter
@@ -228,3 +243,90 @@ def _say(message: str) -> None:
     if sys.stderr is not None:
         with contextlib.suppress(Exception):  # nowhere else to say it
             print(message, file=sys.stderr, flush=True)
+
+
+def _no_console() -> bool:
+    """Whether nobody can read stderr: no stream, or a frozen build off a tty."""
+    if sys.stderr is None:
+        return True
+    if not getattr(sys, "frozen", False):
+        return False
+    try:
+        return not sys.stderr.isatty()
+    except Exception:  # noqa: BLE001 -- a replaced stream; assume nobody reads it
+        return True
+
+
+_DIALOG_DETAIL_LIMIT = 600
+
+
+def _dialog_text(app_name: str, exc_value: BaseException, report: Path | None) -> str:
+    """What the player reads: the error's own message, then the report."""
+    detail = str(exc_value) or type(exc_value).__name__
+    if len(detail) > _DIALOG_DETAIL_LIMIT:
+        detail = detail[:_DIALOG_DETAIL_LIMIT] + "..."
+    where = (
+        f"A crash report was written to:\n{report}"
+        if report is not None
+        else "No crash report could be written."
+    )
+    return f"{app_name} stopped because of an error.\n\n{detail}\n\n{where}"
+
+
+def _dialog_command(title: str, text: str) -> list[str] | None:
+    """The command that shows an error dialog here, or None if there is none.
+
+    The text is passed as an argument, never spliced into a script, so
+    nothing in an error message is interpreted.
+    """
+    if sys.platform == "darwin":
+        return [
+            "osascript",
+            "-e",
+            "on run argv",
+            "-e",
+            "display alert (item 1 of argv) message (item 2 of argv) as critical",
+            "-e",
+            "end run",
+            title,
+            text,
+        ]
+    zenity = shutil.which("zenity")
+    if zenity is not None:
+        return [zenity, "--error", "--no-markup", f"--title={title}", f"--text={text}"]
+    kdialog = shutil.which("kdialog")
+    if kdialog is not None:
+        return [kdialog, "--title", title, "--error", text]
+    return None
+
+
+def _show_dialog(title: str, text: str) -> bool:
+    """Show a blocking native error dialog. Never raises.
+
+    Returns:
+        True if a dialog was shown; False where the platform has none to
+        offer, as a Linux desktop without zenity or kdialog.
+    """
+    try:
+        if sys.platform == "win32":
+            import ctypes
+
+            mb_iconerror, mb_setforeground, mb_topmost = 0x10, 0x10000, 0x40000
+            user32 = ctypes.WinDLL("user32")
+            user32.MessageBoxW(
+                None, text, title, mb_iconerror | mb_setforeground | mb_topmost
+            )
+            return True
+        command = _dialog_command(title, text)
+        if command is None:
+            return False
+        result = subprocess.run(  # noqa: S603 -- fixed program, text as arguments
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        return result.returncode == 0
+    except Exception:  # noqa: BLE001 -- must not mask the crash
+        return False

@@ -147,6 +147,33 @@ the GPU, and anything the game added with `pyguara.crash.note(key, value)`,
 such as the level. The newest 20 are kept. Where there is a console, the
 report's path is printed and the traceback still follows.
 
+Where there is none -- a frozen build not started from a terminal -- the
+player is also shown a dialog with the error's message and the report's
+path: a message box on Windows, an alert through `osascript` on macOS,
+and `zenity` or `kdialog` on Linux when either is installed (otherwise
+nothing is shown). `install_crash_reporter(..., dialog=True)` or `False`
+overrides that. A project made by `pyguara new` installs the reporter in
+its entry point.
+
+### A machine with no usable GPU
+
+The default renderer stops at startup with `NoGraphicsAdapterError`,
+which the reporter shows the player as above. The engine never switches
+renderer by itself, because the software renderer has no lighting or
+post-processing. A game that accepts the difference turns on the
+fallback, and ships the software renderer by building in an environment
+with the `pyguara[pygame]` extra installed (`pyguara build` bundles
+pygame whenever it is importable):
+
+```python
+def configure(config: GameConfig) -> None:
+    config.display.software_fallback = True
+```
+
+or `"software_fallback": true` under `display` in the config file. With
+it on and no GPU, the game starts on `pygame`, logs a warning, and notes
+the switch in any later crash report.
+
 It is opt-in because the folder is named after the game. Ctrl+C is not a
 crash, and an exception in a background thread, which does not end the
 program, is not reported. A report contains paths from the player's
