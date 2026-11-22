@@ -60,15 +60,17 @@ Reproduces:
 - bound actions and the raw `OnRawKeyEvent` / `OnMouseEvent` stream (position
   and modifiers included), so both gameplay and UI interactions replay;
 - everything downstream of those that is a pure function of input + time —
-  fixed-step physics, animation, coroutine waits, camera smoothing.
+  fixed-step physics, animation, coroutine waits, camera smoothing;
+- draws from `RandomService`: `start_recording()` pins the service's root
+  seed into the replay and `load_replay()` re-roots the service on it;
+- a flock: queries come back in a reproducible order, so `FlockingSystem`
+  integrates the same way on playback
+  (`tests/integration/test_replay_flock.py`).
 
 Does **not** reproduce, today:
 
-- **RNG.** The `seed` is recorded and exposed as `ReplayPlayer.seed`, but
-  nothing reseeds a random source on playback — there is no engine RNG service
-  yet (tracked in the roguelike-core issue). A game that seeds its own RNG from
-  `player.seed` on load will replay; one that calls `random.*` on the global
-  module state will not.
+- **The global `random` module.** Only `RandomService` streams are
+  re-rooted; `random.*` on the module's global state is not.
 - Anything a game reads from outside the input+time envelope directly:
   `time.time()` / `datetime.now()`, the filesystem, the network, thread
   scheduling.
@@ -86,6 +88,30 @@ is gzip, `.replay` is plain, a path with neither gets one appended per the
 `metadata.version` exceeds `ReplaySerializer.SUPPORTED_VERSION` — there is no
 migration layer.
 
+## A library of replays
+
+`ReplayLibrary` keeps a game's replays by name in one folder, for a replay
+menu:
+
+```python
+from pyguara.replay import ReplayLibrary
+
+library = ReplayLibrary.for_game("Reclaimer")    # <data dir>/replays
+library.save(app.stop_recording(), "boss rush")  # FileExistsError if taken
+for entry in library.entries():                  # newest first
+    label = entry.name if entry.metadata else f"{entry.name} (damaged)"
+app.load_replay(str(library.path_of("boss rush")))
+library.rename("boss rush", "best run")
+library.delete("best run")
+```
+
+Each replay is `<name>.replay.gz`; a plain `.replay` saved there by other
+means is found too. A damaged file is listed with `metadata` None rather
+than left out, and `load()` raises for it. A name is refused, with
+`ValueError`, unless it is a plain file name on every platform: no path
+separators or `<>:"|?*`, no leading or trailing space or dot, not a name
+Windows reserves, at most 100 characters. Any script is fine.
+
 ## API surface
 
 | Call | Purpose |
@@ -96,6 +122,7 @@ migration layer.
 | `Application.load_replay(path)` | load and start playback |
 | `save_replay(data, path, compress=True)` / `load_replay(path)` | module-level serializer helpers |
 | `ReplaySerializer.get_metadata(path)` | read the metadata block only |
+| `ReplayLibrary(directory)` / `ReplayLibrary.for_game(name)` | named replays in a folder: `entries`, `save`, `load`, `rename`, `delete`, `path_of` |
 
 `ReplayPlayer` exposes two playback models for a caller driving its own loop
 (the `Application` path uses the first):
