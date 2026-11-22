@@ -1,6 +1,7 @@
 """Scene management system."""
 
 import contextlib
+import weakref
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -68,6 +69,11 @@ class SceneManager:
         self._layers: list[LayerEntry] = []
         self._layer_sequence = 0
 
+        # Scenes that have exited since they were last wired. An exit drops
+        # a scene's systems and disposes its scope, so entering one of these
+        # again wires it afresh first.
+        self._exited: weakref.WeakSet[Scene] = weakref.WeakSet()
+
     def set_container(self, container: DIContainer) -> None:
         """Receive the DI container and wire every scene with it.
 
@@ -98,7 +104,8 @@ class SceneManager:
         """Add a scene under its name, wiring it if the container is available.
 
         Registering before `set_container()` is fine: the scene is wired when
-        the container arrives.
+        the container arrives. Registering a scene that is already registered
+        changes nothing, so it is not wired twice.
 
         Args:
             scene: The scene to register. Replaces any scene already
@@ -106,7 +113,9 @@ class SceneManager:
                 displaced scene becomes unreachable.
         """
         existing = self._scenes.get(scene.name)
-        if existing is not None and existing is not scene:
+        if existing is scene:
+            return
+        if existing is not None:
             logger.warning(
                 f"Replacing the scene already registered as '{scene.name}'. "
                 f"The previous one is now unreachable by name."
@@ -182,7 +191,7 @@ class SceneManager:
                 target_scene,
                 on_complete,
                 on_from_hidden=on_from_hidden,
-                on_to_shown=target_scene.on_enter,
+                on_to_shown=lambda: self._enter_scene(target_scene),
             )
         else:
             # Immediate switch
@@ -190,7 +199,7 @@ class SceneManager:
 
             self._current_scene = target_scene
             self._current_pause_below = False
-            self._current_scene.on_enter()
+            self._enter_scene(target_scene)
 
     def push_scene(
         self,
@@ -242,13 +251,13 @@ class SceneManager:
                 target_scene,
                 on_complete,
                 on_from_hidden=None,
-                on_to_shown=target_scene.on_enter,
+                on_to_shown=lambda: self._enter_scene(target_scene),
             )
         else:
             # Immediate push
             self._current_scene = target_scene
             self._current_pause_below = pause_below
-            self._current_scene.on_enter()
+            self._enter_scene(target_scene)
 
     def pop_scene(self, transition: Transition | None = None) -> Scene | None:
         """Return to the scene beneath the current one.
@@ -376,7 +385,7 @@ class SceneManager:
         self._layer_sequence += 1
         self._layers.append(LayerEntry(scene, order, self._layer_sequence))
         self._layers.sort(key=lambda entry: (entry.order, entry.sequence))
-        scene.on_enter()
+        self._enter_scene(scene)
 
     def remove_layer(self, scene_name: str) -> Scene | None:
         """Deactivate a persistent layer, exiting its scene.
@@ -701,6 +710,18 @@ class SceneManager:
         )
         return True
 
+    def _enter_scene(self, scene: Scene) -> None:
+        """Run a scene's enter hook, wiring it again first if it has exited.
+
+        An exit drops the scene's systems and disposes its scope, so a scene
+        entered a second time, say back to the menu from a game, would
+        otherwise run without its engine systems.
+        """
+        if scene in self._exited and self._container is not None:
+            self._exited.discard(scene)
+            scene.resolve_dependencies(self._container)
+        scene.on_enter()
+
     def _exit_scene(self, scene: Scene) -> None:
         """Run a scene's exit hook and guarantee its resources are torn down.
 
@@ -732,6 +753,7 @@ class SceneManager:
         scene.system_manager.cleanup()
         if scene.scope is not None:
             scene.scope.dispose()
+        self._exited.add(scene)
 
     def _pause_scene(self, scene: Scene) -> None:
         """Run a scene's pause hook and guarantee its SystemManager is disabled.

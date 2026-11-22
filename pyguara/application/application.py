@@ -434,6 +434,8 @@ class Application:
     def begin(self, starting_scene: Scene) -> None:
         """Register and activate `starting_scene`, then arm the frame loop.
 
+        A scene that is already current stays as it is.
+
         Split out of `run()` so a frame can be driven from outside it --
         `step()` is unusable before this has run, because `_fixed_dt` is
         still `0.0` and no scene is active. A headless harness, a test, or
@@ -450,7 +452,10 @@ class Application:
         self.logger.info(f"Starting with scene: {starting_scene.name}")
 
         self._scene_manager.register(starting_scene)
-        self._scene_manager.switch_to(starting_scene.name)
+        # Already current, say after a `switch_to()` to set it up: switching
+        # again would exit it and enter it afresh, dropping what was set up.
+        if self._scene_manager.current_scene is not starting_scene:
+            self._scene_manager.switch_to(starting_scene.name)
 
         self._is_running = True
         physics_config = self._config_manager.config.physics
