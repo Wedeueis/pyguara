@@ -1,6 +1,6 @@
 """The core Rendering System that orchestrates the pipeline."""
 
-from pyguara.common.types import Color, Vector2
+from pyguara.common.types import Vector2
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.batch import Batcher
 from pyguara.graphics.pipeline.queue import RenderQueue
@@ -76,6 +76,9 @@ class RenderSystem:
     def flush(self, camera: Camera2D, viewport: Viewport | None = None) -> None:
         """Process the frame: Sort -> Batch -> Draw.
 
+        Draws over what the frame already holds: the frame's own clear, a
+        colour the scene cleared to, or a scene beneath this one's layer.
+
         Args:
             camera: The active camera for the scene.
             viewport: Optional custom viewport. If None, uses full screen.
@@ -96,7 +99,6 @@ class RenderSystem:
             viewport = self._default_viewport
 
         self._backend.set_viewport(viewport)
-        self._backend.clear(color=Color(0, 0, 0))
 
         # 2. Sort (Critical for Z-Index / Painter's Algorithm)
         self._queue.sort()
