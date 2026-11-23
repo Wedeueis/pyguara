@@ -35,8 +35,10 @@ from pyguara.events.dispatcher import EventDispatcher
 
 
 def _vm_game_scene(event_dispatcher: EventDispatcher) -> VMGameScene:
-    """`GameScene` needs a `StageConfig`; `validate_game()` calls with just
-    the dispatcher, so pin it to Stage 1 for the smoke check.
+    """Build the game scene at Stage 1, for the smoke check.
+
+    `GameScene` needs a `StageConfig`, and `validate_game()` passes only
+    the dispatcher.
     """
     return VMGameScene(event_dispatcher, STAGE_1)
 

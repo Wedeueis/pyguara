@@ -66,9 +66,11 @@ class SaveFormatError(ValueError):
 
 
 def _is_known_inventory_key(key: str) -> bool:
-    """Whether `PlayerEconomy.inventory[key]` names something this build
-    understands: a structure kind, the generic seed stock, or a specific
-    species' stocked-seed key (`components.specific_seed_key`)."""
+    """Whether this build understands `PlayerEconomy.inventory[key]`.
+
+    It does for a structure kind, the generic seed stock, or a specific
+    species' stocked-seed key (`components.specific_seed_key`).
+    """
     if key in STRUCTURE_TABLE or key == GENERIC_SEED_KEY:
         return True
     prefix, _, species_id = key.partition(":")
@@ -328,9 +330,9 @@ def _parse(payload: Any) -> _Parsed:
             parsed_cond,
             cells,
         )
+    except SaveFormatError:
+        raise
     except (KeyError, TypeError, ValueError, AttributeError) as error:
-        if isinstance(error, SaveFormatError):
-            raise
         raise SaveFormatError(f"malformed save: {error!r}") from error
 
 

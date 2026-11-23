@@ -1,4 +1,4 @@
-"""Module 2: ECS Systems
+"""Module 2: the systems.
 
 Logic processors. They query data and update it.
 """
@@ -13,6 +13,11 @@ class MovementSystem:
     """Updates entity positions."""
 
     def __init__(self, entity_manager: EntityManager):
+        """Move the entities in `entity_manager`.
+
+        Args:
+            entity_manager: The scene's entities.
+        """
         self._em = entity_manager
 
         # Optimization: Register query for caching
@@ -21,7 +26,6 @@ class MovementSystem:
 
     def update(self, dt: float) -> None:
         """Move all entities with a Transform."""
-
         # Use the cached query for performance
         # dt is 'delta time' (time passed since last frame)
         for entity in self._em.get_entities_with_cached(Transform):

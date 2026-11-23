@@ -35,6 +35,7 @@ class Drift(BaseComponent):
     value: Vector2
 
     def __post_init__(self) -> None:
+        """Run `BaseComponent`'s setup, which the generated `__init__` does not."""
         BaseComponent.__init__(self)
 
 

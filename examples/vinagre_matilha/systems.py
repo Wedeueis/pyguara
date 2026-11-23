@@ -90,6 +90,15 @@ class FlankerAssignmentSystem:
         jaguar_id: str,
         spatial_index: SpatialHash[str],
     ) -> None:
+        """Feed `blackboard` what the pack needs to choose its moves.
+
+        Args:
+            entity_manager: The scene's entities.
+            blackboard: The pack's shared blackboard.
+            flow_field: The field leading the dogs to the jaguar.
+            jaguar_id: The jaguar's entity id.
+            spatial_index: For finding the dogs nearest a point.
+        """
         self._em = entity_manager
         self._blackboard = blackboard
         self._flow_field = flow_field
@@ -99,6 +108,11 @@ class FlankerAssignmentSystem:
         blackboard.set("pack_cell_size", CELL_SIZE)
 
     def update(self, dt: float) -> None:
+        """Post the jaguar's position and the flankers' neighbours, and route them.
+
+        Args:
+            dt: Seconds since the last tick.
+        """
         jaguar = self._em.get_entity(self._jaguar_id)
         if jaguar is None:
             return
@@ -163,8 +177,10 @@ class FlankerAssignmentSystem:
             assign_flanker_vector(self._blackboard, dog.id, point)
 
     def _assign_plate_runners(self, flankers: list[Entity]) -> None:
-        """Route the nearest `required_count` flankers to any unopened
-        pressure plate, ahead of whatever command the player has issued.
+        """Send the nearest flankers to any pressure plate not yet open.
+
+        That takes `required_count` dogs per plate, ahead of whatever
+        command the player has issued.
 
         Without this, nothing ever routes a dog to a plate at all: the
         Pincer/Scatter/Distract leaves only ever steer relative to the
@@ -212,6 +228,14 @@ class VanguardControlSystem:
         vanguard_id: str,
         speed: float = 180.0,
     ) -> None:
+        """Move the Vanguard `vanguard_id` across `graph`.
+
+        Args:
+            entity_manager: The scene's entities.
+            graph: The walkable grid.
+            vanguard_id: The Vanguard's entity id.
+            speed: Pixels a second.
+        """
         self._em = entity_manager
         self._graph = graph
         self._vanguard_id = vanguard_id
@@ -219,6 +243,11 @@ class VanguardControlSystem:
         self.move_direction = Vector2(0, 0)
 
     def update(self, dt: float) -> None:
+        """Move the Vanguard along `move_direction` for one tick.
+
+        Args:
+            dt: Seconds since the last tick.
+        """
         entity = self._em.get_entity(self._vanguard_id)
         if entity is None:
             return
@@ -253,8 +282,7 @@ class VanguardControlSystem:
 
 
 class JaguarAISystem:
-    """Flees the nearest pack member, enforces the grid's walls, and detects
-    when the jaguar has been cornered.
+    """Runs the jaguar from the pack, inside the walls, until it is cornered.
 
     Calls `SteeringBehavior.flee()` directly and integrates the result by
     hand -- the same F=ma clamp `SteeringSystem` uses internally -- rather
@@ -273,6 +301,16 @@ class JaguarAISystem:
         required_capture_dogs: int,
         event_dispatcher: EventDispatcher,
     ) -> None:
+        """Run the jaguar `jaguar_id` from the pack.
+
+        Args:
+            entity_manager: The scene's entities.
+            graph: The walkable grid.
+            jaguar_id: The jaguar's entity id.
+            corner_zone: Where the jaguar can be cornered.
+            required_capture_dogs: Dogs needed near it there to corner it.
+            event_dispatcher: Where the capture is announced.
+        """
         self._em = entity_manager
         self._graph = graph
         self._jaguar_id = jaguar_id
@@ -282,6 +320,11 @@ class JaguarAISystem:
         self._cornered_time = 0.0
 
     def update(self, dt: float) -> None:
+        """Flee one tick, and check whether the jaguar is cornered.
+
+        Args:
+            dt: Seconds since the last tick.
+        """
         jaguar = self._em.get_entity(self._jaguar_id)
         if jaguar is None:
             return
@@ -374,9 +417,19 @@ class CurrentZoneSystem:
     """
 
     def __init__(self, entity_manager: EntityManager) -> None:
+        """Damp movement inside the current zones.
+
+        Args:
+            entity_manager: The scene's entities.
+        """
         self._em = entity_manager
 
     def update(self, dt: float) -> None:
+        """Damp everything inside a current zone for one tick.
+
+        Args:
+            dt: Seconds since the last tick.
+        """
         for zone in self._em.get_entities_with(TriggerVolume, CurrentZone):
             trigger = zone.get_component(TriggerVolume)
             current = zone.get_component(CurrentZone)
@@ -409,9 +462,19 @@ class PackMotionSystem:
     """
 
     def __init__(self, entity_manager: EntityManager) -> None:
+        """Keep the dogs' steering in step with their states.
+
+        Args:
+            entity_manager: The scene's entities.
+        """
         self._em = entity_manager
 
     def update(self, dt: float) -> None:
+        """Sync every dog's steering and facing.
+
+        Args:
+            dt: Seconds since the last tick.
+        """
         for entity in self._em.get_entities_with(DogState, FlockingAgent):
             state = entity.get_component(DogState)
             agent = entity.get_component(FlockingAgent)
@@ -438,10 +501,21 @@ class PackContainmentSystem:
     """
 
     def __init__(self, entity_manager: EntityManager, graph: GridGraph) -> None:
+        """Keep the dogs on `graph`'s walkable cells.
+
+        Args:
+            entity_manager: The scene's entities.
+            graph: The walkable grid.
+        """
         self._em = entity_manager
         self._graph = graph
 
     def update(self, dt: float) -> None:
+        """Put any dog on a wall back where it last stood on open ground.
+
+        Args:
+            dt: Seconds since the last tick.
+        """
         for entity in self._em.get_entities_with(DogState, Transform):
             state = entity.get_component(DogState)
             transform = entity.get_component(Transform)
@@ -472,11 +546,23 @@ class PressurePlateSystem:
         graph: GridGraph,
         event_dispatcher: EventDispatcher,
     ) -> None:
+        """Open gates on `graph` as plates are held down.
+
+        Args:
+            entity_manager: The scene's entities.
+            graph: The walkable grid, opened where a gate lifts.
+            event_dispatcher: Where an opened gate is announced.
+        """
         self._em = entity_manager
         self._graph = graph
         self._dispatcher = event_dispatcher
 
     def update(self, dt: float) -> None:
+        """Open the gate of every plate with enough dogs on it.
+
+        Args:
+            dt: Seconds since the last tick.
+        """
         for plate_entity in self._em.get_entities_with(TriggerVolume, PressurePlate):
             plate = plate_entity.get_component(PressurePlate)
             if plate.opened:

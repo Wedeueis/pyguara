@@ -1,4 +1,4 @@
-"""Module 2: ECS Components
+"""Module 2: the components.
 
 Pure data containers. No logic allowed here!
 """

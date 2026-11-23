@@ -51,8 +51,9 @@ on 3,700 functions, which is what Google style asks for. Whether to trim
 those too is decision 3 below.
 
 Outside the package: `tests/` has 4,441 docstrings (317 with a marker),
-`examples/` and `tools/` 1,656 (81). None of the three is under any
-docstring rule today (#267).
+`examples/` and `tools/` 1,656 (81). None of the three was under any
+docstring rule then; ruff's `D` rules now cover `examples/` and `tools/`,
+outside each demo's `tests/` (#267).
 
 ## The standard
 
@@ -223,7 +224,8 @@ The owner took all five recommendations on 2026-11-15.
    summary already says it. Requiring it adds lines to 531 public
    functions; forbidding a redundant one cannot be checked.
 4. **`tests/` gets `DS001` and `DS003` only.** A regression test may
-   name its issue. `examples/` and `tools/` wait for #267.
+   name its issue. `examples/` and `tools/` are under ruff's `D` rules
+   only, not the content rules (#267).
 5. **`DOC501` is enabled in D2**: an exception a caller can meet is
    part of the contract.
 
@@ -246,7 +248,8 @@ keeps. What changed is what the prose says.
 
 Left open:
 
-- `examples/` and `tools/` are under no docstring rule (#267).
+- `examples/` and `tools/` are under ruff's `D` rules but not the content
+  rules of `tools/check_docstrings.py`.
 - The comments in `pyproject.toml` have the same habits and no check.
 - `DS001` is not applied to comments, by decision 2: a comment may be as
   long as its explanation needs.

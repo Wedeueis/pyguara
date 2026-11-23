@@ -23,8 +23,7 @@ once. Wind (`weather.py`) multiplies it."""
 
 
 class SoilSystem:
-    """Dries out every cell's soil a little, every tick -- and wets it
-    back down where rain is currently falling."""
+    """Dries every cell's soil a little each tick, and wets it where it rains."""
 
     def __init__(self, grid: GardenGrid, weather: WeatherState | None = None) -> None:
         """Initialize the system.

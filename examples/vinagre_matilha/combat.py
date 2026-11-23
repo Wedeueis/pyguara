@@ -84,11 +84,23 @@ class PackCombatSystem:
         jaguar_id: str,
         event_dispatcher: EventDispatcher,
     ) -> None:
+        """Let the pack bite the jaguar `jaguar_id`.
+
+        Args:
+            entity_manager: The scene's entities.
+            jaguar_id: The jaguar's entity id.
+            event_dispatcher: Where bites are announced.
+        """
         self._em = entity_manager
         self._jaguar_id = jaguar_id
         self._dispatcher = event_dispatcher
 
     def update(self, dt: float) -> None:
+        """Land the bites due this tick, and count down each dog's cooldown.
+
+        Args:
+            dt: Seconds since the last tick.
+        """
         jaguar = self._em.get_entity(self._jaguar_id)
         for dog in self._em.get_entities_with(PackMember, DogState, Transform):
             state = dog.get_component(DogState)
@@ -165,6 +177,14 @@ class JaguarCombatSystem:
         event_dispatcher: EventDispatcher,
         pack_break_threshold: int,
     ) -> None:
+        """Fight back as the jaguar `jaguar_id`.
+
+        Args:
+            entity_manager: The scene's entities.
+            jaguar_id: The jaguar's entity id.
+            event_dispatcher: Where swipes and a broken pack are announced.
+            pack_break_threshold: How many downed dogs break the pack.
+        """
         self._em = entity_manager
         self._jaguar_id = jaguar_id
         self._dispatcher = event_dispatcher
@@ -172,6 +192,11 @@ class JaguarCombatSystem:
         self._pack_broken = False
 
     def update(self, dt: float) -> None:
+        """Advance the jaguar's attack loop one tick.
+
+        Args:
+            dt: Seconds since the last tick.
+        """
         jaguar = self._em.get_entity(self._jaguar_id)
         if jaguar is None:
             return
@@ -273,9 +298,19 @@ class PackRecoverySystem:
     """
 
     def __init__(self, entity_manager: EntityManager) -> None:
+        """Recover the downed dogs among `entity_manager`'s.
+
+        Args:
+            entity_manager: The scene's entities.
+        """
         self._em = entity_manager
 
     def update(self, dt: float) -> None:
+        """Count every downed dog's recovery down one tick.
+
+        Args:
+            dt: Seconds since the last tick.
+        """
         dogs = list(self._em.get_entities_with(PackMember, DogState, Transform))
         for dog in dogs:
             state = dog.get_component(DogState)

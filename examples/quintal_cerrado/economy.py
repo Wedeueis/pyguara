@@ -132,8 +132,9 @@ def harvest_cell(
     cell: Cell,
     season: seasons.Season | None = None,
 ) -> HarvestResult | None:
-    """Collect whatever `cell` is ready to give up, freeing the (still
-    tilled) cell either way.
+    """Collect whatever `cell` is ready to give up.
+
+    The cell is freed either way, and stays tilled.
 
     The one place a harvest becomes value -- see the module docstring for
     the three outcomes -- shared by the player's own harvest tool and a

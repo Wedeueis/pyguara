@@ -69,8 +69,10 @@ class WeedSpreadSystem:
         self._spawn_spontaneous_weed()
 
     def _spread_existing(self) -> None:
-        """One roll per eligible plant, against the plot as it stood at
-        nightfall -- a weed created tonight must not itself spread tonight."""
+        """Roll once per eligible plant, against the plot as it was at nightfall.
+
+        A weed created tonight must not itself spread tonight.
+        """
         for cell, entity_id in list(self._grid.plant_at.items()):
             entity = self._entity_manager.get_entity(entity_id)
             if entity is None or not entity.has_component(PlantComponent):
