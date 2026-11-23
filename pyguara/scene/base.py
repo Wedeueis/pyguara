@@ -109,8 +109,9 @@ class Scene(ABC):
         # New: Application will set this before on_enter
         self.container: DIContainer | None = None
 
-        # Built in resolve_dependencies(): one DIScope per scene instance,
-        # disposed by SceneManager._exit_scene() when this scene exits. For
+        # Built in resolve_dependencies(): one DIScope per visit, disposed by
+        # SceneManager._exit_scene() when this scene exits, and built again
+        # if it is entered again. For
         # a scope spanning multiple scenes -- a roguelike run outliving its
         # floor transitions -- see DIContainer.run_scope instead.
         self.scope: DIScope | None = None
@@ -123,6 +124,7 @@ class Scene(ABC):
         # Callbacks registered through `on_teardown()`, run by
         # `SceneManager._exit_scene()`.
         self._teardown_callbacks: list[Callable[[], None]] = []
+        self._republishing_removals = False
 
     def resolve_dependencies(self, container: DIContainer) -> None:
         """Call by the Application/SceneManager to inject the container.
@@ -142,7 +144,13 @@ class Scene(ABC):
 
         # EntityManager stays decoupled from the event system; this scene
         # subscribes to its removals and republishes them as EntityDestroyed.
-        self.entity_manager.subscribe_entity_removed(self._dispatch_entity_destroyed)
+        # Once only: a scene entered again after exiting is wired again, and
+        # a second subscription would report every removal twice.
+        if not self._republishing_removals:
+            self.entity_manager.subscribe_entity_removed(
+                self._dispatch_entity_destroyed
+            )
+            self._republishing_removals = True
 
         # First in the band: a tween driving `transform.position` must be
         # applied before steering, AI or the scene's own update reads a

@@ -85,7 +85,8 @@ manager.register(Level("level_1", dispatcher))
 Registration order and container availability do not matter: a scene
 registered before the DI container arrives is wired when it does. Registering
 a second scene under a name already in use replaces it and logs a warning,
-since the displaced scene becomes unreachable.
+since the displaced scene becomes unreachable. Registering the same scene
+object again changes nothing.
 
 ## Switching versus stacking
 
@@ -100,6 +101,15 @@ manager.pop_scene()                  # return to what is beneath
 **`switch_to()` tears down the entire stack.** Every scene currently live is
 exited, LIFO — the current one first, then the stack top-down — before the new
 scene is entered. Nothing survives a switch.
+
+**A scene can be entered again.** Going back to the menu from a game, or
+switching to the scene already current, exits it and enters it afresh: it is
+wired again first, so its engine systems and its DI scope are new, and then
+`on_enter()` runs. Systems the scene registered itself are gone with the
+exit, so register them in `on_enter()`, not `__init__`. Its entities are not
+cleared, so an `on_enter()` that spawns should clear what the last visit
+left. `Application.begin(scene)` leaves a scene that is already current as
+it is.
 
 **`push_scene()` keeps the scene beneath alive.** It is paused, not exited, and
 `pop_scene()` resumes it. This is the pause-menu, dialog and inventory shape.
