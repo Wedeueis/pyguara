@@ -459,8 +459,10 @@ class GardenGridCanvas(Canvas):
         self._play(sfx)
 
     def render(self, renderer: UIRenderer) -> None:
-        """Do nothing -- `UIManager` still calls this, but drawing itself
-        happens in `render_world()`. See the module docstring for why."""
+        """Do nothing: the widget draws in `render_world()`.
+
+        `UIManager` still calls this. See the module docstring for why.
+        """
 
     def render_world(self, renderer: IRenderer) -> None:
         """Draw every soil cell, then whatever occupies it, then particles.

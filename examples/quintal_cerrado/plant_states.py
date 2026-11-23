@@ -163,9 +163,12 @@ class HarvestableState(_PlantState):
 
 
 class OverripeState(_PlantState):
-    """Left too long. The harvest tool still clears it, for a seed instead
-    of Sementes (`economy.harvest_cell`) -- not nothing, but not the sale
-    collecting it in time would have been."""
+    """A plant left too long to harvest for sale.
+
+    The harvest tool still clears it, for a seed instead of Sementes
+    (`economy.harvest_cell`): not nothing, but not the sale collecting it
+    in time would have been.
+    """
 
     STAGE_NAME = "overripe"
 

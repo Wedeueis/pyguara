@@ -93,6 +93,11 @@ class Meter:
     """Turns received probe traffic into a `Report`, trusting none of it."""
 
     def __init__(self, role: str) -> None:
+        """Start an empty report for `role`.
+
+        Args:
+            role: Which side this is, host or client.
+        """
         self.report = Report(role)
         self._seen: set[int] = set()
         self._highest = -1
@@ -174,6 +179,14 @@ class Sender:
     """Sends what a session would, from one side, once a frame."""
 
     def __init__(self, send: object, channel: Channel, size: int, every: int) -> None:
+        """Send on `channel` through `send`.
+
+        Args:
+            send: Called with a channel and the bytes to send.
+            channel: The channel the stream goes on.
+            size: Bytes in each stream message.
+            every: Frames between stream messages.
+        """
         self._send = send
         self._channel = channel
         self._size = size

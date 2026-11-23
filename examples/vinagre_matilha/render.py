@@ -100,6 +100,12 @@ class StageArtwork:
     """
 
     def __init__(self, stage: StageConfig, seed: int = 20260911) -> None:
+        """Scatter the detail for `stage`.
+
+        Args:
+            stage: The stage whose terrain is decorated.
+            seed: The stream the scatter is drawn from.
+        """
         rng = RandomStream(seed)
         self.tufts: list[tuple[Vector2, float, Color]] = []
         self.rocks: list[tuple[Vector2, float]] = []

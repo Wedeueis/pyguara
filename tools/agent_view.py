@@ -326,6 +326,9 @@ def main(argv: list[str] | None = None) -> int:
 
     Returns:
         A process exit code.
+
+    Raises:
+        SystemExit: If the arguments are not valid.
     """
     parser = argparse.ArgumentParser(
         description="Run a PyGuara demo headlessly and save frames to look at.",

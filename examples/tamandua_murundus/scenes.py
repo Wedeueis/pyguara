@@ -324,7 +324,6 @@ class ClearingScene(Scene):
         scene's own world; the `UIManager` is a container singleton and
         outlives it.
         """
-
         self.ui_manager.clear()
 
     # ---- events ----------------------------------------------------

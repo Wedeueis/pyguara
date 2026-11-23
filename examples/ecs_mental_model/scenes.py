@@ -1,4 +1,4 @@
-"""Module 2: ECS Scene
+"""Module 2: the scene.
 
 Composition root. We wire up Systems and create initial Entities here.
 """
@@ -20,9 +20,15 @@ class ECSScene(Scene):
     """Demonstrates Entity creation and System execution."""
 
     def __init__(self, event_dispatcher: EventDispatcher):
+        """Create the scene under the name `ECSScene`.
+
+        Args:
+            event_dispatcher: The engine's event bus.
+        """
         super().__init__("ECSScene", event_dispatcher)
 
     def on_enter(self) -> None:
+        """Register the movement system and create the hero."""
         print("ECSScene entered! Creating entities...")
 
         # 1. Register Systems
@@ -43,15 +49,26 @@ class ECSScene(Scene):
         print(f"Created entity: {hero.id} with Transform and Sprite")
 
     def on_exit(self) -> None:
-        pass
+        """Do nothing: the scene's systems are cleaned up for it."""
 
     def update(self, dt: float) -> None:
+        """Do nothing; `MovementSystem` moves the hero.
+
+        Args:
+            dt: Seconds since the last frame.
+        """
         # Nothing here on purpose. MovementSystem is registered with
         # self.system_manager, so it is already being ticked -- this is the
         # difference between "a class with an update() method" and a System.
         pass
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
+        """Draw every entity's sprite as a rectangle.
+
+        Args:
+            world_renderer: Draws the world.
+            ui_renderer: Draws the interface, unused here.
+        """
         # Clear screen
         world_renderer.clear(Color(30, 30, 30))
 

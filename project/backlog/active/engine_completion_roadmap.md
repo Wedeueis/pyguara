@@ -293,8 +293,7 @@ answers it, the choice is made in the PR and logged under `## Decisions`.
 dependency graph (#272) and prefabs (#51) until a game uses prefabs;
 visibility culling (#161) until a large scrolling world; non-square
 tiles (#346), kept; columnar components (6g); the audio and input
-production layers (#72, #73) until Reclaimer asks. The docstring rules
-for tests (#267) are proposed for closing as not planned.
+production layers (#72, #73) until Reclaimer asks.
 
 **Needs a person or hardware:** the Steam playtest (#402), audio on a
 Linux desktop and a window on a Mac, the present copy on an integrated

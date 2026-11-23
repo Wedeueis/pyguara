@@ -65,12 +65,23 @@ class PlayerController:
     """
 
     def __init__(self, layout: CaveLayout, state: PlayerState) -> None:
+        """Control the player through `state`, colliding with `layout`.
+
+        Args:
+            layout: The cave's solid cells.
+            state: The player, moved in place.
+        """
         self._layout = layout
         self._state = state
         self.move_input = 0.0
         self.jump_requested = False
 
     def update(self, dt: float) -> None:
+        """Move the player one tick, and fade the call flash.
+
+        Args:
+            dt: Seconds since the last tick.
+        """
         state = self._state
         state.call_flash = max(0.0, state.call_flash - dt * 3.2)
         state.hurt_flash = max(0.0, state.hurt_flash - dt * 1.4)
@@ -145,6 +156,13 @@ class PulseSystem:
         memory: RevealMemory,
         ray_count: int = 140,
     ) -> None:
+        """Reveal `layout` into `memory` as pulses spread.
+
+        Args:
+            layout: The cave the rays march through.
+            memory: Where each revealed cell's brightness is kept.
+            ray_count: Rays cast per pulse.
+        """
         self._layout = layout
         self._memory = memory
         self._ray_count = ray_count
@@ -244,6 +262,13 @@ class CreatureSystem:
     SPIDER_RECOVERY = 1.6
 
     def __init__(self, layout: CaveLayout, bats: list[Bat], spiders: list[Spider]):
+        """Drive the given creatures through `layout`.
+
+        Args:
+            layout: The cave they move in.
+            bats: The bats, moved in place.
+            spiders: The spiders, moved in place.
+        """
         self._layout = layout
         self.bats = bats
         self.spiders = spiders
@@ -264,6 +289,12 @@ class CreatureSystem:
                 bat.velocity = Vector2(math.cos(angle), math.sin(angle)) * 190.0
 
     def update(self, dt: float, player: Vector2) -> None:
+        """Move every creature one tick.
+
+        Args:
+            dt: Seconds since the last tick.
+            player: Where the player is, which the spiders react to.
+        """
         for bat in self.bats:
             bat.phase += dt * (16.0 if bat.agitation > 0.05 else 5.0)
             if bat.agitation > 0.0:

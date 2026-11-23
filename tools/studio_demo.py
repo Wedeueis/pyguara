@@ -91,6 +91,14 @@ def _make_demos_resizable(*, borderless: bool = False) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Open the studio on a demo.
+
+    Args:
+        argv: The arguments, or None for `sys.argv[1:]`.
+
+    Returns:
+        The process exit code.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "demo", nargs="?", default="guara_falcao", choices=sorted(DEMOS)

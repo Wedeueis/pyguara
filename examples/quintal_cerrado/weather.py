@@ -112,10 +112,12 @@ WEATHER_TABLE: dict[str, WeatherCondition] = {
 
 @dataclass
 class WeatherState:
-    """The current condition's live effect, read every tick by three
-    other systems and not one entity -- see the module docstring for why
-    this is plain data rather than a component. Owned and overwritten
-    wholesale by `WeatherSystem`; everything else only ever reads it."""
+    """The current weather's live effect, read every tick by three systems.
+
+    Plain data rather than a component; see the module docstring for why.
+    `WeatherSystem` owns it and overwrites it whole; everything else only
+    reads it.
+    """
 
     condition_id: str = CALM_CONDITION_ID
     growth_multiplier: float = 1.0
