@@ -149,11 +149,12 @@ instead of freezing the window.
 the only way back is to replay from the start. `restart` puts the world back
 where the recording began, usually by switching to a fresh copy of the scene
 it started in.
-Before calling it the engine reseeds `RandomService` and resets its fixed-step
-accumulator. Without `restart`, seeking back raises `RuntimeError` and the
-back keys do nothing. Anything the game keeps outside the scene, and any
-event still waiting in `dispatch_after`, is not reset, so `restart` must
-reset the first, and the second carries across the rewind.
+Before calling it the engine reseeds `RandomService`, resets its fixed-step
+accumulator, and drops every event still waiting in `dispatch_after`
+(`EventDispatcher.cancel_delayed()`): the replayed run schedules its own.
+Without `restart`, seeking back raises `RuntimeError` and the back keys do
+nothing. Anything the game keeps outside the scene is not reset, so
+`restart` must reset it.
 
 While the bar is hidden, a replay that ends hands input back to the game,
 as it always has, and `replay_controls` becomes None. While it is shown,

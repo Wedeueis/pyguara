@@ -646,6 +646,9 @@ class Application:
         player = self._replay_player
         assert player is not None and self._replay_restart is not None
         self._rng().reseed(player.seed)
+        # Anything scheduled during the frames being undone must not arrive
+        # in the replayed run, which schedules its own again.
+        self._event_dispatcher.cancel_delayed()
         self._accumulator = self._replay_start_accumulator
         self._replay_restart()
         player.start_playback()

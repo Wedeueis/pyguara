@@ -329,6 +329,20 @@ class EventDispatcher:
         """
         self._delayed.append((delay, event))
 
+    def cancel_delayed(self) -> int:
+        """Drop every event `dispatch_after()` is still waiting to deliver.
+
+        For putting the world back to an earlier point, where an event
+        scheduled after that point must never arrive. Queued events and
+        subscriptions are untouched.
+
+        Returns:
+            How many pending events were dropped.
+        """
+        dropped = len(self._delayed)
+        self._delayed = []
+        return dropped
+
     def advance(self, dt: float) -> None:
         """Advance pending `dispatch_after` timers and fire what is due.
 
