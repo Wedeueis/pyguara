@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **A native error dialog when a shipped game cannot start** (#518). A crash in a build with no console shows the player the error and where the report was written. `pyguara new` projects install the crash reporter.
+- **`display.software_fallback`** (#518): a game can choose to start on the software renderer when there is no usable GPU. The engine still never switches on its own.
+- **`pyguara build` gives a Windows `.exe` its file details** (#519), with `--game-version`, `--company` and `--copyright`. The version defaults to the game's `pyproject.toml`; with none found there is no resource.
+- **`pyguara.net.EndCode`** (#520), and a `code` field on `Refused`, `Left`, `PlayerLeft` and `SessionFailed`, so a localised game can translate why a session ended. `code` defaults to `UNKNOWN`; the engine always sets it.
+- **`pyguara.ui.text_layout.fitted_size`** (#521): the largest font size at which one line of text fits a width.
+- **`SteamNetwork.game_locale`** (#522): the language the player chose for the game in Steam, from `NativeSteam.game_language`. **`Translator.choose()`** switches to the closest available locale.
+- **Reloading a system's code while the game runs** (#523): `Application.enable_code_hot_reload()` and `pyguara.dev.SystemCodeReloader`, development only. A system keeps its state across a reload, and `on_reload()` covers new setup. `SystemManager.add_key()` and `SceneManager.scenes`.
+- **`pyguara.replay.ReplayLibrary` and `ReplayEntry`** (#524): list, save, load, rename and delete a game's replays by name.
+- **Replay controls** (#526): `Application.replay_controls` (`ReplayControls`) pauses, steps, plays at 0.25x to 8x and seeks a playing replay, with a scrub bar and keys when `visible`. `load_replay(..., restart=)` enables seeking back. `ReplayPlayer.duration` and `ReplayPlayer.timestamps()`.
+- **Atlas trimming, fitting and pages** (#527): `pyguara atlas --trim`, `--fit fixed|tight|pot`, a non-square `--size WxH`, and multi-page output when `-m` is given. `AtlasRegion.offset`, `.page`, `.trimmed` and `.center_offset`; `Atlas.pages` and `Atlas.texture_of()`; `AtlasGenerator.pack_pages()`. `ResourceManager.load_atlas` reads every page.
+- **`EventDispatcher.cancel_delayed()`** (#529) drops every event `dispatch_after()` is still waiting to deliver.
+- `pyguara build --with-studio` keeps the editor in a build (#508).
+- `tests/test_layering.py`: the foundation packages may import only each other and the native extension (#513).
+- `tools/present_copy_probe.py` and `tools/substep_probe.py` measure the present copy and the substep count (#515).
+- `docs/guides/contributing.md`: how defects are found and fixed in the engine (#510).
+
+### Changed
+- **`games/` is now `examples/`** (#511). Each demo carries its own `tests/` and a `DESIGN.md`; `make run` takes `DEMO=<name>`. `tools/slice_spritesheet.py` moved into its demo, as `python -m examples.guara_falcao.slice_spritesheet` (#513).
+- **A graphics device that cannot be opened raises `NoGraphicsAdapterError`** (#518), as a missing adapter does.
+- **Atlas metadata gains `pages`, and `offset` and `page` per region** (#527). Older metadata still loads, and trimming and fitting are off unless asked for.
+- **`SystemManager.unregister()` removes a system under every key that reaches it** (#523).
+- **Studio's built-in operations are split by domain** under `pyguara/studio/ops/` (#509). `build_registry` and `default_registry` stay in `pyguara.studio.ops.builtin`, and the tool list is unchanged.
+- Capture tools and pixel tests boot demos from `PYGUARA_EXAMPLES` when it is set (#514).
+- The Rust crate requires a `SAFETY` comment on every `unsafe` block, checked by `make lint-rust` in CI (#516).
+- Ruff's docstring rules cover `examples/` and `tools/`, outside each demo's tests (#530).
+
+### Removed
+- **The root `main.py`** (#511). Start a demo with `python -m examples.<name>.main`, or a new project with `pyguara new`.
+- The pre-alpha process history, three retired probe tools, two superseded backlog notes and `DEPENDENCY_MAP.md` (#510, #513). All of it is kept in the tag `archive/pre-alpha-history`.
+
+### Fixed
+- **A scene entered a second time has its engine systems and DI scope** (#528). Going back to a scene, such as the menu from a game, used to leave it without tweens, animation, AI, audio sources and steering. `Application.begin(scene)` no longer exits and re-enters a scene that is already current, and registering a scene twice no longer wires it twice.
+- **`pyguara build` no longer bundles `pyguara.studio`** into a shipped game (#508). An error while resolving the editor layer is raised instead of being read as "no editor attached".
+- **`NativeSteam` no longer crashes or leaks** when `steam_api` reports more messages than fit its buffer, a null persona name or a null interface (#516). A lobby request whose result cannot be read reports a failure instead of nothing.
+- **A replay paused through `ReplayPlayer.pause_playback()` stops the world** (#526), instead of simulating on the wall clock with input swallowed.
+- **Rewinding a replay no longer delivers `dispatch_after` events** scheduled before the rewind (#529).
+
 ## [0.8.0] - 2026-11-18
 
 ### Changed

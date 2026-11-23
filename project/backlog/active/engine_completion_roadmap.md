@@ -97,8 +97,8 @@ merge-commit PR from `next` into `pyguara`'s `main`, Reclaimer repointed,
 | **Packed assets** (W30, workstream 6) | Loader protocol from path to opener, across every loader; a bake step in `pyguara build`. *Done: `pyguara.assets` (#430), `pyguara build --pack` (#431), locales and fonts from a pack (#439, #440). Reclaimer reads through it and builds with `--pack` (reclaimer_v2#38); a real packed Linux build ran with no loose files* | XL |
 | **Platform verification** | A macOS test job and a full Windows test job in `ci.yml`; native audio heard on a real Linux desktop; a wgpu frame seen on macOS. *CI part done: `Tests (windows-latest)` and `Tests (macos-latest)` run the suite with a real adapter (DX12 WARP, Metal) and found two engine bugs. Still needs a person: audio heard on Linux, a window seen on a Mac* | M |
 | **Crash capture** | An `excepthook` that writes a report (traceback, engine version, backend, `native.status()`) into the user data directory, and says where. *Done: `pyguara.crash` (#411); Reclaimer installs it (reclaimer_v2#36)* | S |
-| **Localisation** | A string table keyed by id, a locale setting in config, font fallback for scripts outside Liberation Sans. *Done in code: L1 to L4 (#415, #424, #425, reclaimer_v2#40 and #41), all ten languages rendered and checked. Still open: native speakers review the nine drafts; the language from Steam (#446)* | L |
-| **Windows version resource** (#354) | Blocked on validating it off Windows; decide whether to build it on the Windows runner instead | S |
+| **Localisation** | A string table keyed by id, a locale setting in config, font fallback for scripts outside Liberation Sans. *Done in code: L1 to L4 (#415, #424, #425, reclaimer_v2#40 and #41), all ten languages rendered and checked. The language from Steam is read (#522). Still open: native speakers review the nine drafts* | L |
+| **Windows version resource** (#354) | Built and checked on the Windows runner. **Done** (#519) | S |
 | **Source protection** (W29) | Nuitka, only if the game asks for it | M |
 
 **Done when** a Reclaimer build made by `pyguara build` and `pyguara
@@ -252,8 +252,8 @@ ceiling, and API stability, which waits for a team outside the project.
 | Item | What | Size |
 | --- | --- | --- |
 | **Unsafe audit** ([#503](https://github.com/Wedeueis/pyguara/issues/503)) | Every `unsafe` block in `steam.rs` and `mixer.rs` documented and checked; Steam-sourced lengths and layouts bounds-checked, each finding a hostile-input test first. **Done** (#516): offsets checked against the SDK headers, four defects fixed against a fake `steam_api`, `mixer.rs` clean, `// SAFETY:` comments enforced by Clippy in CI | M |
-| **No-GPU message** ([#504](https://github.com/Wedeueis/pyguara/issues/504)) | A native dialog when a windowed build dies at startup, and one supported way for a game to opt in to the software renderer. The engine still never falls back on its own | M |
-| **Studio out of builds** ([#505](https://github.com/Wedeueis/pyguara/issues/505)) | `pyguara build` excludes `pyguara.studio` by default; the runtime survives its absence | S |
+| **No-GPU message** ([#504](https://github.com/Wedeueis/pyguara/issues/504)) | A native dialog when a windowed build dies at startup, and one supported way for a game to opt in to the software renderer. The engine still never falls back on its own. **Done** (#518) | M |
+| **Studio out of builds** ([#505](https://github.com/Wedeueis/pyguara/issues/505)) | `pyguara build` excludes `pyguara.studio` by default; the runtime survives its absence. **Done** (#508) | S |
 | **Two measurements** ([#506](https://github.com/Wedeueis/pyguara/issues/506)) | The swapchain copy's cost per frame, and physics at 1, 2 and 4 substeps. Change either only on the numbers. *Measured 2026-11-19: the copy is 94/152 us at 1080p/1440p on an RTX 3050, so no direct path; 4 substeps stay, since joints need them and Reclaimer never steps the solver. Open: the copy on a real integrated GPU* | S |
 
 **Large files** are split when work next touches them, not on their own:
@@ -262,7 +262,8 @@ with ADR 0010, `studio/ops/builtin.py` by operation domain whenever it is
 convenient.
 
 **Done when** the four issues are closed, and a build on a machine with
-no usable GPU says why it cannot start.
+no usable GPU says why it cannot start. *Done except #506's integrated-GPU
+measurement, which needs the hardware.*
 
 ### Phase 8. The rest of the tracker, in order
 
@@ -275,19 +276,19 @@ answers it, the choice is made in the PR and logged under `## Decisions`.
 
 | Order | Issue | The decision taken |
 | --- | --- | --- |
-| 1 | No-GPU message and opt-in fallback ([#504](https://github.com/Wedeueis/pyguara/issues/504)) | The message comes from `pyguara.crash`, so it works when the extension does not load: `MessageBoxW` on Windows, `osascript` on macOS, `zenity` or `kdialog` on Linux when present, stderr otherwise. The fallback is a `display.fallback_backend` setting, off by default, so the engine still never switches on its own; `pyguara build` bundles pygame-ce only when it is set |
-| 2 | Windows version resource ([#354](https://github.com/Wedeueis/pyguara/issues/354)) | Unblocked: CI now has a Windows job, which checks the generated file |
-| 3 | Reason codes on session ends ([#447](https://github.com/Wedeueis/pyguara/issues/447)) | A `code` enum beside `reason`, which stays as the English fallback |
-| 4 | Fit one line to a width ([#448](https://github.com/Wedeueis/pyguara/issues/448)) | Reclaimer's `draw_fitted`, as `fitted_size` in `pyguara.ui.text_layout` |
-| 5 | The game language from Steam ([#446](https://github.com/Wedeueis/pyguara/issues/446)) | Tested against the fake `steam_api`; the real client is checked in #402 |
+| 1 | No-GPU message and opt-in fallback ([#504](https://github.com/Wedeueis/pyguara/issues/504)) | The message comes from `pyguara.crash`, so it works when the extension does not load: `MessageBoxW` on Windows, `osascript` on macOS, `zenity` or `kdialog` on Linux when present, stderr otherwise. The fallback is `display.software_fallback`, a bool since pygame is the only software renderer, off by default, so the engine still never switches on its own; `pyguara build` is unchanged, as it already bundles pygame whenever it is importable. **Done** (#518) |
+| 2 | Windows version resource ([#354](https://github.com/Wedeueis/pyguara/issues/354)) | Unblocked: CI now has a Windows job, which checks the generated file. **Done** (#519) |
+| 3 | Reason codes on session ends ([#447](https://github.com/Wedeueis/pyguara/issues/447)) | A `code` enum beside `reason`, which stays as the English fallback. **Done** (#520) |
+| 4 | Fit one line to a width ([#448](https://github.com/Wedeueis/pyguara/issues/448)) | Reclaimer's `draw_fitted`, as `fitted_size` in `pyguara.ui.text_layout`. **Done** (#521) |
+| 5 | The game language from Steam ([#446](https://github.com/Wedeueis/pyguara/issues/446)) | Tested against the fake `steam_api`; the real client is checked in #402. **Done** (#522) |
 
 **Tier 2. What a professional developer expects**
 
 | Order | Issue | The decision taken |
 | --- | --- | --- |
-| 6 | Reload a system's code while running ([#512](https://github.com/Wedeueis/pyguara/issues/512)) | Dev only and opt-in; only modules that define nothing but systems; no state carried, `on_enter` runs again; a failed reload keeps the old system and reports |
-| 7 | Replay library and scrubbing ([#58](https://github.com/Wedeueis/pyguara/issues/58)) | The library API first, after checking a flock replay reproduces; scrubbing joins the profiler overlay |
-| 8 | Atlas trimming and pages ([#61](https://github.com/Wedeueis/pyguara/issues/61)) | Trimming with the offset in `original_size`, and non-square and multiple pages; build versioning and cross-compiling stay out |
+| 6 | Reload a system's code while running ([#512](https://github.com/Wedeueis/pyguara/issues/512)) | Dev only and opt-in; only modules that define nothing but systems; a failed reload keeps the old system and reports. **Done** (#523), differently from what was agreed: the live system's class is swapped, so its state is kept, and `on_reload()` runs instead of `on_enter`, which would duplicate the scene's entities |
+| 7 | Replay library and scrubbing ([#58](https://github.com/Wedeueis/pyguara/issues/58)) | The library API first, after checking a flock replay reproduces; scrubbing joins the profiler overlay. **Done** (#524, #526, #529) |
+| 8 | Atlas trimming and pages ([#61](https://github.com/Wedeueis/pyguara/issues/61)) | Trimming, with the trim offset in its own field since `original_size` already means the source size, and non-square and multiple pages; build versioning and cross-compiling stay out. **Done** (#527); #61 stays open for its other items |
 
 **Waiting for their trigger**, as each issue says: the resource
 dependency graph (#272) and prefabs (#51) until a game uses prefabs;
@@ -300,7 +301,7 @@ Linux desktop and a window on a Mac, the present copy on an integrated
 GPU (#506), native speakers for the nine translations, and Nuitka (W29)
 if Reclaimer wants it.
 
-**Done when** tiers 1 and 2 are closed.
+**Done when** tiers 1 and 2 are closed. *Done 2026-11-23: tier 1 by #518 to #522, tier 2 by #523 to #529.*
 
 ## What is not in this roadmap
 

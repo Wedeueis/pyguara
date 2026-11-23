@@ -1235,3 +1235,117 @@ edit this file; see `docs/agents/branching.md`.
 - **Alternatives:** a flip flag through every backend; a negative scale; read the flags with `getattr` and a default.
 - **Chose:** a negative scale, which the backends already agreed means a mirror, with the flip done before the turn, as `draw_texture` does. `Renderable` declares both fields strictly, so an unflipped sprite pays two attribute reads. `ColumnarSprite` has no flip yet.
 - **Tags:** graphics, sprites
+
+## Studio is excluded from builds by default (#508)
+- **Context:** `pyguara build` bundled `pyguara.studio` into every shipped game.
+- **Alternatives:** keep bundling it; exclude it with a flag to opt in; move Studio to an extra.
+- **Chose:** exclude it by default, with `--with-studio` to keep it, since a shipped game is the common case. Studio stays in the base package because `pyguara studio ops` needs no extra dependency. The lookup's broad `except` was narrowed: a guard must not return a plausible wrong value.
+- **Tags:** build, studio
+
+## Studio's operations split by domain, registration order kept (#509)
+- **Context:** `studio/ops/builtin.py` held every operation.
+- **Alternatives:** split and reorder freely; split and keep the exact registration order.
+- **Chose:** keep the order exactly, so the tool list clients see is unchanged and the refactor is provable by a diff. `list_operations` stays in `builtin.py`, since moving it would make an import cycle. Shared helpers are public names in a private `_args.py`.
+- **Tags:** studio, refactor
+
+## Pre-alpha history archived, retired probes deleted (#510, #513)
+- **Context:** cleanup step 1 of `repo_cleanup_plan.md`.
+- **Alternatives:** repair the retired probe tools; delete them; keep everything in the tree.
+- **Chose:** archive the history under `archive/pre-alpha-history` and delete the retired probes, since each answered a question an ADR records and the code it measured is gone. `columnar_probe.py` was kept against the plan, as 6g's measurement, and `rust_core.md` because ADRs cite it by path. The dependency map became `tests/test_layering.py` rather than a regenerated document, so it cannot go stale. The slicer moved into its demo rather than becoming a CLI command.
+- **Tags:** cleanup, repository
+
+## `games/` becomes `examples/`, each demo with its own tests (#511)
+- **Context:** cleanup step 3.
+- **Alternatives:** a `conftest.py` at the repo root; `examples/conftest.py` importing the engine's autouse fixtures.
+- **Chose:** `examples/conftest.py`, which keeps the top level clean. The moved tests keep their file names inside `tests/` packages, so same-named files in different demos cannot collide. The docstring check's test rules apply to any `tests` folder rather than to all of `examples/`.
+- **Tags:** cleanup, examples, tests
+
+## Demos booted from `PYGUARA_EXAMPLES` (#514)
+- **Context:** capture tools and pixel tests need to boot demos from a copy outside the repo.
+- **Alternatives:** a pytest option; an environment variable.
+- **Chose:** an environment variable, because the capture tools and the subprocess frame scripts need it too. Callers change the working directory, not `load_demo`, so importing a demo has no side effect. A same-named package already imported from the repo is guarded against.
+- **Tags:** tests, examples, tools
+
+## No direct swapchain path, and 4 substeps stay (#515)
+- **Context:** #506 asked for the present copy's cost and physics at 1, 2 and 4 substeps, to change either only on the numbers.
+- **Alternatives:** render straight to the swapchain; keep the copy. Lower the substep count; keep 4.
+- **Chose:** keep both. The copy is under 1% of a frame on a discrete GPU (94/152 us at 1080p/1440p on an RTX 3050), measured without a window so WSLg's compositor is excluded. Joints need 4 substeps, and the one real game never steps the solver. The copy on an integrated GPU is still to be measured on hardware.
+- **Tags:** graphics, physics, measurement
+
+## `NativeSteam` hardened against the SDK, with a C fake (#516)
+- **Context:** the unsafe audit (#503) of `steam.rs` and `mixer.rs`.
+- **Alternatives:** check struct offsets by reasoning about packing, or by compiling against the SDK headers; test with a Rust mock or a fake `steam_api` in C.
+- **Chose:** compile against the headers, kept out of the repo, and a fake `steam_api` in C, so the tests drive the real loading and manual-dispatch path. Clippy in CI denies only `undocumented_unsafe_blocks`, so the existing style warnings do not become a cleanup.
+- **Tags:** steam, native, safety
+
+## The no-GPU dialog lives in Python (#518)
+- **Context:** a windowed build that dies at startup showed the player nothing (#504).
+- **Alternatives:** a dialog in the crate or in `pyguara.crash`; the fallback as an optional backend name or as a bool.
+- **Chose:** `pyguara.crash`, so it still works when the extension fails to load, and only where nobody reads stderr, so development runs and tests never open one. `display.software_fallback` is a bool, because pygame is the only software renderer and config coercion has no rule for an optional enum. `pyguara build` already bundles pygame whenever it is importable; that is now documented.
+- **Tags:** startup, graphics, crash
+
+## The Windows version resource uses `--game-version` (#519)
+- **Context:** #354, unblocked once CI had a Windows job.
+- **Alternatives:** `--version`; `--game-version`. A `0.0.0` default; no resource without a version.
+- **Chose:** `--game-version`, since `--version` reads as the CLI's own flag, and no resource rather than a made-up version. The resource is not limited to Windows hosts, matching `--bundle-id` on macOS.
+- **Tags:** build, windows
+
+## One `EndCode` for every session end (#520)
+- **Context:** `Refused`, `Left`, `PlayerLeft` and `SessionFailed` carried only English text (#447).
+- **Alternatives:** one enum per event or one for all; the code as a byte inside the refusal or as its own control message.
+- **Chose:** one enum, so a game keeps one table of translation keys, sent as its own control message so refusals stay readable across engine versions. `code` defaults to `UNKNOWN` so code that builds these events keeps working.
+- **Tags:** net, localisation
+
+## `fitted_size` binary-searches the size (#521)
+- **Context:** #448 asked for Reclaimer's `draw_fitted` as an engine helper.
+- **Alternatives:** step down one size at a time; binary search. A helper alone, or an option on `Text`.
+- **Chose:** binary search, returning only a size measured to fit, and the helper alone, as the issue asked.
+- **Tags:** ui, text
+
+## The game applies Steam's language itself (#522)
+- **Context:** reading `GetCurrentGameLanguage` (#446).
+- **Alternatives:** `install_translator` applies it; the game applies it after opening Steam.
+- **Chose:** the game, because Steam opens after startup. A null `ISteamApps` gives `None` rather than refusing Steam.
+- **Tags:** steam, localisation
+
+## A system's code reload swaps the class and keeps the state (#523)
+- **Context:** #512, where phase 8 had said "no state carried, `on_enter` runs again".
+- **Alternatives:** rebuild the system and re-run the scene's `on_enter`; swap the class of the live object.
+- **Chose:** swap the class. Re-running `on_enter` would duplicate the scene's entities, and the engine cannot rebuild a system without its constructor arguments; `on_reload()` covers new setup. Every class in a reloaded module must be a system. No event is dispatched on a reload, which would have needed a change to `pyguara/events/`; `drain()` returns the results and they are logged.
+- **Tags:** dev, hot-reload, systems
+
+## Replays are one file each, with no index (#524)
+- **Context:** the replay library API (#58).
+- **Alternatives:** an index file beside the replays; the directory as the index.
+- **Chose:** the directory, so there is no second record to get out of step. A damaged replay is listed rather than skipped.
+- **Tags:** replay, persistence
+
+## Replay speed counts whole frames, and seeking back restarts (#526)
+- **Context:** pausing, stepping, speeding and seeking a replay (#58).
+- **Alternatives:** scale the recorded delta, or play whole recorded frames; seek back through snapshots, or by replaying from the start.
+- **Chose:** whole frames, because a scaled delta changes the fixed-step count and desyncs the replay. Seeking back replays from the start through a game-supplied `restart`, since snapshots would mean serialising arbitrary game state; without `restart` a seek back raises. A seek runs at most 240 frames per displayed frame. The bar is drawn beside the frame profiler, not as a `tools/` `Tool`, so it works in a shipped build. Shown controls hold at the end; hidden ones hand input back as before.
+- **Tags:** replay, determinism
+
+## A rewind cancels pending delayed events (#529)
+- **Context:** a `dispatch_after` event scheduled before a rewind still arrived after it, and the world left the recording.
+- **Alternatives:** a public `EventDispatcher.cancel_delayed()`; refuse to rewind while events are pending; leave it to the game's `restart`; rewind from a world snapshot.
+- **Chose:** `cancel_delayed()`, a core change approved by the user. Refusing would block any game with timers, `restart` had no way to cancel them, and snapshots are too big for this fix. Queued events and subscriptions are left alone.
+- **Tags:** replay, events
+
+## Atlas trimming is opt-in, with the offset as its own field (#527)
+- **Context:** #61's trimming, fitting and multi-page items.
+- **Alternatives:** trim by default or on request; put the trim offset in `original_size` or in its own field.
+- **Chose:** on request, since a trimmed region drawn at its rect's size comes out smaller without warning. The offset is its own field, because `original_size` already means the source size. Pages spill over only when metadata is written, as the page index lives nowhere else. Equal-height sprites are ordered by name. Shelf packing is kept; MaxRects and rotation are outside phase 8's scope.
+- **Tags:** atlas, cli, assets
+
+## Scene re-entry is fixed in `SceneManager` (#528)
+- **Context:** #525 found that `switch_to()` then `begin()` on one scene dropped its systems. The cause was wider: any scene re-entered after it exited ran without its engine systems and with a disposed scope.
+- **Alternatives:** special-case `begin()`; re-wire any exited scene on entry. Make switching to the current scene a no-op, or a re-entry.
+- **Chose:** re-wire on entry in `SceneManager`, for switch, push, layer and transition alike. Switching to the current scene re-enters it, which a "restart level" needs, and `begin()` skips the switch when its scene is already current. Entities persist across re-entry, as before, now documented.
+- **Tags:** scene, lifecycle
+
+## #267 narrowed to examples and tools (#530)
+- **Context:** whether ruff's docstring rules should cover tests, examples and tools.
+- **Alternatives:** close it as not planned; enforce on all three; enforce on examples and tools only.
+- **Chose:** examples and tools, which people read to learn the engine: 70 findings under the Google convention. Docstrings on every test would mostly repeat its sentence-shaped name. `tools/check_docstrings.py`'s content rules still do not cover examples and tools.
+- **Tags:** docstrings, lint
