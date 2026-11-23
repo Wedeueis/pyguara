@@ -1223,3 +1223,29 @@ class _Owner:
     def handle(self, event: object) -> None:
         """Count one delivery."""
         self.calls += 1
+
+
+def test_cancel_delayed_drops_pending_events_and_counts_them() -> None:
+    dispatcher = EventDispatcher()
+    seen: list[CustomEvent] = []
+    dispatcher.subscribe(CustomEvent, seen.append)
+    dispatcher.dispatch_after(0.1, CustomEvent(data="a"))
+    dispatcher.dispatch_after(0.5, CustomEvent(data="b"))
+
+    assert dispatcher.cancel_delayed() == 2
+    dispatcher.advance(1.0)
+
+    assert seen == []
+    assert dispatcher.cancel_delayed() == 0
+
+
+def test_cancel_delayed_leaves_queued_events_alone() -> None:
+    dispatcher = EventDispatcher()
+    seen: list[CustomEvent] = []
+    dispatcher.subscribe(CustomEvent, seen.append)
+    dispatcher.queue_event(CustomEvent(data="queued"))
+
+    dispatcher.cancel_delayed()
+    dispatcher.process_queue()
+
+    assert [e.data for e in seen] == ["queued"]

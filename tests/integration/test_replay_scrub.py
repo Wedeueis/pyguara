@@ -347,3 +347,67 @@ def test_pausing_the_player_itself_freezes_the_world_too(recording: Any) -> None
     play.steps(20)
 
     assert play.flock.positions() == after[10]
+
+
+class _DelayedFlock(_Flock):
+    """A press spawns its three a second later, through `dispatch_after`."""
+
+    def __init__(self, app: Application) -> None:
+        super().__init__(app)
+        app._event_dispatcher.subscribe(_LaterEvent, lambda _: self._spawn(3))
+
+    def _on_action(self, event: OnActionEvent) -> None:
+        if event.action_name == "Spawn":
+            self.app._event_dispatcher.dispatch_after(1.0, _LaterEvent())
+
+
+class _LaterEvent:
+    """A delayed spawn arriving."""
+
+    def __init__(self) -> None:
+        self.timestamp = 0.0
+        self.source = None
+
+
+class _FixedClock:
+    def tick(self, fps: int = 0) -> int:
+        return 16
+
+
+def test_rewinding_drops_an_event_scheduled_before_it(tmp_path: Path) -> None:
+    """Pressed at frame 5, due near frame 67: a rewind at 50 must not keep it."""
+    path = tmp_path / "later.replay.gz"
+    app = create_headless_application()
+    app._clock = _FixedClock()  # type: ignore[assignment]
+    app.start_recording(seed=7)
+    flock = _DelayedFlock(app)
+    app._window.poll_events = iter(_frames((5,))).__next__  # type: ignore[method-assign]
+    for _ in range(FRAMES):
+        app.step()
+    expected = flock.positions()
+    assert len(expected) == 43
+    data = app.stop_recording()
+    assert data is not None and app.save_recording(data, str(path))
+    app.shutdown()
+    pygame.quit()
+
+    play_app = create_headless_application()
+    play_app._clock = _FixedClock()  # type: ignore[assignment]
+    holder: list[_DelayedFlock] = []
+    assert play_app.load_replay(str(path), restart=lambda: holder[0].restart())
+    holder.append(_DelayedFlock(play_app))
+    play_app._window.poll_events = list  # type: ignore[method-assign,assignment]
+    controls = play_app.replay_controls
+    assert controls is not None
+    controls.visible = True
+    for _ in range(50):
+        play_app.step()
+
+    controls.seek(30)
+    while controls.seeking:
+        play_app.step()
+    controls.resume()
+    for _ in range(FRAMES):
+        play_app.step()
+
+    assert holder[0].positions() == expected
