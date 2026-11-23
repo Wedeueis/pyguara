@@ -290,11 +290,7 @@ answers it, the choice is made in the PR and logged under `## Decisions`.
 | 7 | Replay library and scrubbing ([#58](https://github.com/Wedeueis/pyguara/issues/58)) | The library API first, after checking a flock replay reproduces; scrubbing joins the profiler overlay. **Done** (#524, #526, #529) |
 | 8 | Atlas trimming and pages ([#61](https://github.com/Wedeueis/pyguara/issues/61)) | Trimming, with the trim offset in its own field since `original_size` already means the source size, and non-square and multiple pages; build versioning and cross-compiling stay out. **Done** (#527); #61 stays open for its other items |
 
-**Waiting for their trigger**, as each issue says: the resource
-dependency graph (#272) and prefabs (#51) until a game uses prefabs;
-visibility culling (#161) until a large scrolling world; non-square
-tiles (#346), kept; columnar components (6g); the audio and input
-production layers (#72, #73) until Reclaimer asks.
+What these tiers left waiting for a trigger is phase 9.
 
 **Needs a person or hardware:** the Steam playtest (#402), audio on a
 Linux desktop and a window on a Mac, the present copy on an integrated
@@ -302,6 +298,38 @@ GPU (#506), native speakers for the nine translations, and Nuitka (W29)
 if Reclaimer wants it.
 
 **Done when** tiers 1 and 2 are closed. *Done 2026-11-23: tier 1 by #518 to #522, tier 2 by #523 to #529.*
+
+### Phase 9. Hordes, and the production layers
+
+Agreed with the user 2026-11-23. Phase 8 left six issues "waiting for
+their trigger", a game that needs them. That is too passive for an
+engine meant to run hordes of enemies: the production layers are what a
+professional engine has anyway, and the performance items need a
+measurement, not a game. So the engine builds its own trigger, a horde
+demo, and the rest is built now.
+
+**The trigger, first**
+
+| Order | Item | What |
+| --- | --- | --- |
+| 1 | **Horde demo** | A capstone in `examples/`: a scrolling world, 1,000 to 10,000 enemies spawned off screen from prefabs, flocking and colliding, animated, the camera following the player. With a frame-time breakdown at 1k, 5k and 10k, recorded in `docs/guides/performance.md`. It is the measurement items 2 and 3 are decided on |
+| 2 | **Visibility culling** ([#161](https://github.com/Wedeueis/pyguara/issues/161)) | Measured on the demo, where a survivor camera leaves much of the horde off screen. Lands only on a before and after number |
+| 3 | **Columnar components** (6g) | Only if the demo's profile says sprite preparation or per-entity work is the cost. It changes `EntityManager`, so the numbers go to the user before any code |
+
+**The production layers, alongside**
+
+| Order | Issue | What |
+| --- | --- | --- |
+| 4 | Prefab production layer ([#51](https://github.com/Wedeueis/pyguara/issues/51)) | Spawn tables, variants, schema migration; the demo spawns through them |
+| 5 | Resource dependency graph ([#272](https://github.com/Wedeueis/pyguara/issues/272)) | After #51, whose prefabs are the first resources to depend on others |
+| 6 | Audio production layer ([#72](https://github.com/Wedeueis/pyguara/issues/72)) | Sound variation on a cosmetic stream, interactive music, ducking |
+| 7 | Input production layer ([#73](https://github.com/Wedeueis/pyguara/issues/73)) | Buffering, hold, tap, double-tap and chords, local co-op joining. A change to `events/` is asked first |
+| 8 | The rest of the asset pipeline ([#61](https://github.com/Wedeueis/pyguara/issues/61)) | Denser packing, namespaced input, richer metadata, a watch mode |
+| 9 | Non-square tiles ([#346](https://github.com/Wedeueis/pyguara/issues/346)) | A `(width, height)` tile size through the tilemap model and its collision merge |
+
+**Done when** the horde demo runs 10,000 enemies with its frame time
+measured and recorded, culling and 6g are each landed or dropped on that
+measurement, and issues 4 to 9 are closed.
 
 ## What is not in this roadmap
 
