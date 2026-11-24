@@ -1,8 +1,8 @@
 # ADR 0008: The columnar world spike
 
-**Status:** In progress -- increments 1 and 2 measured; criterion 1 met. No decision yet.
-**Date:** 2026-11-10
-**Scope:** This fork only. `Wedeueis/pyguara` is unchanged by any of it.
+**Status:** Closed. Increments 1 and 2 measured, and criterion 1 met. Columns inside `EntityManager` are not pursued; hordes go to ADR 0013.
+**Date:** 2026-11-10, closed 2026-11-24
+**Scope:** A spike beside the ECS, wired into nothing.
 
 ## Context
 
@@ -194,6 +194,15 @@ So columns in `EntityManager` would make no current game faster and would
 make per-entity reads 3.5x slower. Postponed by the user's call, until a game
 draws thousands of sprites through `Scene.render`; that game is then
 measured before and after.
+
+## Closed: not wired into `EntityManager`
+
+The postponement's condition was met by Correição, which draws thousands of
+sprites through `Scene.render`. Column storage in `EntityManager` was then
+designed and rejected before any code. It would have changed the core for one
+workload, needed hidden binding in components, and removed only about half of
+a horde's tick. ADR 0013 records the design, the numbers and the swarm chosen
+instead. The spike's code stays as a reference for native-owned arrays.
 
 ## Decisions taken in this increment
 
