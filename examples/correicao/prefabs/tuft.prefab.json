@@ -1,0 +1,7 @@
+{
+  "name": "tuft",
+  "components": {
+    "Transform": {},
+    "Sprite": {"texture": "examples/correicao/assets/tuft.png", "layer": 0}
+  }
+}

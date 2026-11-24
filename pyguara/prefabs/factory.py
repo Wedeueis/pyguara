@@ -7,12 +7,14 @@ resolution and component hydration.
 from __future__ import annotations
 
 import copy
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 from pyguara.common.components import Transform, set_parent
+from pyguara.common.random import RandomStream
 from pyguara.common.types import Vector2
 from pyguara.log import get_logger
+from pyguara.prefabs.spawn_table import SpawnTable
 from pyguara.prefabs.types import PrefabChild, PrefabData, PrefabInstance
 
 if TYPE_CHECKING:
@@ -158,6 +160,65 @@ class PrefabFactory:
             return None
 
         return self.create(prefab, entity_id, overrides, source_path=prefab_path)
+
+    def spawn(
+        self,
+        table: SpawnTable,
+        rng: RandomStream,
+        count: int = 1,
+        positions: Sequence[Vector2] | None = None,
+    ) -> list[Entity]:
+        """Instantiate `count` prefabs picked from `table`.
+
+        Each pick is independent and weighted; the same seed picks the same
+        prefabs. A choice's overrides apply, and then, when `positions` is
+        given, each entity's `Transform.position` is set from it in order.
+
+        Args:
+            table: What to pick from.
+            rng: The seeded stream to roll on.
+            count: How many to spawn.
+            positions: One world position per spawn, or None to leave each
+                prefab where it says.
+
+        Returns:
+            The entities, in the order they were picked.
+
+        Raises:
+            ValueError: If `positions` is not `count` long, or a picked
+                prefab cannot be resolved. Nothing is spawned in either case.
+        """
+        if positions is not None and len(positions) != count:
+            raise ValueError(f"got {len(positions)} positions for {count} spawns")
+        if self._prefab_resolver is None:
+            raise ValueError("spawning from a table needs a prefab resolver")
+        picked = table.pick_many(rng, count)
+        resolved = {}
+        for choice in picked:
+            if choice.prefab not in resolved:
+                prefab = self._prefab_resolver(choice.prefab)
+                if prefab is None:
+                    raise ValueError(
+                        f"spawn table names {choice.prefab!r}, which did not load"
+                    )
+                resolved[choice.prefab] = prefab
+        entities = []
+        for index, choice in enumerate(picked):
+            overrides = {name: dict(data) for name, data in choice.overrides.items()}
+            if positions is not None:
+                point = positions[index]
+                overrides.setdefault("Transform", {})["position"] = {
+                    "x": point.x,
+                    "y": point.y,
+                }
+            entities.append(
+                self.create(
+                    resolved[choice.prefab],
+                    overrides=overrides or None,
+                    source_path=choice.prefab,
+                )
+            )
+        return entities
 
     def resolve_components(self, prefab: PrefabData) -> dict[str, dict[str, Any]]:
         """Return a prefab's component data with its `extends` chain applied.

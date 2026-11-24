@@ -1,0 +1,6 @@
+{
+  "choices": [
+    {"prefab": "examples/correicao/prefabs/tuft.prefab.json", "weight": 3},
+    {"prefab": "examples/correicao/prefabs/stone.prefab.json", "weight": 1}
+  ]
+}

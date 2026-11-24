@@ -170,3 +170,43 @@ object's own shape, and a component or field that does not exist raises. Any
 other property is the game's own, on `item.source.properties`.
 
 `offset=` moves everything, for a room placed inside a larger world.
+
+## Spawn tables
+
+A spawn table names prefabs and how likely each is, so waves, room contents
+or scattered scenery are authored as data and rolled the same way for the
+same seed. A `.spawn.json` file:
+
+```json
+{
+  "choices": [
+    {"prefab": "prefabs/goblin.prefab.json", "weight": 3},
+    {"prefab": "prefabs/orc.prefab.json", "weight": 1,
+     "overrides": {"Health": {"max": 40}}}
+  ]
+}
+```
+
+```python
+from pyguara.prefabs import load_spawn_table
+
+table = load_spawn_table("data/cave.spawn.json")
+enemies = factory.spawn(table, rng, count=5, positions=spawn_points)
+```
+
+- **Weights** need not sum to 1. A choice weighted 0 stays in the table and
+  is never picked. A table with no positive weight is refused when it is
+  built.
+- **Picking:**
+  - `table.pick(rng)` picks one choice.
+  - `table.pick_many(rng, n)` picks `n`, each independently.
+  - `table.pick_many(rng, n, unique=True)` picks `n` different choices.
+- **Spawning:** `factory.spawn` applies each choice's overrides, then sets
+  `Transform.position` from `positions`, in order, when they are given.
+  Every pick is resolved before anything is created, so a choice whose
+  prefab does not load raises and spawns nothing.
+- **Textures:** a prefab whose `Sprite` names its texture by path needs
+  a converter, registered against the game's resource manager:
+  `registry.register_type_converter(Texture, lambda path:
+  resources.load(path, Texture))`. Correição scatters its ground this way
+  (`examples/correicao/prefabs/`).

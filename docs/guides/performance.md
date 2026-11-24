@@ -1183,6 +1183,24 @@ Each agent sums its flockmates in the grid's order. Sorting them by slot
 first would make the order independent of the grid's hash, but it put the
 10,000 tick at 18.5 ms, so it was left out.
 
+## Prefabs
+
+### Spawning from a spawn table
+
+`tools/prefab_spawn_probe.py` spawns 4,000 of Correição's ground prefabs, a
+`Transform` and a `Sprite` each, through `PrefabFactory.spawn`, each at its
+own position. Best of five:
+
+| | 4,000 spawns | Per spawn |
+| --- | ---: | ---: |
+| Before | 1,141 ms | 285 us |
+| After | 211 ms | 53 us |
+
+Before, `ComponentRegistry` called `typing.get_type_hints` for every
+component it built, and that was 65% of a spawn. It now keeps each
+dataclass's hints and field names after the first time. A class's hints do
+not change once it is defined.
+
 ## Rendering, CPU side
 
 These are the portable figures, and the surprise is where the time goes.
