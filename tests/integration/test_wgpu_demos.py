@@ -36,11 +36,13 @@ TOLERANCE = 2
 # their rasterisers shade glyph edges a little differently (see
 # `test_wgpu_pixels.TestText`). Measured 2026-11-12, plus a quarter:
 # net_horde 2113, tilemap_authoring 266, ui_scene_graph 89, vinagre_matilha
-# 1845 -- a third of what they were before hinting. Every other demo is held
+# 1845 -- a third of what they were before hinting; correicao 604, measured
+# 2026-11-24 over its ground colour, where every glyph edge shows (over
+# black, most of that shading was too dark to count). Every other demo is held
 # to zero, so a budget hides nothing but text, and a demo gaining text fails
 # loudly rather than quietly earning one.
 TEXT_BUDGET = {
-    "correicao": 94,
+    "correicao": 755,
     "net_horde": 2650,
     "tilemap_authoring": 340,
     "ui_scene_graph": 115,
