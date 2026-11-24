@@ -21,11 +21,17 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Sequence
-from dataclasses import astuple, dataclass
+from dataclasses import astuple, dataclass, field
+from functools import partial
 from typing import Any
 
 from pyguara.common.types import Vector2
+from pyguara.graphics.components.camera import Camera2D
+from pyguara.graphics.pipeline.render_system import RenderSystem
+from pyguara.graphics.pipeline.viewport import Viewport
+from pyguara.graphics.types import RenderBatch
 from pyguara.native import require_extension
+from pyguara.resources.types import Texture
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +80,50 @@ class SwarmKind:
                 raise ValueError(f"SwarmKind.{name} must not be negative")
 
 
+@dataclass(frozen=True, slots=True)
+class SwarmLook:
+    """How every agent of one kind is drawn.
+
+    An agent's box is placed as a `Sprite`'s is: its top-left corner at the
+    agent's position plus `offset`, and a turned frame's box is the one
+    bounding it after turning.
+
+    Attributes:
+        frames: The textures of a looping clip; one for a still image.
+        frame_rate: Frames a second. Each agent's clip starts when it is
+            spawned. 0 holds the first frame.
+        layer: The render layer, sorted with sprites on the same layers.
+        z_index: Depth within the layer.
+        offset: From an agent's position to its box's top-left corner.
+        scale: Drawn scale.
+        face_heading: Turn each agent to point along its velocity, as a
+            `Sprite.rotation` of its heading in degrees.
+    """
+
+    frames: tuple[Texture, ...]
+    frame_rate: float = 0.0
+    layer: int = 0
+    z_index: float = 0.0
+    offset: Vector2 = field(default_factory=lambda: Vector2(0.0, 0.0))
+    scale: Vector2 = field(default_factory=lambda: Vector2(1.0, 1.0))
+    face_heading: bool = False
+
+    def __post_init__(self) -> None:
+        """Reject a look that cannot be drawn.
+
+        Raises:
+            ValueError: If there are no frames, or `frame_rate` is negative
+                or not finite.
+        """
+        if not self.frames:
+            raise ValueError("SwarmLook needs at least one frame")
+        if not (math.isfinite(self.frame_rate) and self.frame_rate >= 0.0):
+            raise ValueError(
+                f"SwarmLook.frame_rate must be finite and not negative, got "
+                f"{self.frame_rate}"
+            )
+
+
 class Swarm:
     """A pool of flocking agents, stepped together natively.
 
@@ -95,11 +145,17 @@ class Swarm:
         """
         self._native: Any = require_extension("Swarm").NativeSwarm(cell_size)
         self._kinds: list[SwarmKind] = []
+        self._looks: dict[int, SwarmLook] = {}
 
     @property
     def count(self) -> int:
         """How many agents are alive."""
         return int(self._native.count())
+
+    @property
+    def time(self) -> float:
+        """Seconds the swarm has been stepped; agents' clips run on it."""
+        return float(self._native.time())
 
     @property
     def kinds(self) -> tuple[SwarmKind, ...]:
@@ -204,6 +260,70 @@ class Swarm:
         Usually the camera centre, set each frame.
         """
         self._native.set_detail_focus(focus)
+
+    def set_look(self, kind: int, look: SwarmLook) -> None:
+        """Draw a kind's agents with `look` from the next `submit` on.
+
+        Raises:
+            ValueError: For an unknown kind.
+        """
+        scale = look.scale
+        extent = max(
+            math.hypot(frame.width * scale.x, frame.height * scale.y)
+            for frame in look.frames
+        )
+        self._native.set_look(
+            kind,
+            len(look.frames),
+            look.frame_rate,
+            look.face_heading,
+            look.offset,
+            extent,
+        )
+        self._looks[kind] = look
+
+    def submit(self, render_system: RenderSystem) -> None:
+        """Queue every drawn kind's visible agents for this frame.
+
+        Call from a scene's `render`, before the render system flushes; the
+        base `Scene.render` flushes, so call this before it. Agents are
+        culled against the camera's view as `Scene.render` culls sprites.
+        """
+        for kind, look in self._looks.items():
+            render_system.submit_batches(
+                partial(self._batches, kind, look), look.layer, look.z_index
+            )
+
+    def _batches(
+        self, kind: int, look: SwarmLook, camera: Camera2D, viewport: Viewport
+    ) -> list[RenderBatch]:
+        view = camera.get_view_bounds()
+        offset = camera.screen_offset(viewport)
+        scale = (look.scale.x, look.scale.y)
+        transformed = look.face_heading or scale != (1.0, 1.0)
+        batches = []
+        for frame, destinations, rotations in self._native.pack(
+            kind,
+            camera.zoom,
+            offset.x,
+            offset.y,
+            view.x - 1,
+            view.y - 1,
+            view.x + view.width + 1,
+            view.y + view.height + 1,
+        ):
+            batches.append(
+                RenderBatch(
+                    texture=look.frames[frame],
+                    destinations=destinations,
+                    rotations=(rotations or [0.0] * len(destinations))
+                    if transformed
+                    else [],
+                    scales=[scale] * len(destinations) if transformed else [],
+                    transforms_enabled=transformed,
+                )
+            )
+        return batches
 
     def update(self, dt: float) -> None:
         """Steer and move every agent by one step.

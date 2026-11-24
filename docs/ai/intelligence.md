@@ -135,9 +135,14 @@ swarm.kill(swarm.query_radius(player_position, 150.0))
   every tick and the rest every fourth, while every agent still moves
   every tick. With a fifth of a crowded 10,000 near the focus, a tick
   costs less than half as much.
+- **Drawing:** `swarm.set_look(ant, SwarmLook(frames=walk, frame_rate=9.0,
+  layer=10, face_heading=True))`, then `swarm.submit(self.render_system)`
+  in the scene's `render`, before `super().render(...)`. Agents are placed,
+  culled and sorted among sprites as `Sprite`s on that layer would be.
+  Each agent's clip starts when it spawns. A look has no frame events or
+  state machine; give an agent that needs them an `Animator` as an entity.
 - **Use entities when an agent needs its own components or logic**, and
-  `FlockingSystem` for flocks of up to a couple of thousand. Drawing and
-  animation are later increments of ADR 0013.
+  `FlockingSystem` for flocks of up to a couple of thousand.
 
 ## Measured ceiling
 
