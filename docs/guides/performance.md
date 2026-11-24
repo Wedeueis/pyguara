@@ -1020,6 +1020,44 @@ of the rest. A tighter Python path, tried first, bought 1.2x. The port
 misses ADR 0004's 5x bar; what would clear it is component data that does
 not have to be written back to Python at all, which is roadmap item 6g.
 
+## A horde, end to end
+
+### Correição at 1,000, 5,000 and 10,000 ants
+
+The horde demo, `examples/correicao`, puts every sprite through the base
+`Scene.render`. Its world is about five screens on each side, with 4,000
+ground sprites, and the camera follows the calango on its autopilot loop.
+`tools/horde_probe.py` boots it headlessly on wgpu, once per size, waits
+until the raid is full and has run 240 frames, then measures 300
+uncapped frames. WSL2, RTX 3050. Means in milliseconds: per frame for the
+first three columns, per fixed tick for the last four.
+
+| Ants | Frame | Render | Sprite building | Sprites (on screen) | Ticks a frame | Tick | Flock | Animation | Combat |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,000 | 55.1 | 40.4 | 20.1 | 5,001 (583) | 3.3 | 4.37 | 1.81 | 0.81 | 0.13 |
+| 5,000 | 455.4 | 76.7 | 51.3 | 9,001 (1,129) | 15.0 | 25.24 | 15.96 | 5.10 | 0.84 |
+| 10,000 | 1,068.9 | 143.8 | 110.0 | 14,001 (2,047) | 15.0 | 61.66 | 41.82 | 11.14 | 1.88 |
+
+**From 5,000 ants a fixed tick costs more than the 16.7 ms it stands for**,
+so the loop runs as many ticks as `physics.max_frame_time` allows, 15, and
+the frame time explodes. Below that, the frame is dominated by rendering.
+
+What this decides, in phase 9's order:
+
+- **Culling (#161) has a case.** About 15% of the sprites built each frame
+  are on screen. Sprite building is everything from `Scene.render`'s loop
+  to the hand-over to the GPU, so it is the cost culling removes: up to
+  110 ms of 144 at 10,000.
+- **The flock is the tick's largest cost**, 68% at 10,000, about 4 us an
+  ant. The solver is native. What is not is the Python on either side of
+  it: packing 15 floats an ant out of the components each tick, and
+  writing positions and velocities back. That is the cost 6g's columns, or
+  a flock that keeps its own state natively, would remove.
+- **Animation is next**, 18% at 10,000: `AnimationSystem` visits every
+  `Animator` in Python each tick, to change a texture a few times a second.
+- **The demo's own combat pass is 3%.** It visits every ant at 10 Hz, not
+  every tick.
+
 ## Rendering, CPU side
 
 These are the portable figures, and the surprise is where the time goes.

@@ -36,6 +36,7 @@ PACKAGE = EXAMPLES_DIR.name
 _SCENES: dict[str, str] = {
     "asset_pipeline": "AssetScene",
     "boot_process": "BootScene",
+    "correicao": "HordeScene",
     "ecs_mental_model": "ECSScene",
     "net_horde": "SideBySideScene",
     "guara_falcao": "TitleScene",
