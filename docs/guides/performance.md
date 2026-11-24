@@ -1107,6 +1107,23 @@ runs:
 | 5,000 | 6.3 | 4.8-4.9 | 3.1 |
 | 10,000 | 13.9 | 9.8-10.0 | 6.4 |
 
+**Drawing and animating** (`tools/swarm_draw_probe.py`): 10,000 still
+ants on wgpu, scattered so about a fifth are on screen, each facing its
+heading and walking a two-frame clip. One run draws them as entities with
+a `Sprite` and an `Animator`, through `Scene.render` and `AnimationSystem`.
+The other draws them as one `Swarm` kind with a `SwarmLook`. Milliseconds a
+frame; drawing runs from the scene's render to the GPU hand-over, and the
+range is over three runs.
+
+| Ants | Drawing, entities | Drawing, swarm | Animation, entities | Animation, swarm |
+| ---: | ---: | ---: | ---: | ---: |
+| 5,000 | 7.4 | 0.42 | 3.9 | 0 |
+| 10,000 | 15.4 | 0.74-0.77 | 15.8-16.3 | 0 |
+
+A swarm's frame is worked out from its clock while it is drawn, and only
+for agents on screen, so animating costs nothing on its own. The drawing
+figure includes it.
+
 **A neighbour cap was built and dropped.** Keeping each agent's *k* nearest
 flockmates made the 10,000 tick slower, not faster: 14.2-15.0 ms uncapped,
 16.7-16.9 at 6, 18.7-19.1 at 16, 20.6-20.7 at 24. The cost of a crowded tick

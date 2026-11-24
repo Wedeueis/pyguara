@@ -31,6 +31,19 @@ use pyo3::prelude::*;
 use crate::grid::{check_position, check_query_span, Grid};
 use crate::vector::{Pair, Point};
 
+/// How a kind is drawn. Textures stay in Python; this holds what
+/// placing, culling and animating its agents needs.
+#[derive(Clone, Copy)]
+struct Look {
+    frames: usize,
+    frame_rate: f64,
+    face_heading: bool,
+    offset_x: f64,
+    offset_y: f64,
+    /// The longest a turned frame's box can be, for culling.
+    extent: f64,
+}
+
 /// One kind's tuning, shared by every agent of that kind.
 #[derive(Clone, Copy)]
 struct Kind {
@@ -97,6 +110,12 @@ pub struct NativeSwarm {
     counts: Vec<u32>,
     /// Ticks stepped so far, which picks the agents a band steers.
     ticks: u64,
+    /// Seconds stepped so far, the clock animation reads.
+    time: f64,
+    /// Per slot: `time` when the agent was spawned.
+    born: Vec<f64>,
+    /// Per kind: how it is drawn, if it is.
+    looks: Vec<Option<Look>>,
     /// Where level of detail measures from; `None` steers everyone.
     focus: Option<(f64, f64)>,
     /// Level-of-detail bands as (squared radius, period), radius rising.
@@ -355,6 +374,9 @@ impl NativeSwarm {
             grid: Grid::default(),
             grid_current: false,
             ticks: 0,
+            time: 0.0,
+            born: Vec::new(),
+            looks: Vec::new(),
             focus: None,
             bands: Vec::new(),
             scratch: Vec::new(),
@@ -448,6 +470,7 @@ impl NativeSwarm {
                 self.alive.push(false);
                 self.generation.push(0);
                 self.has_seek.push(false);
+                self.born.push(0.0);
                 self.seek_x.push(0.0);
                 self.seek_y.push(0.0);
                 self.alive.len() - 1
@@ -462,6 +485,7 @@ impl NativeSwarm {
             self.kind[slot] = kind as u32;
             self.alive[slot] = true;
             self.has_seek[slot] = false;
+            self.born[slot] = self.time;
             self.live += 1;
             ids.push(self.id_of(slot));
         }
@@ -622,6 +646,7 @@ impl NativeSwarm {
             self.sweep(dt);
         });
         self.ticks = self.ticks.wrapping_add(1);
+        self.time += dt;
         self.grid_current = false;
         Ok(())
     }
@@ -657,6 +682,105 @@ impl NativeSwarm {
             .map(|(radius, period)| (radius * radius, period))
             .collect();
         Ok(())
+    }
+
+    /// Set how a kind is drawn: its frame count and rate, whether agents
+    /// turn to face their velocity, the offset from an agent's position to
+    /// its box's top-left corner, and the longest its box can be turned.
+    #[allow(clippy::too_many_arguments)]
+    fn set_look(
+        &mut self,
+        kind: usize,
+        frames: usize,
+        frame_rate: f64,
+        face_heading: bool,
+        offset: Pair,
+        extent: f64,
+    ) -> PyResult<()> {
+        let kind = self.kind_index(kind)?;
+        if frames == 0 {
+            return Err(PyValueError::new_err("a look needs at least one frame"));
+        }
+        if !(frame_rate.is_finite() && frame_rate >= 0.0) {
+            return Err(PyValueError::new_err(format!(
+                "frame_rate must be finite and not negative, got {frame_rate}"
+            )));
+        }
+        if !(offset.0.is_finite() && offset.1.is_finite() && extent.is_finite()) {
+            return Err(PyValueError::new_err("a look's offset and size must be finite"));
+        }
+        if self.looks.len() < self.kinds.len() {
+            self.looks.resize(self.kinds.len(), None);
+        }
+        self.looks[kind] = Some(Look {
+            frames,
+            frame_rate,
+            face_heading,
+            offset_x: offset.0,
+            offset_y: offset.1,
+            extent,
+        });
+        Ok(())
+    }
+
+    /// One kind's visible agents, ready to draw: per frame that any agent
+    /// shows, `(frame, destinations, rotations)` in slot order, frames
+    /// rising. Destinations are screen positions of each box's top-left
+    /// corner, `world * zoom + offset`; rotations are degrees, empty when
+    /// the kind does not face its heading. An agent whose box lies wholly
+    /// outside `left, top, right, bottom` is skipped, by `Scene.render`'s
+    /// rule. A kind with no look draws nothing.
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    fn pack(
+        &self,
+        kind: usize,
+        zoom: f64,
+        offset_x: f64,
+        offset_y: f64,
+        left: f64,
+        top: f64,
+        right: f64,
+        bottom: f64,
+    ) -> PyResult<Vec<(usize, Vec<(f64, f64)>, Vec<f64>)>> {
+        let kind_index = self.kind_index(kind)?;
+        let Some(look) = self.looks.get(kind_index).copied().flatten() else {
+            return Ok(Vec::new());
+        };
+        let mut groups: Vec<(Vec<(f64, f64)>, Vec<f64>)> = vec![(Vec::new(), Vec::new()); look.frames];
+        for slot in 0..self.alive.len() {
+            if !self.alive[slot] || self.kind[slot] as usize != kind_index {
+                continue;
+            }
+            let x = self.x[slot] + look.offset_x;
+            let y = self.y[slot] + look.offset_y;
+            if x > right || y > bottom {
+                continue;
+            }
+            if (x < left || y < top) && (x + look.extent < left || y + look.extent < top) {
+                continue;
+            }
+            let frame = if look.frames == 1 || look.frame_rate == 0.0 {
+                0
+            } else {
+                ((self.time - self.born[slot]) * look.frame_rate).floor() as usize % look.frames
+            };
+            let group = &mut groups[frame];
+            group.0.push((x * zoom + offset_x, y * zoom + offset_y));
+            if look.face_heading {
+                group.1.push(self.vy[slot].atan2(self.vx[slot]).to_degrees());
+            }
+        }
+        Ok(groups
+            .into_iter()
+            .enumerate()
+            .filter(|(_, (destinations, _))| !destinations.is_empty())
+            .map(|(frame, (destinations, rotations))| (frame, destinations, rotations))
+            .collect())
+    }
+
+    /// Seconds the swarm has been stepped.
+    fn time(&self) -> f64 {
+        self.time
     }
 
     /// How many flockmates each live agent steered by on the last tick,

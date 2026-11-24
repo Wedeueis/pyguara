@@ -1,6 +1,6 @@
 # ADR 0013: Hordes are a native swarm, not entities
 
-**Status:** Accepted 2026-11-24. Increments 1 and 3 are built; increment 2, the neighbour cap, was built, measured slower and dropped.
+**Status:** Accepted 2026-11-24. Increments 1, 3 and 4 are built; increment 2, the neighbour cap, was built, measured slower and dropped.
 **Scope:** A new subsystem, `pyguara/ai/swarm.py` over `rust/src/swarm.rs`.
 `pyguara/ecs/` is not touched.
 
@@ -143,7 +143,10 @@ The swarm culls natively, and hands each kind's visible agents to the
 renderer as `RenderBatch`es with rotations, the path `ParticleSystem`
 uses. That path is the same on wgpu and pygame, so the pixel tests apply.
 Its batches enter the render queue at the kind's layer, so ground below
-and a player above sort as they do now.
+and a player above sort as they do now. Built in increment 4, through
+`RenderSystem.submit_batches`. At 10,000 ants with about a fifth on screen,
+drawing takes 0.74-0.77 ms a frame against 15.4 ms as entities, and
+animation adds nothing against 15.8-16.3 ms. Both criteria are met.
 
 ### 7. Gameplay goes through batch calls
 

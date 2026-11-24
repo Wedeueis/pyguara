@@ -53,6 +53,16 @@ beyond a sprite's own box sets `self.cull_sprites = False`. A game drawing
 by hand, rather than through `Scene.render`, culls for itself:
 `camera.get_view_bounds()` is the view in world coordinates.
 
+## Ready-made batches
+
+`RenderSystem.submit_batches(source, layer, z_index=0.0, sort_group=0)`
+queues batches that something else builds, such as a `Swarm` drawing its
+agents. During `flush`, `source(camera, viewport)` returns them in screen
+coordinates. They are drawn after every sprite sorting at or before
+`(layer, sort_group, z_index)`, and before the rest, so they stack among
+sprites as a sprite at that place would. Sources last one frame, like
+submitted sprites.
+
 ## Depth ordering
 
 Four keys, most significant first:

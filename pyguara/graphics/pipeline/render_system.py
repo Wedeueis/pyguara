@@ -1,12 +1,18 @@
 """The core Rendering System that orchestrates the pipeline."""
 
+from bisect import bisect_right
+from collections.abc import Callable, Iterable
+
 from pyguara.common.types import Vector2
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.batch import Batcher
 from pyguara.graphics.pipeline.queue import RenderQueue
 from pyguara.graphics.pipeline.viewport import Viewport
 from pyguara.graphics.protocols import IRenderer, Renderable
-from pyguara.graphics.types import RenderCommand
+from pyguara.graphics.types import RenderBatch, RenderCommand
+
+BatchSource = Callable[[Camera2D, Viewport], Iterable[RenderBatch]]
+"""Builds ready-made batches for a frame, given its camera and viewport."""
 
 
 class RenderSystem:
@@ -28,6 +34,9 @@ class RenderSystem:
 
         # Optimization: persistent viewport to avoid per-frame allocation
         self._default_viewport: Viewport | None = None
+
+        # Ready-made batches, as (layer, sort group, depth, order, source).
+        self._sources: list[tuple[int, int, float, int, BatchSource]] = []
 
     def submit(self, item: Renderable, position: Vector2 | None = None) -> None:
         """Add a renderable object to the current frame's queue.
@@ -73,6 +82,29 @@ class RenderSystem:
             )
         )
 
+    def submit_batches(
+        self,
+        source: BatchSource,
+        layer: int,
+        z_index: float = 0.0,
+        sort_group: int = 0,
+    ) -> None:
+        """Add batches built elsewhere, drawn at a place in the sort order.
+
+        `source` is called during `flush` with the frame's camera and
+        viewport, and its batches are drawn after every sprite sorting at
+        or before `(layer, sort_group, z_index)`, and before the rest.
+        Batches from one source keep their order; sources at the same
+        place keep their submission order.
+
+        Args:
+            source: Returns the batches, in screen coordinates.
+            layer: The layer to draw them on.
+            z_index: Their depth within the layer.
+            sort_group: Their sort group within the layer.
+        """
+        self._sources.append((layer, sort_group, z_index, len(self._sources), source))
+
     def flush(self, camera: Camera2D, viewport: Viewport | None = None) -> None:
         """Process the frame: Sort -> Batch -> Draw.
 
@@ -105,7 +137,11 @@ class RenderSystem:
 
         # 3. Batch (Critical for Performance)
         # The batcher also handles the World->Screen coordinate transform loop
-        batches = self._batcher.create_batches(self._queue.commands, camera, viewport)
+        commands = self._queue.commands
+        if self._sources:
+            batches = self._merge_sources(commands, camera, viewport)
+        else:
+            batches = self._batcher.create_batches(commands, camera, viewport)
 
         # 4. Execute
         self._backend.begin_frame()
@@ -116,3 +152,23 @@ class RenderSystem:
         # 5. Cleanup
         # We clear the queue so it's ready for the next frame
         self._queue.clear()
+        self._sources.clear()
+
+    def _merge_sources(
+        self, commands: list[RenderCommand], camera: Camera2D, viewport: Viewport
+    ) -> list[RenderBatch]:
+        """Batch the sorted commands with the ready-made batches between them."""
+        keys = [(c.layer, c.sort_group, c.z_index) for c in commands]
+        batches: list[RenderBatch] = []
+        start = 0
+        for layer, sort_group, z_index, _, source in sorted(
+            self._sources, key=lambda entry: entry[:4]
+        ):
+            end = bisect_right(keys, (layer, sort_group, z_index), lo=start)
+            batches += self._batcher.create_batches(
+                commands[start:end], camera, viewport
+            )
+            batches += source(camera, viewport)
+            start = end
+        batches += self._batcher.create_batches(commands[start:], camera, viewport)
+        return batches
