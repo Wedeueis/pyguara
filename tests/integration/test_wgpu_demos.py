@@ -36,14 +36,27 @@ TOLERANCE = 2
 # their rasterisers shade glyph edges a little differently (see
 # `test_wgpu_pixels.TestText`). Measured 2026-11-12, plus a quarter:
 # net_horde 2113, tilemap_authoring 266, ui_scene_graph 89, vinagre_matilha
-# 1845 -- a third of what they were before hinting. Every other demo is held
+# 1845 -- a third of what they were before hinting; correicao 604, measured
+# 2026-11-24 over its ground colour, where every glyph edge shows (over
+# black, most of that shading was too dark to count). Every other demo is held
 # to zero, so a budget hides nothing but text, and a demo gaining text fails
 # loudly rather than quietly earning one.
 TEXT_BUDGET = {
+    "correicao": 755,
     "net_horde": 2650,
     "tilemap_authoring": 340,
     "ui_scene_graph": 115,
     "vinagre_matilha": 2310,
+}
+
+# Pixels a demo's turned sprites may differ by. pygame's `rotate` resamples
+# the image and the GPU samples it, so a sprite at an angle that is not a
+# quarter turn never matches exactly (`test_wgpu_pixels` holds the two
+# within a bound, and to the same direction). Measured 2026-11-23, plus a
+# quarter: correicao 80, its calango. Kept apart from `TEXT_BUDGET` so
+# neither budget hides the other's kind of difference.
+ROTATED_SPRITE_BUDGET = {
+    "correicao": 100,
 }
 
 
@@ -98,9 +111,9 @@ def test_the_demo_draws_the_same_frame_on_wgpu(demo: str, tmp_path: Path) -> Non
     drawn = _frame(demo, "wgpu", tmp_path / "wgpu.rgb")
     assert drawn[:2] == reference[:2], "the frames are not the same size"
     differing = _differing(reference[2], drawn[2])
-    allowed = TEXT_BUDGET.get(demo, 0)
+    allowed = TEXT_BUDGET.get(demo, 0) + ROTATED_SPRITE_BUDGET.get(demo, 0)
     assert differing <= allowed, (
         f"{demo}: {differing} pixels differ from the pygame frame, against "
-        f"{allowed} allowed for its text. Reproduce with "
+        f"{allowed} allowed for its text and turned sprites. Reproduce with "
         f"tests/integration/_demo_frame.py on each backend"
     )
