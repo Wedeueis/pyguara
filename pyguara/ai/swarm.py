@@ -25,8 +25,20 @@ from dataclasses import astuple, dataclass, field
 from functools import partial
 from typing import Any
 
+from pyguara.ai.flocking_system import FlockingAgent
+from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
+from pyguara.ecs.entity import Entity
+from pyguara.ecs.manager import EntityManager
+from pyguara.graphics.components.animation import (
+    AnimationClip,
+    Animator,
+    add_clip,
+    advance_animator,
+    play_clip,
+)
 from pyguara.graphics.components.camera import Camera2D
+from pyguara.graphics.components.sprite import Sprite
 from pyguara.graphics.pipeline.render_system import RenderSystem
 from pyguara.graphics.pipeline.viewport import Viewport
 from pyguara.graphics.types import RenderBatch
@@ -103,7 +115,7 @@ class SwarmLook:
     frames: tuple[Texture, ...]
     frame_rate: float = 0.0
     layer: int = 0
-    z_index: float = 0.0
+    z_index: int = 0
     offset: Vector2 = field(default_factory=lambda: Vector2(0.0, 0.0))
     scale: Vector2 = field(default_factory=lambda: Vector2(1.0, 1.0))
     face_heading: bool = False
@@ -330,6 +342,106 @@ class Swarm:
                 )
             )
         return batches
+
+    def promote(self, agent: int, entity_manager: EntityManager) -> Entity:
+        """Turn a live agent into an entity, and remove it from the swarm.
+
+        For an agent that needs logic of its own: a leader, a carried one, a
+        selected one. The entity gets a `Transform` where the agent was, a
+        `FlockingAgent` with its kind's tuning, its velocity and its seek
+        target, and, when its kind has a look, a `Sprite` drawn as it was,
+        with an `Animator` on the same clip at the same point. It no longer
+        flocks with the swarm: a `FlockingSystem` steers it among entities.
+
+        Raises:
+            KeyError: If `agent` is not alive.
+        """
+        ids = [agent]
+        (kind_index,) = self.kinds_of(ids)
+        (position,) = self.positions(ids)
+        (velocity,) = self.velocities(ids)
+        (target,) = self._native.seek_targets(ids)
+        (age,) = self._native.ages(ids)
+        kind = self._kinds[kind_index]
+
+        entity = entity_manager.create_entity()
+        entity.add_component(Transform(position=position))
+        entity.add_component(
+            FlockingAgent(
+                max_speed=kind.max_speed,
+                max_force=kind.max_force,
+                mass=kind.mass,
+                velocity=velocity,
+                neighbor_radius=kind.neighbor_radius,
+                separation_radius=kind.separation_radius,
+                cohesion_weight=kind.cohesion_weight,
+                alignment_weight=kind.alignment_weight,
+                separation_weight=kind.separation_weight,
+                seek_weight=kind.seek_weight,
+                seek_target=target,
+            )
+        )
+        look = self._looks.get(kind_index)
+        if look is not None:
+            heading = math.degrees(math.atan2(velocity.y, velocity.x))
+            sprite = Sprite(
+                texture=look.frames[0],
+                layer=look.layer,
+                z_index=look.z_index,
+                position=look.offset,
+                scale=look.scale,
+                rotation=heading if look.face_heading else 0.0,
+            )
+            entity.add_component(sprite)
+            if len(look.frames) > 1 and look.frame_rate > 0.0:
+                animator = Animator(sprite)
+                add_clip(
+                    animator,
+                    AnimationClip(
+                        name="swarm",
+                        frames=list(look.frames),
+                        frame_rate=look.frame_rate,
+                    ),
+                )
+                play_clip(animator, "swarm")
+                cycle = len(look.frames) / look.frame_rate
+                advance_animator(animator, math.fmod(age, cycle))
+                entity.add_component(animator)
+        self.kill(ids)
+        return entity
+
+    def adopt(self, entity_manager: EntityManager, entity_id: str, kind: int) -> int:
+        """Turn an entity into an agent of `kind`, removing the entity.
+
+        The agent starts where the entity's `Transform` is, with its
+        `FlockingAgent`'s velocity and seek target when it has one. Its
+        clip starts over.
+
+        Returns:
+            The new agent's id.
+
+        Raises:
+            KeyError: If there is no such entity, or it has no `Transform`.
+            ValueError: For an unknown kind.
+        """
+        entity = entity_manager.get_entity(entity_id)
+        if entity is None:
+            raise KeyError(f"no entity {entity_id!r} to adopt")
+        if not entity.has_component(Transform):
+            raise KeyError(
+                f"entity {entity_id!r} has no Transform to place an agent at"
+            )
+        position = entity.get_component(Transform).position
+        velocity = Vector2(0.0, 0.0)
+        target = None
+        if entity.has_component(FlockingAgent):
+            flocking = entity.get_component(FlockingAgent)
+            velocity, target = flocking.velocity, flocking.seek_target
+        (agent,) = self.spawn(kind, [position], [velocity])
+        if target is not None:
+            self.set_seek([agent], [target])
+        entity_manager.remove_entity(entity_id)
+        return agent
 
     def update(self, dt: float) -> None:
         """Steer and move every agent by one step.

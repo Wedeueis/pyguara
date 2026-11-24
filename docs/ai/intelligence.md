@@ -145,6 +145,12 @@ swarm.kill(swarm.query_radius(player_position, 150.0))
   culled and sorted among sprites as `Sprite`s on that layer would be.
   Each agent's clip starts when it spawns. A look has no frame events or
   state machine; give an agent that needs them an `Animator` as an entity.
+- **One agent can become an entity, and back.**
+  - `entity = swarm.promote(agent, entity_manager)` gives it a `Transform`,
+    a `FlockingAgent` with its kind's tuning, velocity and target, and,
+    with a look, a `Sprite` and an `Animator` that carry on its clip.
+  - `swarm.adopt(entity_manager, entity.id, kind)` turns it back.
+  - A promoted agent flocks among entities, not with the swarm.
 - **Use entities when an agent needs its own components or logic**, and
   `FlockingSystem` for flocks of up to a couple of thousand.
 
