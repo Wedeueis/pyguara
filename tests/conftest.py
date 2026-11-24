@@ -61,6 +61,23 @@ def _restore_ui_theme() -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
+def _restore_case_language() -> Iterator[None]:
+    """Put the global case language back after each test.
+
+    Starting an application installs its translator, which sets the case
+    language to the configured locale, or the machine's when none is set.
+    A test that boots one in Russian, or on a Portuguese machine, left it
+    behind, and the next test on that worker upper-cased by the wrong rules.
+    """
+    text_case = sys.modules.get("pyguara.ui.text_case")
+    previous = text_case.case_language() if text_case is not None else "en"
+    yield
+    text_case = sys.modules.get("pyguara.ui.text_case")
+    if text_case is not None:
+        text_case.set_case_language(previous)
+
+
+@pytest.fixture(autouse=True)
 def _free_leaked_gpu_devices() -> Iterator[None]:
     """Collect garbage after a test that leaves too many devices alive.
 
