@@ -1077,6 +1077,30 @@ What this decides, in phase 9's order:
 - **The demo's own combat pass is 3%.** It visits every ant at 10 Hz, not
   every tick.
 
+### The swarm against the flocking solver
+
+`tools/swarm_probe.py` steps one crowded raid two ways: with the native
+solver inside `FlockingSystem`, fed packed rows directly, and with a `Swarm`
+(ADR 0013). The raid has Correição's tuning and 75 to 85 flockmates an
+agent. The solver's figure is its **sweep alone**, with the cost of
+converting its rows subtracted, so it is the floor for any change that
+keeps ants as entities. The swarm's figure is its **whole tick**. Best of
+30 ticks, in milliseconds, with the range over three runs.
+
+| Agents | Solver sweep | Swarm tick |
+| ---: | ---: | ---: |
+| 5,000 | 6.5-6.9 | 6.2-6.5 |
+| 10,000 | 14.9-15.6 | 13.9-14.6 |
+
+In play, `FlockingSystem` at 10,000 ants costs 43.7 ms a tick. Of that,
+28.3 ms is Python glue and the row conversions, which a swarm does not
+have. The swarm's sweep is single-threaded, and has no neighbour cap or
+level of detail yet.
+
+Each agent sums its flockmates in the grid's order. Sorting them by slot
+first would make the order independent of the grid's hash, but it put the
+10,000 tick at 18.5 ms, so it was left out.
+
 ## Rendering, CPU side
 
 These are the portable figures, and the surprise is where the time goes.

@@ -133,14 +133,17 @@ impl Grid {
     /// cell coordinates: they arrive in a dense band, and the fold is what
     /// stops the mask throwing away all the mixing.
     ///
-    /// **Any deterministic function of `(cx, cy)` is correct here**, and
-    /// that is worth knowing before trying to test this. Insert and query
-    /// both go through it, so a different mixing merely redistributes the
-    /// buckets; swapping the two multipliers was tried as a sabotage and
-    /// no test noticed, as none should. What the constants buy is the
-    /// distribution, and the only thing that can go wrong is slower
-    /// queries -- which `tests/performance/test_perf_spatial.py` is the
-    /// place to notice.
+    /// **Any deterministic function of `(cx, cy)` gives correct
+    /// membership**: insert and query both go through it, so a different
+    /// mixing merely redistributes the buckets. What the constants buy is
+    /// the distribution, and `tests/performance/test_perf_spatial.py` is
+    /// where slower queries would show.
+    ///
+    /// They do reach the last bits of a sum. Two cells sharing a bucket
+    /// are visited together, which changes the order a query returns
+    /// neighbours in, and so the order the swarm sums them in. The swarm's
+    /// goldens and `tests/reference/swarm.py` depend on these exact
+    /// constants, so changing them means re-recording those.
     #[inline]
     fn bucket(&self, cx: i64, cy: i64) -> usize {
         let hash = (cx as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)

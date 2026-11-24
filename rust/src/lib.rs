@@ -79,6 +79,7 @@ mod replica;
 mod sparks;
 mod spatialhash;
 mod steam;
+mod swarm;
 mod text;
 mod vector;
 mod window;
@@ -100,6 +101,7 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<physics::NativePhysicsWorld>()?;
     module.add_class::<replica::NativeInterpolator>()?;
     module.add_class::<sparks::NativeSparkPool>()?;
+    module.add_class::<swarm::NativeSwarm>()?;
     module.add_class::<spatialhash::NativeSpatialHash>()?;
     module.add_class::<world::NativeWorld>()?;
     module.add_class::<world::ColumnView>()?;

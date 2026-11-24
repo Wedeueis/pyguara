@@ -1,6 +1,6 @@
 # ADR 0013: Hordes are a native swarm, not entities
 
-**Status:** Proposed 2026-11-24. Nothing below is built.
+**Status:** Accepted 2026-11-24. Increment 1 is built.
 **Scope:** A new subsystem, `pyguara/ai/swarm.py` over `rust/src/swarm.rs`.
 `pyguara/ecs/` is not touched.
 

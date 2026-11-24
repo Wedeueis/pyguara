@@ -103,6 +103,38 @@ movement.update(dt)
 
 `SteeringSystem` still writes positions directly.
 
+## Hordes: `Swarm`
+
+For thousands of agents that share their logic, use a `Swarm` instead of
+`FlockingSystem` (ADR 0013). Its agents are ids, not entities. They have no
+components, and Python never visits them one at a time. Shared tuning
+lives in a `SwarmKind`, and gameplay goes through batch calls:
+
+```python
+from pyguara.ai.swarm import Swarm, SwarmKind
+
+swarm = Swarm(cell_size=26.0)
+ant = swarm.add_kind(SwarmKind(max_speed=120.0, neighbor_radius=26.0, separation_radius=12.0))
+ids = swarm.spawn(ant, spawn_points)
+swarm.set_kind_seek(ant, player_position)    # every ant of the kind, at once
+swarm.update(dt)
+swarm.kill(swarm.query_radius(player_position, 150.0))
+```
+
+- **Every agent steers from the state at the start of the tick**, so the
+  result does not depend on the order agents are computed in. That is
+  unlike `FlockingSystem`, where an agent sees flockmates already moved
+  this tick. Both use the same forces.
+- **Ids stay valid until the agent is killed**, and never name another
+  agent afterwards. A call given a dead id raises `KeyError` and changes
+  nothing.
+- **Queries return ids sorted**, so a result does not depend on how the
+  swarm is laid out.
+- **Use entities when an agent needs its own components or logic**, and
+  `FlockingSystem` for flocks of up to a couple of thousand. Drawing,
+  animation, a neighbour cap and level of detail are later increments of
+  ADR 0013.
+
 ## Measured ceiling
 
 `FlockingSystem` has been benchmarked — see
