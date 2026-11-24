@@ -9,7 +9,7 @@ from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.components.animation import (
     AnimationStateMachine,
     Animator,
-    advance_animator,
+    advance_animators,
     advance_state_machine,
 )
 from pyguara.graphics.events import AnimationFrameEvent
@@ -38,6 +38,9 @@ class AnimationSystem:
         """
         self._entity_manager = entity_manager
         self._dispatcher = dispatcher
+        # Both run every frame, so both are worth the cache's bookkeeping.
+        entity_manager.register_cached_query(Animator)
+        entity_manager.register_cached_query(AnimationStateMachine)
 
     def update(self, dt: float) -> None:
         """Update all animation components.
@@ -45,20 +48,29 @@ class AnimationSystem:
         Args:
             dt: Delta time in seconds.
         """
-        # Check for AnimationStateMachine first (higher-level)
-        for entity in self._entity_manager.get_entities_with(AnimationStateMachine):
+        manager = self._entity_manager
+
+        # State machines first: each advances its own animator.
+        driven: set[str] = set()
+        for entity in manager.get_entities_with_cached(AnimationStateMachine):
+            driven.add(entity.id)
             fsm = entity.get_component(AnimationStateMachine)
             for name in advance_state_machine(fsm, dt):
                 self._dispatch_frame_event(entity.id, fsm.current_state_name, name)
 
-        # Update standalone Animators (those without AnimationStateMachine)
-        for entity in self._entity_manager.get_entities_with(Animator):
-            if not entity.has_component(AnimationStateMachine):
-                animator = entity.get_component(Animator)
-                for name in advance_animator(animator, dt):
-                    self._dispatch_frame_event(
-                        entity.id, animator.current_clip_name, name
-                    )
+        # Then every animator no state machine drives, in one pass.
+        animators = (
+            entity.get_component(Animator)
+            for entity in manager.get_entities_with_cached(Animator)
+            if entity.id not in driven
+        )
+        for animator, names in advance_animators(animators, dt):
+            # It came out of an entity's components, so it is attached.
+            assert animator.entity is not None
+            for name in names:
+                self._dispatch_frame_event(
+                    animator.entity.id, animator.current_clip_name, name
+                )
 
     def _dispatch_frame_event(
         self, entity_id: str, clip_name: str | None, name: str
