@@ -140,6 +140,12 @@ three ways:
   the two-kinds scenario, against both the recording and the reference.
   Reading a flockmate's velocity after it moved, rather than from the
   tick's start, fails 19 tests.
+- **Threads.** `Swarm(threads=...)` must give the same bits on any count,
+  so the recorded scenarios run on 1, 2, 7 and the shared pool. Each step
+  reads only the tick's starting state and writes only its own slot. The
+  grid's shared query, `neighbours_shared`, keeps its visited buckets in
+  the caller's scratch. Leaving that scratch uncleared between queries
+  fails 64 tests.
 
 ```bash
 uv sync                              # maturin is the backend; this builds it

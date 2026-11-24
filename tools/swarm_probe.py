@@ -3,6 +3,7 @@
     uv run python tools/swarm_probe.py                  # 5,000 and 10,000
     uv run python tools/swarm_probe.py --ants 20000
     uv run python tools/swarm_probe.py --near-share 0.2   # level of detail
+    uv run python tools/swarm_probe.py --threads 4 --threads 0   # 0: shared pool
 
 Builds the same raid for both: agents in a disc sized for about 60
 flockmates each, seeking its centre with Correição's tuning and eight
@@ -13,7 +14,8 @@ rows directly. Its row-conversion cost, measured with every agent disabled,
 is subtracted, so its figure is the sweep alone, the part no Python change
 can remove. The swarm's figure is its whole tick, at full detail and with
 each `--near-share`: a band around the raid's centre holding that share of
-it steers every tick, and the rest every fourth. Milliseconds per tick.
+it steers every tick, and the rest every fourth. Each row runs on one
+thread unless `--threads` adds rows on more. Milliseconds per tick.
 """
 
 from __future__ import annotations
@@ -62,12 +64,14 @@ def _raid(ants: int) -> tuple[list[Vector2], list[Vector2], list[float]]:
     return positions, velocities, speeds
 
 
-def probe(ants: int, near_share: float = 1.0) -> dict[str, float]:
+def probe(
+    ants: int, near_share: float = 1.0, threads: int | None = 1
+) -> dict[str, float]:
     """Time both solvers on one raid size."""
     positions, velocities, speeds = _raid(ants)
     centre = Vector2(3000, 3000)
 
-    swarm = Swarm(cell_size=RADIUS)
+    swarm = Swarm(cell_size=RADIUS, threads=threads)
     kinds = {
         speed: swarm.add_kind(SwarmKind(max_speed=speed, **TUNING))
         for speed in sorted(set(speeds))
@@ -121,19 +125,24 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--ants", type=int, action="append")
     parser.add_argument("--near-share", type=float, action="append")
+    parser.add_argument("--threads", type=int, action="append")
     arguments = parser.parse_args()
     sizes = arguments.ants or [5000, 10000]
     shares = [1.0, *(arguments.near_share or [])]
+    pools: list[int | None] = [1, *((t or None) for t in (arguments.threads or []))]
     print(
-        f"{'ants':>6}  {'near':>5}  {'solver sweep':>12}  {'swarm tick':>10}  flockmates"
+        f"{'ants':>6}  {'near':>5}  {'threads':>7}  {'solver sweep':>12}  "
+        f"{'swarm tick':>10}  flockmates"
     )
     for ants in sizes:
         for share in shares:
-            row = probe(ants, share)
-            print(
-                f"{ants:>6}  {share:>5.0%}  {row['sweep']:>12.2f}  "
-                f"{row['swarm']:>10.2f}  {row['flockmates']:.1f}"
-            )
+            for threads in pools:
+                row = probe(ants, share, threads)
+                print(
+                    f"{ants:>6}  {share:>5.0%}  {threads or 'shared':>7}  "
+                    f"{row['sweep']:>12.2f}  {row['swarm']:>10.2f}  "
+                    f"{row['flockmates']:.1f}"
+                )
 
 
 if __name__ == "__main__":

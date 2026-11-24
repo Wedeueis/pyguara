@@ -1107,6 +1107,20 @@ runs:
 | 5,000 | 6.3 | 4.8-4.9 | 3.1 |
 | 10,000 | 13.9 | 9.8-10.0 | 6.4 |
 
+**Threads** (`Swarm(threads=...)`, `--threads`): the same raid at
+10,000, every agent steering every tick. Swarm tick in milliseconds, two
+runs, on a 12-thread machine:
+
+| Threads | 1 | 2 | 4 | 6 to 12 | Shared pool |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Every agent near | 14.5-14.7 | 7.8 | 4.3 | 3.7-4.9 | 4.1-5.7 |
+| 20% near | 6.8 | 3.8-3.9 | 2.2-2.3 | | 2.8-3.8 |
+
+The gain levels off at about 4 ms from four threads up. What is left runs on
+one thread: copying the tick's starting state, building the grid, and
+writing the steps back. Every thread count gives the same bits; the
+recorded scenarios run on 1, 2, 7 threads and the shared pool.
+
 **Drawing and animating** (`tools/swarm_draw_probe.py`): 10,000 still
 ants on wgpu, scattered so about a fifth are on screen, each facing its
 heading and walking a two-frame clip. One run draws them as entities with

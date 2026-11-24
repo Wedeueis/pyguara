@@ -1,6 +1,6 @@
 # ADR 0013: Hordes are a native swarm, not entities
 
-**Status:** Accepted 2026-11-24. Increments 1, 3 and 4 are built; increment 2, the neighbour cap, was built, measured slower and dropped.
+**Status:** Accepted 2026-11-24. Increments 1, 3, 4 and 5 are built; increment 2, the neighbour cap, was built, measured slower and dropped.
 **Scope:** A new subsystem, `pyguara/ai/swarm.py` over `rust/src/swarm.rs`.
 `pyguara/ecs/` is not touched.
 
@@ -90,6 +90,12 @@ tick (Jacobi), not from neighbours already moved this tick (Gauss-Seidel).
   updates differs.
 - **The swarm has its own goldens** and a Python reference in
   `tests/reference/`.
+- **Built in increment 5.** Every recorded scenario gives the same bits on
+  1, 2 and 7 threads and on the shared pool. At 10,000 crowded agents, 4
+  threads take a tick from 14.5-14.7 ms to 4.3 ms, 3.4 times faster, which
+  meets criterion 3. Past four threads the gain levels off at about 4 ms,
+  because the snapshot copy, the grid build and the write-back run on one
+  thread.
 
 `FlockingSystem`, `FlockingAgent` and their goldens are unchanged. They
 stay the tool for a flock of entities, up to a couple of thousand, each
