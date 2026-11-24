@@ -126,6 +126,25 @@ found it: `Vector2` arithmetic in the inner loop (the largest, and the one
 nobody predicts), then per-neighbour entity and component re-lookup, then
 iterating the neighbour list once per steering behaviour.
 
+### `AnimationSystem.update` -- milliseconds per tick
+
+Two-frame walk cycles at 7 to 11 frames a second, one `Animator` each, best
+of 30 ticks at 1/60 s. At those rates five ticks in six change no frame, so
+the batch path, `advance_animators`, does that case inline with
+`advance_animator`'s own arithmetic and agrees with it bit for bit. It
+also uses cached queries, and skips the per-entity state-machine check.
+
+| Animators | Before | After |
+| ---: | ---: | ---: |
+| 1,000 | 0.47 | 0.32 |
+| 10,000 | 5.40 | 4.04 |
+
+What is left is Python's cost of visiting an animator at all, about 0.3 us.
+Visiting only the animators whose frame is due would go further, but a
+catch-up of several ticks at once rounds differently from adding each tick,
+so a frame on an exact boundary could flip a tick later. Not done, because
+the horde's tick is the flock's: at 10,000 ants animation is 11 ms of 62.
+
 ### `SpatialHash`
 
 | Keys | Rebuild (ms) | Query (µs/query) | Query, before |
