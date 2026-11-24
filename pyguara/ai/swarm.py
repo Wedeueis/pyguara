@@ -132,18 +132,24 @@ class Swarm:
     `KeyError` for one that is not alive, and change nothing.
     """
 
-    def __init__(self, cell_size: float = 64.0) -> None:
+    def __init__(self, cell_size: float = 64.0, threads: int | None = None) -> None:
         """Create an empty swarm.
+
+        The result is the same bits on any number of threads.
 
         Args:
             cell_size: The neighbour grid's bucket size; pick something
                 close to the kinds' `neighbor_radius`.
+            threads: `None` steers a large swarm on a pool shared with
+                other swarms, sized to the machine. 1 steers on the calling
+                thread; more, on a pool of this swarm's own.
 
         Raises:
-            ValueError: If `cell_size` is not finite and positive.
+            ValueError: If `cell_size` is not finite and positive, or
+                `threads` is below 1.
             RuntimeError: If the native extension cannot be imported.
         """
-        self._native: Any = require_extension("Swarm").NativeSwarm(cell_size)
+        self._native: Any = require_extension("Swarm").NativeSwarm(cell_size, threads)
         self._kinds: list[SwarmKind] = []
         self._looks: dict[int, SwarmLook] = {}
 

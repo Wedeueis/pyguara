@@ -82,6 +82,13 @@ pub(crate) fn check_query_span(widest_radius: f64, cell_size: f64) -> PyResult<(
     Ok(())
 }
 
+/// The buckets one `Grid::neighbours_shared` query has visited.
+#[derive(Default)]
+pub(crate) struct Seen {
+    few: Vec<usize>,
+    many: std::collections::HashSet<usize>,
+}
+
 /// A uniform grid over two parallel coordinate arrays.
 ///
 /// Rebuilt wholesale rather than maintained, like the `SpatialHash` it
@@ -255,6 +262,63 @@ impl Grid {
     /// Every slot in the bucket one cell hashes to, unfiltered.
     pub(crate) fn visit_bucket(&mut self, cx: i64, cy: i64, out: &mut Vec<u32>) {
         self.cells_in_range(cx, cx, cy, cy, out);
+    }
+
+    /// `neighbours`, without touching the grid, so threads can share it.
+    ///
+    /// The same slots in the same order: a bucket already visited in this
+    /// query is skipped by remembering it in `seen`, the caller's own
+    /// scratch, rather than by stamping the grid. A short list for the few
+    /// cells a typical query spans, a set past that.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn neighbours_shared(
+        &self,
+        centre_x: f64,
+        centre_y: f64,
+        radius: f64,
+        snap_x: &[f64],
+        snap_y: &[f64],
+        seen: &mut Seen,
+        out: &mut Vec<u32>,
+    ) {
+        out.clear();
+        seen.few.clear();
+        seen.many.clear();
+
+        let min_cx = self.cell_of(centre_x - radius);
+        let max_cx = self.cell_of(centre_x + radius);
+        let min_cy = self.cell_of(centre_y - radius);
+        let max_cy = self.cell_of(centre_y + radius);
+
+        let cells = (max_cx - min_cx + 1).saturating_mul(max_cy - min_cy + 1);
+        let use_set = cells > 32;
+        let radius_sq = radius * radius;
+        for cx in min_cx..=max_cx {
+            for cy in min_cy..=max_cy {
+                let bucket = self.bucket(cx, cy);
+                let first = if use_set {
+                    seen.many.insert(bucket)
+                } else if seen.few.contains(&bucket) {
+                    false
+                } else {
+                    seen.few.push(bucket);
+                    true
+                };
+                if !first {
+                    continue;
+                }
+                let from = self.offsets[bucket] as usize;
+                let to = self.offsets[bucket + 1] as usize;
+                for &slot in &self.items[from..to] {
+                    let index = slot as usize;
+                    let offset_x = snap_x[index] - centre_x;
+                    let offset_y = snap_y[index] - centre_y;
+                    if offset_x * offset_x + offset_y * offset_y <= radius_sq {
+                        out.push(slot);
+                    }
+                }
+            }
+        }
     }
 
     /// Collect every slot within `radius` of a centre, as

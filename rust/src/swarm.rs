@@ -27,8 +27,9 @@
 
 use pyo3::exceptions::{PyKeyError, PyValueError};
 use pyo3::prelude::*;
+use rayon::prelude::*;
 
-use crate::grid::{check_position, check_query_span, Grid};
+use crate::grid::{check_position, check_query_span, Grid, Seen};
 use crate::vector::{Pair, Point};
 
 /// How a kind is drawn. Textures stay in Python; this holds what
@@ -74,6 +75,29 @@ fn scaled_to(x: f64, y: f64, len: f64, target: f64) -> (f64, f64) {
     }
 }
 
+/// One thread's working space for a sweep.
+#[derive(Default)]
+struct Scratch {
+    found: Vec<u32>,
+    seen: Seen,
+}
+
+/// What one agent's step leaves: its new state and how many flockmates it
+/// steered by, or nothing for a free slot.
+#[derive(Clone, Copy, Default)]
+struct Step {
+    live: bool,
+    x: f64,
+    y: f64,
+    vx: f64,
+    vy: f64,
+    count: u32,
+}
+
+/// Below this many slots, a swarm on the shared thread pool sweeps on one
+/// thread: handing out the work costs more than it saves.
+const PARALLEL_MIN_SLOTS: usize = 512;
+
 const SLOT_BITS: u32 = 32;
 const SLOT_MASK: u64 = (1 << SLOT_BITS) - 1;
 
@@ -106,7 +130,10 @@ pub struct NativeSwarm {
     grid: Grid,
     /// Whether `grid` indexes the current positions, for queries.
     grid_current: bool,
-    scratch: Vec<u32>,
+    scratch: Scratch,
+    /// Each slot's step, reused between ticks.
+    steps: Vec<Step>,
+    threads: Threads,
     counts: Vec<u32>,
     /// Ticks stepped so far, which picks the agents a band steers.
     ticks: u64,
@@ -159,8 +186,9 @@ impl NativeSwarm {
         }
     }
 
-    /// Cohesion, alignment and separation for one agent, from the snapshot.
-    fn flock_force(&mut self, slot: usize) -> (f64, f64) {
+    /// Cohesion, alignment and separation for one agent, from the snapshot,
+    /// and how many flockmates it summed.
+    fn flock_force(&self, slot: usize, scratch: &mut Scratch) -> (f64, f64, u32) {
         let agent = self.kinds[self.kind[slot] as usize];
         let max_speed = agent.max_speed;
         let separation_radius = agent.separation_radius;
@@ -172,13 +200,14 @@ impl NativeSwarm {
         let x = self.snap_x[slot];
         let y = self.snap_y[slot];
 
-        self.grid.neighbours(
+        self.grid.neighbours_shared(
             x,
             y,
             agent.neighbor_radius,
             &self.snap_x,
             &self.snap_y,
-            &mut self.scratch,
+            &mut scratch.seen,
+            &mut scratch.found,
         );
 
         let mut count = 0u32;
@@ -186,7 +215,7 @@ impl NativeSwarm {
         let (mut sum_vx, mut sum_vy) = (0.0f64, 0.0f64);
         let (mut push_x, mut push_y) = (0.0f64, 0.0f64);
 
-        for &found in &self.scratch {
+        for &found in &scratch.found {
             let other = found as usize;
             if other == slot {
                 continue;
@@ -223,9 +252,8 @@ impl NativeSwarm {
             push_y += offset_y * scale;
         }
 
-        self.counts[slot] = count;
         if count == 0 {
-            return (0.0, 0.0);
+            return (0.0, 0.0, 0);
         }
 
         let velocity_x = self.snap_vx[slot];
@@ -268,7 +296,7 @@ impl NativeSwarm {
             force_x += push_x * weight;
             force_y += push_y * weight;
         }
-        (force_x, force_y)
+        (force_x, force_y, count)
     }
 
     /// Steer and move every live agent from the snapshot.
@@ -291,67 +319,147 @@ impl NativeSwarm {
             .map_or(outermost, |&(_, period)| period)
     }
 
-    fn sweep(&mut self, dt: f64) {
-        for slot in 0..self.alive.len() {
-            if !self.alive[slot] {
-                continue;
-            }
-            let period = self.period_at(self.snap_x[slot], self.snap_y[slot]);
-            if period > 1 && (slot as u64 + self.ticks) % period != 0 {
-                // Not this agent's tick to steer. It still moves.
-                self.x[slot] = self.snap_x[slot] + self.snap_vx[slot] * dt;
-                self.y[slot] = self.snap_y[slot] + self.snap_vy[slot] * dt;
-                continue;
-            }
-            // A force decided once every `period` ticks acts for all of them.
-            let steering_dt = dt * period as f64;
-            let agent = self.kinds[self.kind[slot] as usize];
-            let (mut force_x, mut force_y) = self.flock_force(slot);
-            let position_x = self.snap_x[slot];
-            let position_y = self.snap_y[slot];
-            let velocity_x = self.snap_vx[slot];
-            let velocity_y = self.snap_vy[slot];
+    /// One agent's step from the snapshot. Reads nothing any other step
+    /// writes, so steps can run in any order, or at once.
+    fn step(&self, slot: usize, dt: f64, scratch: &mut Scratch) -> Step {
+        if !self.alive[slot] {
+            return Step::default();
+        }
+        let position_x = self.snap_x[slot];
+        let position_y = self.snap_y[slot];
+        let velocity_x = self.snap_vx[slot];
+        let velocity_y = self.snap_vy[slot];
+        let period = self.period_at(position_x, position_y);
+        if period > 1 && (slot as u64 + self.ticks) % period != 0 {
+            // Not this agent's tick to steer. It still moves.
+            return Step {
+                live: true,
+                x: position_x + velocity_x * dt,
+                y: position_y + velocity_y * dt,
+                vx: velocity_x,
+                vy: velocity_y,
+                count: 0,
+            };
+        }
+        // A force decided once every `period` ticks acts for all of them.
+        let steering_dt = dt * period as f64;
+        let agent = self.kinds[self.kind[slot] as usize];
+        let (mut force_x, mut force_y, count) = self.flock_force(slot, scratch);
 
-            if agent.seek_weight != 0.0 && self.has_seek[slot] {
-                let direction_x = self.seek_x[slot] - position_x;
-                let direction_y = self.seek_y[slot] - position_y;
-                let len = length(direction_x, direction_y);
-                if len >= 0.001 {
-                    let (desired_x, desired_y) =
-                        scaled_to(direction_x, direction_y, len, agent.max_speed);
-                    force_x += (desired_x - velocity_x) * agent.seek_weight;
-                    force_y += (desired_y - velocity_y) * agent.seek_weight;
-                }
+        if agent.seek_weight != 0.0 && self.has_seek[slot] {
+            let direction_x = self.seek_x[slot] - position_x;
+            let direction_y = self.seek_y[slot] - position_y;
+            let len = length(direction_x, direction_y);
+            if len >= 0.001 {
+                let (desired_x, desired_y) =
+                    scaled_to(direction_x, direction_y, len, agent.max_speed);
+                force_x += (desired_x - velocity_x) * agent.seek_weight;
+                force_y += (desired_y - velocity_y) * agent.seek_weight;
             }
+        }
 
-            let force_length = length(force_x, force_y);
-            if force_length > agent.max_force {
-                (force_x, force_y) = scaled_to(force_x, force_y, force_length, agent.max_force);
-            }
-            let inverse_mass = 1.0 / agent.mass;
-            let mut new_vx = velocity_x + force_x * inverse_mass * steering_dt;
-            let mut new_vy = velocity_y + force_y * inverse_mass * steering_dt;
-            let speed = length(new_vx, new_vy);
-            if speed > agent.max_speed {
-                (new_vx, new_vy) = scaled_to(new_vx, new_vy, speed, agent.max_speed);
-            }
-            self.vx[slot] = new_vx;
-            self.vy[slot] = new_vy;
-            self.x[slot] = position_x + new_vx * dt;
-            self.y[slot] = position_y + new_vy * dt;
+        let force_length = length(force_x, force_y);
+        if force_length > agent.max_force {
+            (force_x, force_y) = scaled_to(force_x, force_y, force_length, agent.max_force);
+        }
+        let inverse_mass = 1.0 / agent.mass;
+        let mut new_vx = velocity_x + force_x * inverse_mass * steering_dt;
+        let mut new_vy = velocity_y + force_y * inverse_mass * steering_dt;
+        let speed = length(new_vx, new_vy);
+        if speed > agent.max_speed {
+            (new_vx, new_vy) = scaled_to(new_vx, new_vy, speed, agent.max_speed);
+        }
+        Step {
+            live: true,
+            x: position_x + new_vx * dt,
+            y: position_y + new_vy * dt,
+            vx: new_vx,
+            vy: new_vy,
+            count,
         }
     }
+
+    /// Step every agent, on one thread or many, and write the results.
+    ///
+    /// Each step is a function of the snapshot alone and lands in its own
+    /// slot, so the result is the same bits on any number of threads.
+    fn sweep(&mut self, dt: f64) {
+        let slots = self.alive.len();
+        let mut steps = std::mem::take(&mut self.steps);
+        steps.clear();
+        steps.resize(slots, Step::default());
+        let parallel = match self.threads {
+            Threads::One => false,
+            Threads::Shared => slots >= PARALLEL_MIN_SLOTS,
+            Threads::Own(_) => true,
+        };
+        if parallel {
+            let this = &*self;
+            let work = &mut steps;
+            let mut run = move || {
+                work.par_iter_mut()
+                    .enumerate()
+                    .for_each_init(Scratch::default, |scratch, (slot, out)| {
+                        *out = this.step(slot, dt, scratch);
+                    });
+            };
+            match &self.threads {
+                Threads::Own(pool) => pool.install(run),
+                _ => run(),
+            }
+        } else {
+            let mut scratch = std::mem::take(&mut self.scratch);
+            for (slot, out) in steps.iter_mut().enumerate() {
+                *out = self.step(slot, dt, &mut scratch);
+            }
+            self.scratch = scratch;
+        }
+        for (slot, step) in steps.iter().enumerate() {
+            if step.live {
+                self.x[slot] = step.x;
+                self.y[slot] = step.y;
+                self.vx[slot] = step.vx;
+                self.vy[slot] = step.vy;
+                self.counts[slot] = step.count;
+            }
+        }
+        self.steps = steps;
+    }
+}
+
+/// Which threads a swarm sweeps on.
+enum Threads {
+    /// The calling thread only.
+    One,
+    /// Rayon's shared pool, for swarms large enough to gain from it.
+    Shared,
+    /// A pool of this swarm's own, always.
+    Own(rayon::ThreadPool),
 }
 
 #[pymethods]
 impl NativeSwarm {
+    /// `threads`: `None` sweeps a large swarm on the shared pool, `1` on
+    /// the calling thread, more on a pool of that many of its own.
     #[new]
-    fn new(cell_size: f64) -> PyResult<Self> {
+    #[pyo3(signature = (cell_size, threads = None))]
+    fn new(cell_size: f64, threads: Option<usize>) -> PyResult<Self> {
         if !(cell_size.is_finite() && cell_size > 0.0) {
             return Err(PyValueError::new_err(format!(
                 "cell_size must be finite and positive, got {cell_size}"
             )));
         }
+        let threads = match threads {
+            None => Threads::Shared,
+            Some(0) => return Err(PyValueError::new_err("threads must be at least 1")),
+            Some(1) => Threads::One,
+            Some(count) => Threads::Own(
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(count)
+                    .build()
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?,
+            ),
+        };
         Ok(Self {
             cell_size,
             kinds: Vec::new(),
@@ -379,7 +487,9 @@ impl NativeSwarm {
             looks: Vec::new(),
             focus: None,
             bands: Vec::new(),
-            scratch: Vec::new(),
+            scratch: Scratch::default(),
+            steps: Vec::new(),
+            threads,
             counts: Vec::new(),
         })
     }
@@ -601,8 +711,9 @@ impl NativeSwarm {
         check_query_span(radius, self.cell_size)?;
         self.ensure_grid_current();
         self.grid
-            .neighbours(centre.0, centre.1, radius, &self.x, &self.y, &mut self.scratch);
-        let mut ids: Vec<u64> = self.scratch.iter().map(|&slot| self.id_of(slot as usize)).collect();
+            .neighbours(centre.0, centre.1, radius, &self.x, &self.y, &mut self.scratch.found);
+        let mut ids: Vec<u64> =
+            self.scratch.found.iter().map(|&slot| self.id_of(slot as usize)).collect();
         ids.sort_unstable();
         Ok(ids)
     }

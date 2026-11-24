@@ -52,6 +52,10 @@ class TestKinds:
         with pytest.raises(ValueError, match="kind 3"):
             swarm.spawn(3, [Vector2(0, 0)])
 
+    def test_zero_threads_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="threads"):
+            Swarm(threads=0)
+
     @pytest.mark.parametrize("cell_size", [0.0, -1.0, math.nan, math.inf])
     def test_a_bad_cell_size_is_refused(self, cell_size: float) -> None:
         with pytest.raises(ValueError, match="cell_size"):
