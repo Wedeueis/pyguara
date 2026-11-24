@@ -1047,7 +1047,7 @@ What this decides, in phase 9's order:
 - **Culling (#161) has a case.** About 15% of the sprites built each frame
   are on screen. Sprite building is everything from `Scene.render`'s loop
   to the hand-over to the GPU, so it is the cost culling removes: up to
-  110 ms of 144 at 10,000.
+  110 ms of 144 at 10,000. *Done: see "Visibility culling" below.*
 - **The flock is the tick's largest cost**, 68% at 10,000, about 4 us an
   ant. The solver is native. What is not is the Python on either side of
   it: packing 15 floats an ant out of the components each tick, and
@@ -1173,13 +1173,37 @@ frames, or that carried runs as `(start, count)` into shared columns, would
 attack that — and it is the one part of this path a native implementation would
 not obviously help with either, since the batches have to come back to Python.
 
-### Visibility culling headroom
+### Visibility culling
 
 Sorting and batching 8000 commands of which roughly a tenth are on screen costs
-**25.2 ms**. `RenderSystem` has no visibility rejection at all, so all of that
-is paid. This is the number a culling change would have to beat; it is recorded
-rather than acted on, because for a game where everything is on screen anyway
-culling buys nothing, and the trade only pays in a large scrolling world.
+**25.2 ms**, all of it paid while nothing was culled. `Scene.render` now skips
+a sprite wholly outside the camera's view before submitting it (#161), so it
+is never sorted, batched or handed to the GPU. Measured on the horde demo in
+"A horde, end to end" above; per frame, in milliseconds:
+
+| Ants | Frame | Render | Sprite building | Sprites submitted |
+| ---: | ---: | ---: | ---: | ---: |
+| 1,000 | 55.1 -> **30.0** | 40.4 -> **21.7** | 20.1 -> **5.8** | 5,001 -> 389 |
+| 5,000 | 455.4 -> 402.6 | 76.7 -> **28.5** | 51.3 -> **13.4** | 9,001 -> 1,182 |
+| 10,000 | 1,068.9 -> 971.6 | 143.8 -> **41.5** | 110.0 -> **28.4** | 14,001 -> 2,144 |
+
+At 1,000 ants the frame nearly halves. From 5,000 the frame is the fixed
+tick's, which culling does not touch.
+
+**When everything is on screen**, as in an arena, the check is what is left.
+A sprite whose position is inside the view is kept without reading its
+size, so the check costs about 0.1 us a sprite: `Scene.render`'s loop alone,
+with submission stubbed out, best of 15:
+
+| Sprites | Culling off | Culling on | Cost |
+| ---: | ---: | ---: | ---: |
+| 1,000 | 0.53 | 0.62 | +0.09 |
+| 5,000 | 2.80 | 3.27 | +0.48 |
+| 20,000 | 13.91 | 15.91 | +2.00 |
+
+Against the 4 us it takes to submit, sort and batch a sprite, that is about
+2.5%. A scene whose materials draw beyond a sprite's own box can set
+`cull_sprites = False`.
 
 ### Sprites from columns — milliseconds to build a frame
 

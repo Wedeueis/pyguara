@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -104,6 +105,10 @@ class Scene(ABC):
         # itself looks right, which is a confusing way to find out.
         self.camera: Camera2D | None = None
         self.render_system: RenderSystem | None = None
+
+        # Whether `render()` skips sprites wholly outside the camera's view.
+        # Off for a scene whose materials draw beyond a sprite's own box.
+        self.cull_sprites = True
         self.prefab_factory: PrefabFactory | None = None
 
         # New: Application will set this before on_enter
@@ -453,10 +458,10 @@ class Scene(ABC):
 
         The default submits every entity carrying a visible `Sprite` to
         `self.render_system`, then flushes. With a `Transform`,
-        `Sprite.position` is an offset from it. If that `Transform` has
-        `interpolate=True`, the position drawn is `lerp(previous_position,
-        position, self.render_alpha)`. An entity with only a `Sprite` is drawn
-        at the sprite's own position.
+        `Sprite.position` is an offset from it, lerped by `render_alpha`
+        when the `Transform` has `interpolate=True`. A sprite wholly outside
+        the camera's view is skipped unless `cull_sprites` is off; its box
+        is taken as large as any turn of it could be.
 
         Override to add manual draws, calling
         `super().render(world_renderer, ui_renderer)` first.
@@ -466,20 +471,42 @@ class Scene(ABC):
             "render_system/camera"
         )
 
+        cull = self.cull_sprites
+        view = self.camera.get_view_bounds()
+        # A pixel of slack: the bounds are whole pixels, the camera is not.
+        left, top = view.x - 1, view.y - 1
+        right, bottom = view.x + view.width + 1, view.y + view.height + 1
+
         for entity in self.entity_manager.get_entities_with(Sprite):
             sprite = entity.get_component(Sprite)
-            if sprite.visible:
-                if entity.has_component(Transform):
-                    transform = entity.get_component(Transform)
-                    if transform.interpolate:
-                        base_position = transform.previous_position.lerp(
-                            transform.position, self.render_alpha
-                        )
-                    else:
-                        base_position = transform.position
-                    world_position = base_position + sprite.position
+            if not sprite.visible:
+                continue
+            if entity.has_component(Transform):
+                transform = entity.get_component(Transform)
+                if transform.interpolate:
+                    base_position = transform.previous_position.lerp(
+                        transform.position, self.render_alpha
+                    )
                 else:
-                    world_position = sprite.position
-                self.render_system.submit(sprite, position=world_position)
+                    base_position = transform.position
+                world_position = base_position + sprite.position
+            else:
+                world_position = sprite.position
+            if cull:
+                # The sprite's box starts at its position, so one starting
+                # inside the view is drawn without asking its size. Turned,
+                # the box bounds the turned image and is never wider than
+                # the diagonal, which is the bound for any turn.
+                x, y = world_position.x, world_position.y
+                if x > right or y > bottom:
+                    continue
+                if x < left or y < top:
+                    texture, scale = sprite.texture, sprite.scale
+                    extent = math.hypot(
+                        texture.width * scale.x, texture.height * scale.y
+                    )
+                    if x + extent < left or y + extent < top:
+                        continue
+            self.render_system.submit(sprite, position=world_position)
 
         self.render_system.flush(self.camera)

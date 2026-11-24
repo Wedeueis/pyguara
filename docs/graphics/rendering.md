@@ -32,11 +32,26 @@ The `FramebufferManager` handles FBO lifecycle:
 The rendering process within each pass follows these stages:
 
 1.  **Submission**: Entities submit `Renderable` items to the `RenderSystem`.
+    The base `Scene.render` submits every visible `Sprite`, skipping one
+    wholly outside the camera's view; see [Culling](#culling).
 2.  **Queueing**: Items are stored in a `RenderQueue`.
 3.  **Sorting**: The queue is sorted by **layer, sort group, depth, material**
     — in that order. See [Depth ordering](#depth-ordering).
 4.  **Batching**: The `Batcher` groups compatible draw calls (same material) into `RenderBatch` objects.
 5.  **Execution**: The backend (e.g., `WgpuRenderer`) executes the batches.
+
+## Culling
+
+`Scene.render` skips a sprite whose box cannot reach the camera's view, so
+an off-screen sprite costs a bounds check instead of a submission, a sort
+and a batch. A sprite's box starts at its position; for a turned sprite it
+is the box bounding the turned image, which is never wider than the scaled
+image's diagonal, so the diagonal is the bound used for any turn.
+
+The check reads the sprite, not its material. A scene whose materials draw
+beyond a sprite's own box sets `self.cull_sprites = False`. A game drawing
+by hand, rather than through `Scene.render`, culls for itself:
+`camera.get_view_bounds()` is the view in world coordinates.
 
 ## Depth ordering
 
