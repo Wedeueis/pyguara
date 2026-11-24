@@ -207,7 +207,7 @@ UI builder, the gameplay kits, Studio and the CLI. That is the interface.
 | **6d. Batched drawing** (workstream 2) | A scene hands over arrays of shapes in one call. **Done** (#480): `pyguara.graphics.primitives`, 9.1x at 4000 rectangles, frames byte-identical to one call each | 0.4 us of Python per primitive is the frame's largest drawing cost on wgpu | M |
 | **6e. Physics on Rapier** | A second `IPhysicsEngine` in the crate, then the default; pymunk retired. **Done:** the backend and its parity (#482-#486), the default (#492), pymunk's engine retired in the same release (#494; ADR 0011 amended). The pymunk *package* went with 6f | Removes the last third-party C engine, gives cross-machine determinism (rollback netcode), and is what unblocks 6f | XL |
 | **6f. `Vector2` in Rust** | A PyO3 value type in place of the `pymunk.Vec2d` subclass, if the tuple-compatibility audit comes back cheap; otherwise a tuple subclass of the engine's own. **Done** (#496): the audit came back cheap (six call sites and the tests that pinned tuple-ness); the PyO3 class is in, and the pymunk package is gone | Only possible after 6e: pymunk's C layer accepts tuples and nothing else (ADR 0003, finding 1) | L |
-| **6g. Columnar components** (workstream 7) | Component data that systems consume in bulk lives in Rust columns. **Postponed (the user's call, 2026-11-18):** sprites drawn from columns meet ADR 0008's criterion 1 (#498, 1.7 ms against 51 ms at 20,000), but no demo and not Reclaimer draws sprites through `Scene.render`, so wiring columns into `EntityManager` would gain nothing measurable today and would make per-entity reads 3.5x slower. Resume when a game draws thousands of sprites that way, and measure that game before and after | The foundation the remaining ports stand on; first consumer is 6d | XL |
+| **6g. Columnar components** (workstream 7) | Component data that systems consume in bulk lives in Rust columns. **Postponed (the user's call, 2026-11-18):** sprites drawn from columns meet ADR 0008's criterion 1 (#498, 1.7 ms against 51 ms at 20,000), but no demo and not Reclaimer draws sprites through `Scene.render`, so wiring columns into `EntityManager` would gain nothing measurable today and would make per-entity reads 3.5x slower. Resume when a game draws thousands of sprites that way, and measure that game before and after. **Dropped 2026-11-24:** Correição met that condition, and hordes go to a native swarm instead (ADR 0013) | The foundation the remaining ports stand on; first consumer is 6d | XL |
 | **6h. Pure pixel goldens, pygame dropped** | The wgpu pixel tests compare against golden images, as the render-graph tests already do. **Not doing (the user's call, 2026-11-17):** the software renderer stays as the `pygame` extra, for machines with no usable GPU (an old integrated chip without DX12, Vulkan or OpenGL 3.3, some VMs and remote sessions), so pygame stays in `dev` to test it and the pixel tests keep comparing against it | Removes pygame from `dev` too. Only once nothing but tests needs it | M |
 
 **6e and 6f are one decision.** A Rust `Vector2` cannot be passed to
@@ -314,7 +314,7 @@ demo, and the rest is built now.
 | --- | --- | --- |
 | 1 | **Horde demo** | A capstone in `examples/`: a scrolling world, 1,000 to 10,000 enemies spawned off screen from prefabs, flocking and colliding, animated, the camera following the player. With a frame-time breakdown at 1k, 5k and 10k, recorded in `docs/guides/performance.md`. It is the measurement items 2 and 3 are decided on |
 | 2 | **Visibility culling** ([#161](https://github.com/Wedeueis/pyguara/issues/161)) | Measured on the demo, where a survivor camera leaves much of the horde off screen. Lands only on a before and after number |
-| 3 | **Columnar components** (6g) | Only if the demo's profile says sprite preparation or per-entity work is the cost. It changes `EntityManager`, so the numbers go to the user before any code |
+| 3 | **A native swarm** (ADR 0013), replacing 6g | Correição's profile showed per-entity work is the cost. Columns inside `EntityManager` were designed and dropped (ADR 0008, closed). A native swarm, with an opt-in neighbour cap and simulation level of detail, takes the horde instead, in seven measured increments |
 
 **The production layers, alongside**
 
@@ -328,7 +328,7 @@ demo, and the rest is built now.
 | 9 | Non-square tiles ([#346](https://github.com/Wedeueis/pyguara/issues/346)) | A `(width, height)` tile size through the tilemap model and its collision merge |
 
 **Done when** the horde demo runs 10,000 enemies with its frame time
-measured and recorded, culling and 6g are each landed or dropped on that
+measured and recorded, culling and the swarm are each landed or dropped on that
 measurement, and issues 4 to 9 are closed.
 
 ## What is not in this roadmap
