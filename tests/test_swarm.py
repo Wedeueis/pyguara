@@ -233,3 +233,63 @@ class TestUpdate:
         swarm.kill([ids[1]])
         swarm.update(1 / 60)
         assert swarm.neighbour_counts() == [0]
+
+
+class TestLevelOfDetail:
+    def _pair(self, period: int) -> tuple[Swarm, int, int]:
+        """Two agents seeking far apart, one near the focus, one far."""
+        swarm = Swarm(cell_size=32.0)
+        kind = swarm.add_kind(SwarmKind())
+        near, far = swarm.spawn(kind, [Vector2(0, 0), Vector2(5000, 0)])
+        swarm.set_seek([near, far], [Vector2(0, 900), Vector2(5000, 900)])
+        swarm.set_detail_bands([(1000.0, 1), (6000.0, period)])
+        swarm.set_detail_focus(Vector2(0, 0))
+        return swarm, near, far
+
+    def test_a_far_agent_steers_only_on_its_ticks_and_coasts_between(self) -> None:
+        swarm, near, far = self._pair(4)
+        velocities = []
+        for _ in range(8):
+            swarm.update(1 / 60)
+            velocities.append(swarm.velocities([far])[0])
+        changed = [i for i in range(1, 8) if velocities[i] != velocities[i - 1]]
+        assert changed == [3, 7]  # slot 1 steers when (1 + tick) % 4 == 0
+
+    def test_a_far_agent_is_pulled_about_as_hard_overall(self) -> None:
+        """A force held for its period lands near where every-tick steering does."""
+        swarm, near, far = self._pair(4)
+        for _ in range(240):
+            swarm.update(1 / 60)
+        near_y = swarm.positions([near])[0].y
+        far_y = swarm.positions([far])[0].y
+        assert abs(far_y - near_y) < 0.05 * near_y
+
+    def test_no_focus_steers_everyone(self) -> None:
+        swarm, near, far = self._pair(4)
+        swarm.set_detail_focus(None)
+        reference, ref_near, ref_far = self._pair(4)
+        reference.set_detail_bands([])
+        for _ in range(10):
+            swarm.update(1 / 60)
+            reference.update(1 / 60)
+        assert swarm.velocities([near, far]) == reference.velocities(
+            [ref_near, ref_far]
+        )
+
+    @pytest.mark.parametrize(
+        "bands",
+        [[(100.0, 1), (50.0, 2)], [(100.0, 0)], [(-1.0, 1)], [(math.nan, 1)]],
+    )
+    def test_bad_bands_are_refused(self, bands: list[tuple[float, int]]) -> None:
+        swarm, _, _ = _swarm()
+        with pytest.raises(ValueError, match="band"):
+            swarm.set_detail_bands(bands)
+
+    def test_an_agent_that_did_not_steer_reports_no_flockmates(self) -> None:
+        swarm = Swarm(cell_size=32.0)
+        kind = swarm.add_kind(SwarmKind())
+        swarm.spawn(kind, [Vector2(5000, 0), Vector2(5010, 0)])
+        swarm.set_detail_bands([(10.0, 1), (100.0, 2)])
+        swarm.set_detail_focus(Vector2(0, 0))
+        swarm.update(1 / 60)
+        assert sorted(swarm.neighbour_counts()) == [0, 1]

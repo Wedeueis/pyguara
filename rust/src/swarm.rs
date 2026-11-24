@@ -95,6 +95,12 @@ pub struct NativeSwarm {
     grid_current: bool,
     scratch: Vec<u32>,
     counts: Vec<u32>,
+    /// Ticks stepped so far, which picks the agents a band steers.
+    ticks: u64,
+    /// Where level of detail measures from; `None` steers everyone.
+    focus: Option<(f64, f64)>,
+    /// Level-of-detail bands as (squared radius, period), radius rising.
+    bands: Vec<(f64, u64)>,
 }
 
 impl NativeSwarm {
@@ -247,11 +253,39 @@ impl NativeSwarm {
     }
 
     /// Steer and move every live agent from the snapshot.
+    /// The steering period of an agent at `(x, y)`: 1 near the focus, or
+    /// with no focus or bands, else the first band reaching it, else the
+    /// last band's.
+    fn period_at(&self, x: f64, y: f64) -> u64 {
+        let Some((focus_x, focus_y)) = self.focus else {
+            return 1;
+        };
+        let Some(&(_, outermost)) = self.bands.last() else {
+            return 1;
+        };
+        let offset_x = x - focus_x;
+        let offset_y = y - focus_y;
+        let distance_sq = offset_x * offset_x + offset_y * offset_y;
+        self.bands
+            .iter()
+            .find(|&&(radius_sq, _)| distance_sq <= radius_sq)
+            .map_or(outermost, |&(_, period)| period)
+    }
+
     fn sweep(&mut self, dt: f64) {
         for slot in 0..self.alive.len() {
             if !self.alive[slot] {
                 continue;
             }
+            let period = self.period_at(self.snap_x[slot], self.snap_y[slot]);
+            if period > 1 && (slot as u64 + self.ticks) % period != 0 {
+                // Not this agent's tick to steer. It still moves.
+                self.x[slot] = self.snap_x[slot] + self.snap_vx[slot] * dt;
+                self.y[slot] = self.snap_y[slot] + self.snap_vy[slot] * dt;
+                continue;
+            }
+            // A force decided once every `period` ticks acts for all of them.
+            let steering_dt = dt * period as f64;
             let agent = self.kinds[self.kind[slot] as usize];
             let (mut force_x, mut force_y) = self.flock_force(slot);
             let position_x = self.snap_x[slot];
@@ -276,8 +310,8 @@ impl NativeSwarm {
                 (force_x, force_y) = scaled_to(force_x, force_y, force_length, agent.max_force);
             }
             let inverse_mass = 1.0 / agent.mass;
-            let mut new_vx = velocity_x + force_x * inverse_mass * dt;
-            let mut new_vy = velocity_y + force_y * inverse_mass * dt;
+            let mut new_vx = velocity_x + force_x * inverse_mass * steering_dt;
+            let mut new_vy = velocity_y + force_y * inverse_mass * steering_dt;
             let speed = length(new_vx, new_vy);
             if speed > agent.max_speed {
                 (new_vx, new_vy) = scaled_to(new_vx, new_vy, speed, agent.max_speed);
@@ -320,6 +354,9 @@ impl NativeSwarm {
             snap_vy: Vec::new(),
             grid: Grid::default(),
             grid_current: false,
+            ticks: 0,
+            focus: None,
+            bands: Vec::new(),
             scratch: Vec::new(),
             counts: Vec::new(),
         })
@@ -584,12 +621,46 @@ impl NativeSwarm {
             self.grid.build(&self.snap_x, &self.snap_y, self.cell_size);
             self.sweep(dt);
         });
+        self.ticks = self.ticks.wrapping_add(1);
         self.grid_current = false;
         Ok(())
     }
 
+    /// Steer agents far from `focus` less often, or everyone every tick
+    /// with `None`.
+    fn set_detail_focus(&mut self, focus: Option<Pair>) -> PyResult<()> {
+        if let Some(point) = focus {
+            check_position(point.0, point.1, self.cell_size)?;
+        }
+        self.focus = focus.map(|point| (point.0, point.1));
+        Ok(())
+    }
+
+    /// Replace the level-of-detail bands: (radius, period) pairs with the
+    /// radius rising. An agent steers every `period`-th tick of the first
+    /// band reaching it, or of the last band past them all.
+    fn set_detail_bands(&mut self, bands: Vec<(f64, u64)>) -> PyResult<()> {
+        let mut previous = -1.0f64;
+        for &(radius, period) in &bands {
+            if radius.is_nan() || radius < 0.0 || radius <= previous {
+                return Err(PyValueError::new_err(format!(
+                    "band radii must rise from 0, got {radius} after {previous}"
+                )));
+            }
+            if period == 0 {
+                return Err(PyValueError::new_err("a band's period must be at least 1"));
+            }
+            previous = radius;
+        }
+        self.bands = bands
+            .into_iter()
+            .map(|(radius, period)| (radius * radius, period))
+            .collect();
+        Ok(())
+    }
+
     /// How many flockmates each live agent steered by on the last tick,
-    /// in `ids()` order.
+    /// in `ids()` order. An agent that did not steer reports 0.
     fn neighbour_counts(&self) -> Vec<u32> {
         (0..self.alive.len())
             .filter(|&slot| self.alive[slot])

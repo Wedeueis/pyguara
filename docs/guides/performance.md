@@ -1094,8 +1094,26 @@ keeps ants as entities. The swarm's figure is its **whole tick**. Best of
 
 In play, `FlockingSystem` at 10,000 ants costs 43.7 ms a tick. Of that,
 28.3 ms is Python glue and the row conversions, which a swarm does not
-have. The swarm's sweep is single-threaded, and has no neighbour cap or
-level of detail yet.
+have. The swarm's sweep is single-threaded.
+
+**Level of detail** (`Swarm.set_detail_bands`): with `--near-share`, a band
+round the raid's centre holds that share of the agents and steers every
+tick, and the rest steer every fourth. The near band holds the densest
+agents, as a crowd round the player does. Swarm tick in milliseconds, two
+runs:
+
+| Agents | Every agent every tick | 50% near | 20% near |
+| ---: | ---: | ---: | ---: |
+| 5,000 | 6.3 | 4.8-4.9 | 3.1 |
+| 10,000 | 13.9 | 9.8-10.0 | 6.4 |
+
+**A neighbour cap was built and dropped.** Keeping each agent's *k* nearest
+flockmates made the 10,000 tick slower, not faster: 14.2-15.0 ms uncapped,
+16.7-16.9 at 6, 18.7-19.1 at 16, 20.6-20.7 at 24. The cost of a crowded tick
+is scanning the grid's candidates, about 200 an agent to find 74. A cap
+that keeps the nearest must test every one of them, then select.
+Turning cohesion and alignment off saved only 1.3 ms, and smaller cells
+were slower (17.8 ms at 9 px against 14.6 at 26).
 
 Each agent sums its flockmates in the grid's order. Sorting them by slot
 first would make the order independent of the grid's hash, but it put the
