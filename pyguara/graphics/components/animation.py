@@ -1,6 +1,6 @@
 """Animation Logic Component."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
@@ -387,6 +387,44 @@ def advance_animator(animator: Animator, dt: float) -> list[str]:
     ]
 
     animator._apply_frame()
+    return fired
+
+
+def advance_animators(
+    animators: Iterable[Animator], dt: float
+) -> list[tuple[Animator, list[str]]]:
+    """Advance many animators by `dt`, as `advance_animator` on each.
+
+    Most calls on a playing clip change no frame: at ten frames a second,
+    five ticks in six only add to the cursor. That case is done here
+    inline, with exactly `advance_animator`'s arithmetic, and only an
+    animator whose frame changes, or whose clip times each frame, takes
+    the full path.
+
+    Args:
+        animators: The animators to advance.
+        dt: Seconds since the last call.
+
+    Returns:
+        `(animator, names)` for each animator that crossed a frame carrying
+        `frame_events`, in the order given.
+    """
+    fired: list[tuple[Animator, list[str]]] = []
+    for animator in animators:
+        clip = animator._current_clip
+        if not animator._playing or clip is None:
+            continue
+        scaled = dt * animator.playback_speed
+        if scaled <= 0:
+            continue
+        if clip.frame_durations is None:
+            held = animator._current_time + scaled
+            if held < 1.0 / clip.frame_rate:
+                animator._current_time = held
+                continue
+        names = advance_animator(animator, dt)
+        if names:
+            fired.append((animator, names))
     return fired
 
 
