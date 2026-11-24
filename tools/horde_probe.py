@@ -8,8 +8,10 @@ each in a fresh process. The calango walks its autopilot loop, so every run
 sees the same world. Once the raid is full and has settled, it times each
 frame's phases with the engine's `FrameProfiler`, and inside them the parts
 a horde costs: building the sprites (`Scene.render`, through the sort and
-the batching to the GPU), the flock, the animators and the combat pass.
-It also counts the sprites submitted and how many of them were on screen.
+the batching to the GPU, the swarm's ants included), the raid's step, the
+animators and the combat pass. It also counts what was drawn: the sprites
+submitted, and how many of them were on screen, plus the ants the swarm
+drew, all of which were.
 Means in milliseconds: per frame for the frame, its render and the sprite
 building, per fixed tick for the tick and the systems inside it.
 """
@@ -45,11 +47,11 @@ COLUMNS = (
     "on_screen",
     "ticks",
     "tick",
-    "flock",
+    "raid",
     "animation",
     "combat",
 )
-SYSTEMS = ("flock", "animation", "combat")
+SYSTEMS = ("raid", "animation", "combat")
 
 
 def _timed(
@@ -73,8 +75,8 @@ def _timed(
 def probe(ants: int, frames: int) -> dict[str, float]:
     """Run the raid at `ants` and return its mean costs per frame."""
     from examples.correicao.bootstrap import SCREEN_HEIGHT, SCREEN_WIDTH
-    from examples.correicao.systems import CombatSystem
-    from pyguara.ai.flocking_system import FlockingSystem
+    from examples.correicao.systems import CombatSystem, RaidSystem
+    from pyguara.ai.swarm import Swarm
     from pyguara.application.application import Application
     from pyguara.application.frame_profile import FrameProfiler
     from pyguara.events.dispatcher import EventDispatcher
@@ -90,7 +92,7 @@ def probe(ants: int, frames: int) -> dict[str, float]:
     totals = dict.fromkeys(("sprites", "submitted", "on_screen", *SYSTEMS), 0.0)
     calls = dict.fromkeys(totals, 0)
     _timed(Scene, "render", totals, calls, "sprites")
-    _timed(FlockingSystem, "update", totals, calls, "flock")
+    _timed(RaidSystem, "update", totals, calls, "raid")
     _timed(AnimationSystem, "update", totals, calls, "animation")
     _timed(CombatSystem, "update", totals, calls, "combat")
 
@@ -106,6 +108,17 @@ def probe(ants: int, frames: int) -> dict[str, float]:
         original_submit(self, item, position)
 
     RenderSystem.submit = counted_submit  # type: ignore[method-assign]
+
+    original_batches = Swarm._batches
+
+    def counted_batches(self: Swarm, *args: Any) -> Any:
+        batches = original_batches(self, *args)
+        drawn = sum(len(batch.destinations) for batch in batches)
+        totals["submitted"] += drawn
+        totals["on_screen"] += drawn
+        return batches
+
+    Swarm._batches = counted_batches  # type: ignore[method-assign]
 
     since_full = 0
     measured = 0
@@ -135,7 +148,7 @@ def probe(ants: int, frames: int) -> dict[str, float]:
     assert profiler is not None
     stats = profiler.stats()
     assert stats is not None
-    ticks = calls["flock"]
+    ticks = calls["raid"]
     phases = {phase.name: phase.mean_ms for phase in stats.phases}
     result = {
         "work": stats.work_mean_ms,

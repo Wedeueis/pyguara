@@ -1,6 +1,6 @@
 # ADR 0013: Hordes are a native swarm, not entities
 
-**Status:** Accepted 2026-11-24. Increments 1, 3, 4 and 5 are built; increment 2, the neighbour cap, was built, measured slower and dropped.
+**Status:** Accepted 2026-11-24. Increments 1, 3, 4, 5 and 6 are built, and criterion 1 is met: a 10,000-ant Correição ticks in 8.4-9.2 ms. Increment 2, the neighbour cap, was built, measured slower and dropped. Increment 7, promotion, is left.
 **Scope:** A new subsystem, `pyguara/ai/swarm.py` over `rust/src/swarm.rs`.
 `pyguara/ecs/` is not touched.
 

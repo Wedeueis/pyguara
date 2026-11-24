@@ -1,8 +1,7 @@
-"""Correição's own components, and the player's state.
+"""The player's state.
 
-The horde itself is made of engine components: `Transform`, `Sprite`,
-`Animator` and `FlockingAgent`. The marker here only says which entities
-are ants, so the combat pass and the spawner can find them.
+The raid has no components of its own: it is an engine `Swarm`, whose
+ants are agents held natively rather than entities.
 """
 
 from __future__ import annotations
@@ -10,16 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from pyguara.common.types import Vector2
-from pyguara.ecs.component import StrictComponent
-
-
-@dataclass(slots=True)
-class Ant(StrictComponent):
-    """Marker: this entity is one ant of the raid."""
-
-    def __post_init__(self) -> None:
-        """Run `StrictComponent`'s setup, which the generated `__init__` does not."""
-        StrictComponent.__init__(self)
 
 
 @dataclass
