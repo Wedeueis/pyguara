@@ -1,8 +1,8 @@
 # ADR 0008: The columnar world spike
 
-**Status:** In progress -- increments 1 and 2 measured; criterion 1 met. No decision yet.
-**Date:** 2026-11-10
-**Scope:** This fork only. `Wedeueis/pyguara` is unchanged by any of it.
+**Status:** Spike done (increments 1 and 2, criterion 1 met). Column storage in `EntityManager` **proposed** 2026-11-24; see the last section. Not accepted yet.
+**Date:** 2026-11-10, amended 2026-11-24
+**Scope:** The spike stands beside the ECS and is wired into nothing. The proposal would change `pyguara/ecs/`.
 
 ## Context
 
@@ -194,6 +194,131 @@ So columns in `EntityManager` would make no current game faster and would
 make per-entity reads 3.5x slower. Postponed by the user's call, until a game
 draws thousands of sprites through `Scene.render`; that game is then
 measured before and after.
+
+## Proposed: column storage inside `EntityManager`
+
+The condition the postponement set is met: Correição
+(`examples/correicao/`) draws up to 14,000 sprites through `Scene.render`
+and flocks up to 10,000 ants. Nothing below is built.
+
+### What a tick costs in play
+
+`tools/horde_probe.py` with the native solver's call timed separately, after
+the raid has settled around the calango (WSL2, CPython 3.12, release build).
+In play an ant has about 60 flockmates in range, against 7.6 when the
+same flock is measured standing still.
+
+| Ants | Tick | Flock | Of which Python glue | Rust conversions | Sweep | Animation | Combat |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 5,000 | 24.6 | 16.4 | 8.2 | 3.4 | 4.8 | 4.5 | 0.8 |
+| 10,000 | 60.9 | 43.7 | 20.9 | 7.4 | 15.4 | 10.0 | 1.9 |
+
+The glue is the query, reading 15 fields an ant and writing two back.
+The conversions turn those Python lists into Rust vectors and back. The
+sweep is the steering itself, and the bit-exact flocking goldens fix its
+order. No change outside the ECS removes the first two (see
+`docs/guides/performance.md`, the horde section): they exist because each
+ant's state is a Python object.
+
+### What it would buy, and what it would not
+
+If the flock read and wrote its state in place, glue and conversions would
+fall to about a millisecond:
+
+| Ants | Tick today | Estimated tick | 60 Hz (16.7 ms)? |
+| ---: | ---: | ---: | --- |
+| 5,000 | 24.6 | about 13 | Yes |
+| 10,000 | 60.9 | about 33 | No |
+
+**Columns alone do not reach 10,000 at 60 Hz.** After them, the sweep
+(15 ms) and animation (10 ms) are the tick. Each needs its own change,
+measured separately and outside this decision:
+
+- **The sweep:** an opt-in cap on flockmates per agent, default off, so
+  the goldens are untouched.
+- **Animation:** advancing only on-screen animators, or animating from
+  the columns.
+
+### The design
+
+1. **Opt-in, per scene, per component type.** A scene calls
+   `entity_manager.store_in_columns(Transform, FlockingAgent)` before any
+   entity has either. Every other scene, every demo and Reclaimer keep
+   object storage and are unchanged. Storing everything in columns was
+   rejected: it makes every per-entity read in every game 3.5x slower, for
+   no gain where nothing reads in bulk.
+2. **The component object stays the handle.** Adding a component binds
+   the object the caller passed to a row, and from then on its fields
+   read and write the column. `get_component` returns that same object,
+   so identity, `isinstance` and a reference held by game code all keep
+   working, and nothing reads a stale copy. Removing it copies the values
+   back and unbinds it. A flock that owns its agents and writes positions
+   back only when they are on screen was rejected: it gives exactly that
+   stale copy.
+3. **How a field binds is measured first.** There are two candidates:
+   - a branch in each field's accessor, which costs every object-stored
+     component a little;
+   - swapping the object's class to a bound subclass, which costs objects
+     nothing but means anything keyed on `type(component)` would see the
+     subclass. `persistence/serializer.py` records `__class__.__name__`,
+     for example.
+
+   The first increment measures both and picks against criterion 5.
+4. **Fields.** Columns hold `float`, `int`, `bool` and `Vector2`, as in
+   the spike. `Vector2 | None` gets a presence column, which
+   `FlockingAgent.seek_target` needs. `Vector2` is immutable, so a bound
+   field cannot be changed behind its column's back.
+5. **No parenting for a column-stored `Transform`.** `set_parent` on one
+   raises and names object storage as the alternative. The flock already
+   writes the local position, so the horde loses nothing.
+6. **Order.** The native join follows the cached query's membership
+   order, which is the order entities joined it. The Gauss-Seidel sweep,
+   and so the flocking goldens, stay exact. The goldens run over both
+   storages.
+7. **Notifications.** A write through the object behaves as today. A
+   native system's writes bump the spike's per-column version counters
+   and do not call `notify_component_changed`, which is what
+   `FlockingSystem` does today.
+8. **Rendering.** A bound `Transform` reads slower one at a time, so
+   `Scene.render` must not keep reading 14,000 of them to cull. Instead it
+   culls over the column natively, and reads `Sprite` objects only for
+   what is on screen. `Sprite` stays an object.
+
+### Exit criteria
+
+Fixed before any code, as the spike's were:
+
+1. **Flock glue:** at 10,000 ants in play, the flock outside the native
+   sweep drops from 28.3 ms to 2 ms or less.
+2. **Correição at 5,000:** a tick takes under 16.7 ms, from 24.6 ms.
+3. **Sprites:** `Scene.render`'s sprite pass at 10,000 ants is no slower
+   than its current 33.2 ms.
+4. **Nothing opted out changes.** Every test, visual snapshot and demo
+   frame stays as it is. The ECS benchmarks in
+   `docs/guides/performance.md` stay within noise.
+5. **Per-entity reads:** reading a bound `Transform.position` takes 200 ns
+   or less. Reading an object-stored one is at most 10% slower than
+   today.
+6. **Goldens:** the flocking goldens pass exactly on both storages.
+
+### Increments
+
+Each is one PR, measured where it claims a number:
+
+1. Column storage in `EntityManager`, binding for `FlockingAgent`, and
+   the two binding strategies measured. Tests cover identity, removal,
+   `clone`, deepcopy, persistence, Studio's component schema, replay and
+   disabled entities.
+2. `Transform` binding, with the parenting refusal.
+3. `FlockingSystem` over columns in one native call, held to the goldens.
+   Measures criterion 1.
+4. `Scene.render` culling over the `Transform` column. Measures
+   criterion 3.
+5. Correição opts in, and the horde probe is rerun for
+   `docs/guides/performance.md`. Measures criterion 2.
+
+If an increment misses its criterion, the work stops there and the
+numbers come back to this ADR before anything more is built.
 
 ## Decisions taken in this increment
 
