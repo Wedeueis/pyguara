@@ -687,8 +687,11 @@ def _setup_container(
         ),
     )
 
-    # Register prefab loader with resource manager
-    res_manager.register_loader(PrefabLoader())
+    # The prefab loader, with the resource manager and in the container, so a
+    # game can give it migrations: `container.get(PrefabLoader).migrations`.
+    prefab_loader = PrefabLoader()
+    res_manager.register_loader(prefab_loader)
+    container.register_instance(PrefabLoader, prefab_loader)
 
     # 9. The Application itself, as a singleton rather than an instance, so
     # it is built on the first `container.get(Application)` -- after

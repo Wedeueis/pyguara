@@ -21,7 +21,8 @@ class PrefabData:
 
     Attributes:
         name: Human-readable name for this prefab.
-        version: Schema version for migration support.
+        version: The file's schema version. A `PrefabLoader` with
+            migrations upgrades an older file and reports the current one.
         components: Dictionary mapping component names to their data.
         children: List of child prefab references with positioning.
         extends: Optional path to parent prefab for inheritance.

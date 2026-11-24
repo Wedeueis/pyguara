@@ -131,6 +131,41 @@ PyYAML is installed), and `.prefab` (format auto-detected). A file whose
 top-level value is not a mapping raises `ValueError`. If `name` is omitted the
 file stem is used.
 
+## Versions and migration
+
+A prefab file's `version` says which schema it was written in. When a
+component changes shape, bump the game's prefab version and register a
+step that upgrades the old data. The loader runs every step on load,
+before parsing, so files written under the old schema keep working.
+
+```python
+from pyguara.persistence.migration import Migration, MigrationManager
+from pyguara.prefabs import PrefabLoader
+
+def health_renamed(data: dict) -> dict:
+    health = data.get("components", {}).get("Health")
+    if health is not None:
+        health["maximum"] = health.pop("max")
+    return data
+
+migrations = MigrationManager(current_version=2)
+migrations.register(Migration(1, 2, health_renamed, "Health.max -> maximum"))
+container.get(PrefabLoader).migrations = migrations
+```
+
+- **Steps:** each step takes and returns the file's whole data. The steps
+  are persistence's `Migration` and `MigrationManager`, the same ones save
+  files use.
+- **What loads:** a file with no `version` is version 1, and a loaded
+  prefab reports the current version. A parent named by `extends` upgrades
+  too, because it loads through the same loader.
+- **Errors:** a version newer than the game knows, a gap in the steps, a
+  step that fails, or a version that is not a whole number from 1 each
+  raise `ValueError`, naming the file.
+- **Without migrations,** the loader keeps the version as written and
+  changes nothing. Bootstrap registers its `PrefabLoader` in the container
+  for this reason.
+
 ## Spawning from a map
 
 `spawn_objects` turns the objects on a Tiled or LDtk map into entities. The map
