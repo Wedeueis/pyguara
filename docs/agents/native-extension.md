@@ -128,6 +128,19 @@ Rust index's does not.
 None of the five runs without the extension, and their tests fail rather
 than skip without it.
 
+**`Swarm` (ADR 0013) was native from the start,** and is held the same
+three ways:
+
+- `tests/golden/swarm.json`: nine scenarios, compared exactly.
+- `tests/reference/swarm.py`: a Python swarm that agrees with it bit for
+  bit, because it reproduces the grid's bucket hash and visit order.
+  The grid's hash constants therefore reach the swarm's last bits:
+  changing them means re-recording.
+- Sabotage: the alignment force weighted by the cohesion weight fails
+  the two-kinds scenario, against both the recording and the reference.
+  Reading a flockmate's velocity after it moved, rather than from the
+  tick's start, fails 19 tests.
+
 ```bash
 uv sync                              # maturin is the backend; this builds it
 make native                          # rebuild in place after editing Rust
