@@ -1077,6 +1077,39 @@ What this decides, in phase 9's order:
 - **The demo's own combat pass is 3%.** It visits every ant at 10 Hz, not
   every tick.
 
+### Correição on the swarm
+
+The same probe, before and after Correição moved its raid from entities
+to a `Swarm` (ADR 0013): eight kinds, ants more than 100 px past the
+screen's edge steering every fourth tick, and the shared thread pool.
+The "before" is `main` with culling and the faster `AnimationSystem`
+already in, so it is lower than the first table. Means in milliseconds;
+"after" gives the range over two runs. In "before", animation is the
+ants' `AnimationSystem`. In "after" only the calango's is left; the ants'
+frames are worked out while drawing, inside sprite building.
+
+| Ants | Tick, before | Tick, after | Raid step, after (flock before) | Frame, before | Frame, after |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,000 | 4.08 | 3.44-3.47 | 1.54-1.59 (1.70) | 28.4 | 25.8 |
+| 5,000 | 24.39 | 4.39-4.78 | 2.52-2.54 (16.59) | 395.8 | 28.0-30.7 |
+| 10,000 | 61.81 | 8.44-9.18 | 5.94-5.96 (42.65) | 970.7 | 42.0-45.8 |
+
+| Ants | Animation, before | Sprite building, before | Sprite building, after |
+| ---: | ---: | ---: | ---: |
+| 1,000 | 0.77 | 5.65 | 3.81-4.05 |
+| 5,000 | 4.55 | 13.62 | 4.43-4.46 |
+| 10,000 | 10.16 | 28.31 | 4.67-4.96 |
+
+**At 10,000 ants a tick is 8.4-9.2 ms, inside the 16.7 ms a 60 Hz tick
+stands for.** Before, it was 61.8, and the loop ran 15 catch-up ticks a
+frame. That is ADR 0013's criterion 1.
+
+What is left of the frame is mostly not the horde. The render phase is
+20 to 23 ms at every size, 1,000 ants included, and sprite building is
+under 5 ms of it. The rest is the GPU hand-over on this machine (WSL2, GL
+on D3D12). Because a frame takes longer than a tick, the loop still runs
+two or three ticks a frame.
+
 ### The swarm against the flocking solver
 
 `tools/swarm_probe.py` steps one crowded raid two ways: with the native

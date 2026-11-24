@@ -112,10 +112,11 @@ These modules correspond to the "Tutorial Series Roadmap".
 
 ### [correicao](./correicao) — Correição
 * **Genre:** Horde survival. A calango in the caatinga holds off an army-ant raid of up to ten thousand.
-* **Key Concepts:** the engine's own sprite path (`Scene.render`) at scale,
-  `FlockingSystem` steering the whole raid in one native call a tick,
-  `Animator` on every ant, a scrolling world mostly off screen. It is the
-  benchmark phase 9 decides culling and columnar components on.
+* **Key Concepts:** a `Swarm` holding the whole raid natively, steered,
+  animated and drawn without visiting an ant in Python, with far ants
+  steering less often; sprites through `Scene.render` for the ground; a
+  scrolling world mostly off screen. It is the benchmark phase 9 decided
+  culling and the swarm on.
 * **Run:** `uv run python -m examples.correicao.main --ants 5000`
 * **Measure it:** `uv run python tools/horde_probe.py`
 * **Spec:** [`examples/correicao/DESIGN.md`](correicao/DESIGN.md)

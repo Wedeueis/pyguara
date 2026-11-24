@@ -6,15 +6,16 @@ out of the way. Here a calango, a striped lizard, is in the way.
 
 ## What it is for
 
-Correição is the engine's horde benchmark. Phase 9 of the roadmap decides
-two performance changes, visibility culling (#161) and columnar components
-(6g), on measurement rather than instinct, and no other demo can provide
-it: every other demo draws by hand, and none has a horde in a world
-larger than the screen. So this one is built to be the measurement:
+Correição is the engine's horde benchmark. Phase 9 of the roadmap decided
+visibility culling (#161) and how hordes are held (ADR 0013) on its
+measurements, and no other demo could provide them: every other demo draws
+by hand, and none has a horde in a world larger than the screen. So this
+one is built to be the measurement:
 
-- **Every sprite goes through the engine's own path.** The ground, the
-  ants and the calango are entities with a `Sprite`, drawn by the base
-  `Scene.render`, through `RenderSystem`'s sort and batching.
+- **It uses the engine's own paths.** The ground and the calango are
+  entities with a `Sprite`, drawn by the base `Scene.render`. The raid is
+  an engine `Swarm`, which steers, animates and draws its ants natively,
+  sorted among those sprites by layer.
 - **The world is larger than the screen.** It is about five screens on
   each side, strewn with 4,000 tufts and stones, and the camera follows the
   calango. At any moment most of the sprites are off screen, as in any
@@ -43,15 +44,15 @@ where each frame goes. The results are in `docs/guides/performance.md`.
 
 | Piece | Where | What it does |
 | --- | --- | --- |
-| Movement of the raid | `FlockingSystem` (engine, native) | Steers every ant toward the calango and apart from its neighbours, in one call a tick |
-| Animation | `AnimationSystem` (engine) | Two-frame walk cycle on every ant |
+| The raid | `Swarm` (engine, native) | Every ant, as an agent rather than an entity: steering, animation and drawing |
+| `make_raid` | `systems.py` | Eight kinds of ant, from slow with slow legs to fast with fast ones |
+| `RaidSystem` | `systems.py` | Points the raid at the calango and steps it, ants far off screen steering every fourth tick |
 | `PlayerSystem` | `systems.py` | The keys, or the autopilot loop |
 | `HordeSpawner` | `systems.py` | Tops the raid up on a ring just past the screen's corners |
-| `CombatSystem` | `systems.py` | The only loop over the whole raid, ten times a second: pulses, bites, stragglers, each ant's seek target and facing |
+| `CombatSystem` | `systems.py` | Ten times a second: who is in the pulse, who is biting, who is left behind, each one query to the swarm |
 
-The combat pass runs at 10 Hz on purpose. It is the one piece of Python
-that visits every ant, and nothing it decides needs to happen within a
-sixtieth of a second.
+No Python in the demo visits the ants one at a time. The combat pass asks
+the swarm for ids by distance, and kills them in one call.
 
 ## Art
 

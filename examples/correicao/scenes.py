@@ -1,9 +1,9 @@
 """Correição: a calango in the caatinga, and an army-ant raid closing in.
 
-Everything on screen, the ground, the ants and the calango, is an entity
-with a `Sprite`, drawn by the base `Scene.render`: the engine's own sprite
-path, which is what this demo exists to load. The raid's size is the
-`ants` argument, so the same scene runs at 1,000 or at 10,000.
+The ground and the calango are entities with a `Sprite`, drawn by the base
+`Scene.render`. The raid is an engine `Swarm`, which steers, animates and
+draws its ants natively, sorted among those sprites by layer. The raid's
+size is the `ants` argument, so the same scene runs at 1,000 or at 10,000.
 
 Keys: WASD or the arrows to move; the calango pulses on its own. Until a
 key is pressed it walks a loop by itself.
@@ -22,8 +22,10 @@ from examples.correicao.systems import (
     CombatSystem,
     HordeSpawner,
     PlayerSystem,
+    RaidSystem,
+    make_raid,
 )
-from pyguara.ai.flocking_system import FlockingSystem
+from pyguara.ai.swarm import Swarm
 from pyguara.common.components import Transform
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Color, Vector2
@@ -52,11 +54,11 @@ GROUND = Color(196, 168, 120)
 PULSE = Color(250, 236, 170)
 TEXT = Color(40, 28, 18)
 
-# The flock is steered before the fight reads it, and both before the
-# calango's sprite follows it; the engine's own systems run at 100 to 399.
+# The raid is stepped before the fight reads it; the engine's own systems
+# run at 100 to 399.
 _PRIORITY_PLAYER = 400
 _PRIORITY_SPAWN = 410
-_PRIORITY_FLOCK = 420
+_PRIORITY_RAID = 420
 _PRIORITY_COMBAT = 430
 
 _MOVES = {
@@ -90,6 +92,7 @@ class HordeScene(Scene):
         self.player = PlayerState(position=Vector2(WORLD_SIZE / 2, WORLD_SIZE / 2))
         self._autopilot = autopilot
         self._held: dict[str, bool] = dict.fromkeys(_MOVES, False)
+        self.swarm = Swarm(cell_size=26.0)
         self.spawner: HordeSpawner | None = None
         self.player_system: PlayerSystem | None = None
         self._player_entity_id = ""
@@ -108,10 +111,11 @@ class HordeScene(Scene):
         self._place_player([texture("calango_0"), texture("calango_1")])
 
         self.player_system = PlayerSystem(self.player, autopilot=self._autopilot)
+        kinds = make_raid(self.swarm, [texture("ant_0"), texture("ant_1")])
         self.spawner = HordeSpawner(
-            self.entity_manager,
+            self.swarm,
             self.player,
-            [texture("ant_0"), texture("ant_1")],
+            kinds,
             rng,
             target=self.ants,
             view_radius=view_radius,
@@ -120,16 +124,11 @@ class HordeScene(Scene):
         manager.register(self.player_system, priority=_PRIORITY_PLAYER)
         manager.register(self.spawner, priority=_PRIORITY_SPAWN)
         manager.register(
-            FlockingSystem(self.entity_manager, cell_size=26.0),
-            priority=_PRIORITY_FLOCK,
+            RaidSystem(self.swarm, self.player, kinds, view_radius=view_radius),
+            priority=_PRIORITY_RAID,
         )
         manager.register(
-            CombatSystem(
-                self.entity_manager,
-                self.player,
-                self.spawner,
-                view_radius=view_radius,
-            ),
+            CombatSystem(self.swarm, self.player, view_radius=view_radius),
             priority=_PRIORITY_COMBAT,
         )
         self._bind_keys()
@@ -200,14 +199,15 @@ class HordeScene(Scene):
         self.camera.position = Vector2(round(position.x), round(position.y))
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
-        """Draw the ground, every sprite, the pulse ring and the counts.
+        """Draw the ground, the sprites and the raid, the pulse ring and the counts.
 
         Args:
             world_renderer: Draws the world.
             ui_renderer: Draws the counts.
         """
-        assert self.camera is not None
+        assert self.camera is not None and self.render_system is not None
         world_renderer.clear(GROUND)
+        self.swarm.submit(self.render_system)
         super().render(world_renderer, ui_renderer)
         state = self.player
         if state.pulse_flash > 0.0:

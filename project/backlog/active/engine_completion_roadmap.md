@@ -314,7 +314,7 @@ demo, and the rest is built now.
 | --- | --- | --- |
 | 1 | **Horde demo** | A capstone in `examples/`: a scrolling world, 1,000 to 10,000 enemies spawned off screen from prefabs, flocking and colliding, animated, the camera following the player. With a frame-time breakdown at 1k, 5k and 10k, recorded in `docs/guides/performance.md`. It is the measurement items 2 and 3 are decided on |
 | 2 | **Visibility culling** ([#161](https://github.com/Wedeueis/pyguara/issues/161)) | Measured on the demo, where a survivor camera leaves much of the horde off screen. Lands only on a before and after number |
-| 3 | **A native swarm** (ADR 0013), replacing 6g | Correição's profile showed per-entity work is the cost. Columns inside `EntityManager` were designed and dropped (ADR 0008, closed). A native swarm, with an opt-in neighbour cap and simulation level of detail, takes the horde instead, in seven measured increments |
+| 3 | **A native swarm** (ADR 0013), replacing 6g | Correição's profile showed per-entity work is the cost. Columns inside `EntityManager` were designed and dropped (ADR 0008, closed). A native swarm, with an opt-in neighbour cap and simulation level of detail, takes the horde instead, in seven measured increments. **Criterion 1 met 2026-11-24:** Correição at 10,000 ants ticks in 8.4-9.2 ms, against 61.8 before. The neighbour cap was measured slower and dropped; promotion (increment 7) is left |
 
 **The production layers, alongside**
 
