@@ -11,6 +11,8 @@ Example:
     ant = swarm.add_kind(SwarmKind(max_speed=120.0, neighbor_radius=26.0))
     ids = swarm.spawn(ant, [Vector2(10, 20), Vector2(30, 40)])
     swarm.set_kind_seek(ant, player_position)
+    swarm.set_detail_bands([(900.0, 1), (2000.0, 4)])  # far ants think less
+    swarm.set_detail_focus(camera_centre)
     swarm.update(dt)
     swarm.kill(swarm.query_radius(player_position, 150.0))
 """
@@ -180,6 +182,28 @@ class Swarm:
     def query_outside(self, centre: Vector2, radius: float) -> list[int]:
         """Ids of the live agents farther than `radius` from `centre`, sorted."""
         return list(self._native.query_outside(centre, radius))
+
+    def set_detail_bands(self, bands: Sequence[tuple[float, int]]) -> None:
+        """Steer agents far from the detail focus less often.
+
+        Each band is `(radius, period)`, radii rising. An agent within a
+        band's radius of the focus steers every `period`-th tick, and one
+        past every radius takes the last band's period. On the ticks
+        between it keeps its velocity, so it still moves smoothly. No bands
+        steers every agent every tick.
+
+        Raises:
+            ValueError: If the radii do not rise from 0, or a period is
+                below 1.
+        """
+        self._native.set_detail_bands(list(bands))
+
+    def set_detail_focus(self, focus: Vector2 | None) -> None:
+        """Measure the detail bands from `focus`, or steer everyone with `None`.
+
+        Usually the camera centre, set each frame.
+        """
+        self._native.set_detail_focus(focus)
 
     def update(self, dt: float) -> None:
         """Steer and move every agent by one step.

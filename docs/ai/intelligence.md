@@ -130,10 +130,14 @@ swarm.kill(swarm.query_radius(player_position, 150.0))
   nothing.
 - **Queries return ids sorted**, so a result does not depend on how the
   swarm is laid out.
+- **Far agents can think less.** `set_detail_bands([(900.0, 1), (2000.0,
+  4)])` and `set_detail_focus(camera_centre)` steer agents within 900 px
+  every tick and the rest every fourth, while every agent still moves
+  every tick. With a fifth of a crowded 10,000 near the focus, a tick
+  costs less than half as much.
 - **Use entities when an agent needs its own components or logic**, and
-  `FlockingSystem` for flocks of up to a couple of thousand. Drawing,
-  animation, a neighbour cap and level of detail are later increments of
-  ADR 0013.
+  `FlockingSystem` for flocks of up to a couple of thousand. Drawing and
+  animation are later increments of ADR 0013.
 
 ## Measured ceiling
 

@@ -1,6 +1,6 @@
 # ADR 0013: Hordes are a native swarm, not entities
 
-**Status:** Accepted 2026-11-24. Increment 1 is built.
+**Status:** Accepted 2026-11-24. Increments 1 and 3 are built; increment 2, the neighbour cap, was built, measured slower and dropped.
 **Scope:** A new subsystem, `pyguara/ai/swarm.py` over `rust/src/swarm.rs`.
 `pyguara/ecs/` is not touched.
 
@@ -95,7 +95,16 @@ tick (Jacobi), not from neighbours already moved this tick (Gauss-Seidel).
 stay the tool for a flock of entities, up to a couple of thousand, each
 running its own logic.
 
-### 3. A neighbour cap, opt-in per kind
+### 3. A neighbour cap, opt-in per kind (dropped 2026-11-24)
+
+**Built, measured slower, and dropped.** At 10,000 crowded agents, keeping
+the *k* nearest took the tick from 14.2-15.0 ms to 16.7-20.7 ms, rising with
+*k*. The cost is scanning the grid's candidates, about 200 an agent to find
+74, and a cap that keeps the nearest must test all of them, then select.
+Stopping at the first *k* found would be cheap but biased by scan order.
+Level of detail and threads cut the scan itself instead.
+`docs/guides/performance.md` has the numbers. The original proposal
+follows.
 
 `max_neighbours` limits each agent to its *k* nearest flockmates, with
 ties broken by slot. The default is no cap. A crushed raid at 60
@@ -114,7 +123,11 @@ with a steering period:
 - Every agent still integrates every tick, so motion stays smooth, as
   `FlockingSystem(groups=...)` already does.
 
-With no bands set, every agent steers every tick.
+With no bands set, every agent steers every tick. An agent steering every
+*n*-th tick applies its force for *n* ticks' time, as `FlockingSystem` does
+for `groups`. Bands are measured from each agent's position at the start of
+the tick. Built in increment 3; at 10,000 crowded agents with a fifth of
+them near the focus, the tick went from 13.9 ms to 6.4 ms.
 
 ### 5. Animation from a clock
 

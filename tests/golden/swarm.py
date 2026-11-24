@@ -40,6 +40,8 @@ class SwarmLike(Protocol):
     def ids(self) -> list[int]: ...  # noqa: D102
     def set_kind_seek(self, kind: int, target: Vector2 | None) -> None: ...  # noqa: D102
     def set_seek(self, ids: list[int], targets: list[Vector2]) -> None: ...  # noqa: D102
+    def set_detail_bands(self, bands: list[tuple[float, int]]) -> None: ...  # noqa: D102
+    def set_detail_focus(self, focus: Vector2 | None) -> None: ...  # noqa: D102
     def update(self, dt: float) -> None: ...  # noqa: D102
 
 
@@ -58,6 +60,7 @@ class Scenario:
     own_seek_every: int = 0
     kill_at: int = -1
     respawn_at: int = -1
+    detail: tuple[tuple[float, int], ...] = ()
 
     def build(self, swarm: SwarmLike) -> None:
         """Fill `swarm` with the scenario's agents, deterministically."""
@@ -84,6 +87,8 @@ class Scenario:
     def play(self, swarm: SwarmLike) -> None:
         """Build and tick the scenario on `swarm`."""
         self.build(swarm)
+        if self.detail:
+            swarm.set_detail_bands(list(self.detail))
         for tick in range(self.ticks):
             if tick == self.kill_at:
                 swarm.kill(swarm.ids()[1::3])
@@ -92,6 +97,9 @@ class Scenario:
                     0,
                     [Vector2(self.spread / 2 + i, self.spread / 2) for i in range(10)],
                 )
+            if self.detail:
+                # A focus crossing the swarm, so agents change band.
+                swarm.set_detail_focus(Vector2(self.spread * tick / self.ticks, 0.0))
             swarm.update(DT)
 
 
@@ -125,6 +133,14 @@ SCENARIOS: tuple[Scenario, ...] = (
     ),
     Scenario("killed-and-respawned", 90, 300.0, 40, kill_at=10, respawn_at=20),
     Scenario("small-cells", 60, 400.0, 20, cell_size=16.0),
+    Scenario(
+        "detail-bands",
+        120,
+        400.0,
+        40,
+        detail=((120.0, 1), (260.0, 3), (400.0, 5)),
+        kind_seek=True,
+    ),
     Scenario("long", 40, 400.0, 240),
 )
 

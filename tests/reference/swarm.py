@@ -87,6 +87,9 @@ class ReferenceSwarm:
         self.seek: list[tuple[float, float] | None] = []
         self.free: list[int] = []
         self.counts: list[int] = []
+        self.ticks = 0
+        self.focus: tuple[float, float] | None = None
+        self.bands: list[tuple[float, int]] = []
 
     @property
     def count(self) -> int:
@@ -162,6 +165,25 @@ class ReferenceSwarm:
         for agent, target in zip(ids, targets, strict=True):
             self.seek[self._resolve(agent)] = (target.x, target.y)
 
+    def set_detail_bands(self, bands: Sequence[tuple[float, int]]) -> None:
+        """Set the level-of-detail bands."""
+        self.bands = [(radius * radius, period) for radius, period in bands]
+
+    def set_detail_focus(self, focus: Vector2 | None) -> None:
+        """Set the level-of-detail focus."""
+        self.focus = None if focus is None else (focus.x, focus.y)
+
+    def _period(self, x: float, y: float) -> int:
+        if self.focus is None or not self.bands:
+            return 1
+        offset_x = x - self.focus[0]
+        offset_y = y - self.focus[1]
+        distance_sq = offset_x * offset_x + offset_y * offset_y
+        for radius_sq, period in self.bands:
+            if distance_sq <= radius_sq:
+                return period
+        return self.bands[-1][1]
+
     def query_radius(self, centre: Vector2, radius: float) -> list[int]:
         """Ids within `radius` of `centre`, sorted."""
         radius_sq = radius * radius
@@ -193,6 +215,12 @@ class ReferenceSwarm:
                 seek_weight,
             ) = self._kinds[self.kind[slot]]
             x, y = snap_x[slot], snap_y[slot]
+            period = self._period(x, y)
+            if period > 1 and (slot + self.ticks) % period:
+                self.x[slot] = x + snap_vx[slot] * dt
+                self.y[slot] = y + snap_vy[slot] * dt
+                continue
+            steering_dt = dt * float(period)
             separation_radius_sq = separation_radius * separation_radius
             count = 0
             sum_x = sum_y = sum_vx = sum_vy = push_x = push_y = 0.0
@@ -272,14 +300,15 @@ class ReferenceSwarm:
             if force_length > max_force:
                 force_x, force_y = _scaled_to(force_x, force_y, force_length, max_force)
             inverse_mass = 1.0 / mass
-            new_vx = velocity_x + force_x * inverse_mass * dt
-            new_vy = velocity_y + force_y * inverse_mass * dt
+            new_vx = velocity_x + force_x * inverse_mass * steering_dt
+            new_vy = velocity_y + force_y * inverse_mass * steering_dt
             speed = math.sqrt(new_vx * new_vx + new_vy * new_vy)
             if speed > max_speed:
                 new_vx, new_vy = _scaled_to(new_vx, new_vy, speed, max_speed)
             self.vx[slot], self.vy[slot] = new_vx, new_vy
             self.x[slot] = x + new_vx * dt
             self.y[slot] = y + new_vy * dt
+        self.ticks += 1
 
     def state(self) -> list[tuple[int, float, float, float, float]]:
         """`(id, x, y, vx, vy)` per live agent, in slot order."""
