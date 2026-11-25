@@ -12,7 +12,7 @@ from pyguara.ai.steering_system import SteeringSystem
 from pyguara.animation.tweener import TweenSystem
 from pyguara.audio.audio_source_system import AudioSourceSystem
 from pyguara.audio.audio_system import IAudioSystem
-from pyguara.common.components import Transform
+from pyguara.common.components import Transform, set_parent
 from pyguara.di.container import DIContainer, DIScope  # Import Container
 
 if TYPE_CHECKING:
@@ -246,6 +246,14 @@ class Scene(ABC):
         Args:
             entity: The entity that was just removed.
         """
+        if entity.has_component(Transform):
+            transform = entity.get_component(Transform)
+            # Out of the spatial hierarchy both ways: a parent would keep the
+            # dead transform in `children`, and a child that outlives it
+            # stays where it is on screen, as a root.
+            set_parent(transform, None, keep_world_transform=False)
+            for child in transform.children:
+                set_parent(child, None)
         self.event_dispatcher.dispatch(EntityDestroyed(entity=entity, source=self))
 
     @abstractmethod
