@@ -168,13 +168,59 @@ class IAudioSystem(Protocol):
         """Resume all paused sound effects."""
         ...
 
-    def play_music(self, path: str, loop: bool = True, fade_ms: int = 1000) -> None:
+    def play_music(
+        self, path: str, loop: bool = True, fade_ms: int = 1000, crossfade: bool = False
+    ) -> None:
         """Stream background music from disk.
 
         Args:
             path: File path to the music file.
             loop: Whether to restart when finished.
             fade_ms: Fade-in duration in milliseconds.
+            crossfade: Fade the current track out over `fade_ms` as this one
+                fades in, rather than stopping it; needs
+                `AudioCapability.INTERACTIVE_MUSIC`.
+
+        Raises:
+            UnsupportedAudioCapability: If `crossfade` is asked of a backend
+                without it.
+        """
+        ...
+
+    def play_music_layers(
+        self,
+        paths: Sequence[str],
+        levels: Sequence[float],
+        loop: bool = True,
+        fade_ms: int = 1000,
+        crossfade: bool = False,
+    ) -> None:
+        """Play several tracks as layers of one piece, in step.
+
+        Every layer starts on the same sample, and each has a level that
+        `set_music_layer` moves while they play: stems of one cue, faded in
+        and out as a fight starts and ends. Needs
+        `AudioCapability.INTERACTIVE_MUSIC`.
+
+        Args:
+            paths: Each layer's file.
+            levels: Each layer's starting level, 0 to 1.
+            loop: Whether to restart when finished.
+            fade_ms: Fade-in duration in milliseconds.
+            crossfade: As `play_music`.
+
+        Raises:
+            UnsupportedAudioCapability: On a backend without it.
+        """
+        ...
+
+    def set_music_layer(self, layer: int, level: float, fade_ms: int = 500) -> None:
+        """Move one layer of the current music to a level, over `fade_ms`.
+
+        Raises:
+            UnsupportedAudioCapability: On a backend without
+                `AudioCapability.INTERACTIVE_MUSIC`.
+            IndexError: If the current music has no such layer.
         """
         ...
 

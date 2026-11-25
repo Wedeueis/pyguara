@@ -32,7 +32,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
@@ -89,6 +89,11 @@ impl Fade {
     fn done(&self) -> bool {
         self.gain == self.target
     }
+
+    /// A gain that stays where it is.
+    fn steady(gain: f32) -> Self {
+        Self { gain, step: 0.0, target: gain, stop_at_end: false }
+    }
 }
 
 struct Voice {
@@ -105,10 +110,22 @@ struct Voice {
     gain_left: f32,
     gain_right: f32,
     fade: Option<Fade>,
+    /// A music voice's track (the `music_track` it started as) and layer;
+    /// 0 and 0 for an effect.
+    track: u64,
+    layer: usize,
+    /// A layer's level, ramping when the game changes it.
+    level: Fade,
     finished: bool,
 }
 
 impl Voice {
+    /// Fade from wherever this voice's fade is now to silence, then end.
+    fn fade_out(&mut self, frames: u64) {
+        let from = self.fade.map_or(1.0, |fade| fade.gain);
+        self.fade = Some(Fade::new(from, 0.0, frames, true));
+    }
+
     fn frames(&self) -> usize {
         self.samples.len() / 2
     }
@@ -151,7 +168,7 @@ impl Voice {
             let fade = match &mut self.fade {
                 Some(fade) => fade.next(),
                 None => 1.0,
-            };
+            } * self.level.next();
             frame[0] += left * self.gain_left * fade;
             frame[1] += right * self.gain_right * fade;
             self.cursor += self.step;
@@ -176,6 +193,11 @@ struct State {
     /// finishes after it was replaced is dropped rather than started.
     music_generation: u64,
     music_pending: bool,
+    /// The track the layer levels belong to, and each layer's level: what
+    /// a track still decoding starts at, and what `set_music_layer_level`
+    /// last asked for.
+    music_track: u64,
+    music_levels: Vec<f32>,
 }
 
 impl State {
@@ -195,8 +217,8 @@ impl State {
         }
     }
 
-    fn music(&mut self) -> Option<&mut Voice> {
-        self.voices.iter_mut().find(|voice| voice.group == GROUP_MUSIC)
+    fn music(&mut self) -> impl Iterator<Item = &mut Voice> {
+        self.voices.iter_mut().filter(|voice| voice.group == GROUP_MUSIC)
     }
 }
 
@@ -671,6 +693,9 @@ impl NativeMixer {
             gain_left: left,
             gain_right: right,
             fade: None,
+            track: 0,
+            layer: 0,
+            level: Fade::steady(1.0),
             finished: false,
         });
         Ok(id)
@@ -727,9 +752,11 @@ impl NativeMixer {
     ///     looping: Play it forever rather than once.
     ///     fade_ms: The fade in.
     ///     gain: Its loudness.
-    #[pyo3(signature = (path, looping=true, fade_ms=0, gain=1.0))]
-    fn play_music(&self, path: String, looping: bool, fade_ms: u64, gain: f32) {
-        self.start_music(MusicSource::File(path), looping, fade_ms, gain);
+    ///     crossfade: Fade the current track out over `fade_ms` once this
+    ///         one has decoded, rather than stopping it now.
+    #[pyo3(signature = (path, looping=true, fade_ms=0, gain=1.0, crossfade=false))]
+    fn play_music(&self, path: String, looping: bool, fade_ms: u64, gain: f32, crossfade: bool) {
+        self.start_music(vec![MusicSource::File(path)], vec![1.0], looping, fade_ms, gain, crossfade);
     }
 
     /// Play music held in memory, as `play_music` plays a file.
@@ -743,9 +770,91 @@ impl NativeMixer {
     ///     looping: Play it forever rather than once.
     ///     fade_ms: The fade in.
     ///     gain: Its loudness.
-    #[pyo3(signature = (data, name, looping=true, fade_ms=0, gain=1.0))]
-    fn play_music_bytes(&self, data: Vec<u8>, name: String, looping: bool, fade_ms: u64, gain: f32) {
-        self.start_music(MusicSource::Bytes(data, name), looping, fade_ms, gain);
+    ///     crossfade: As `play_music`.
+    #[pyo3(signature = (data, name, looping=true, fade_ms=0, gain=1.0, crossfade=false))]
+    fn play_music_bytes(&self, data: Vec<u8>, name: String, looping: bool, fade_ms: u64, gain: f32, crossfade: bool) {
+        self.start_music(vec![MusicSource::Bytes(data, name)], vec![1.0], looping, fade_ms, gain, crossfade);
+    }
+
+    /// Play several tracks as layers of one piece, started on the same frame.
+    ///
+    /// Each is decoded on a worker thread, as `play_music_bytes` decodes
+    /// one, and none starts until all have. A shorter layer is padded with
+    /// silence to the longest, so looping layers stay in step. A layer that
+    /// will not decode is reported to stderr and the piece plays nothing.
+    ///
+    /// Args:
+    ///     data: Each layer's file contents.
+    ///     names: Each layer's path, a hint to the format probe.
+    ///     levels: Each layer's starting level, 0 to 1.
+    ///     looping: Play it forever rather than once.
+    ///     fade_ms: The fade in, and the fade out of a crossfaded track.
+    ///     gain: Its loudness.
+    ///     crossfade: As `play_music`.
+    ///
+    /// Raises:
+    ///     ValueError: If there are no layers, or the three lists differ in
+    ///         length.
+    #[pyo3(signature = (data, names, levels, looping=true, fade_ms=0, gain=1.0, crossfade=false))]
+    #[allow(clippy::too_many_arguments)]
+    fn play_music_layers_bytes(
+        &self,
+        data: Vec<Vec<u8>>,
+        names: Vec<String>,
+        levels: Vec<f32>,
+        looping: bool,
+        fade_ms: u64,
+        gain: f32,
+        crossfade: bool,
+    ) -> PyResult<()> {
+        if data.is_empty() || data.len() != names.len() || data.len() != levels.len() {
+            return Err(PyValueError::new_err(format!(
+                "a layered track needs as many names and levels as layers, and at least one; \
+                 got {} layers, {} names and {} levels",
+                data.len(),
+                names.len(),
+                levels.len()
+            )));
+        }
+        let sources = data.into_iter().zip(names).map(|(bytes, name)| MusicSource::Bytes(bytes, name)).collect();
+        self.start_music(sources, levels, looping, fade_ms, gain, crossfade);
+        Ok(())
+    }
+
+    /// Move one layer of the current track to a level over `fade_ms`.
+    ///
+    /// A track still decoding starts at it.
+    ///
+    /// Raises:
+    ///     IndexError: If the current track has no such layer.
+    #[pyo3(signature = (layer, level, fade_ms=0))]
+    fn set_music_layer_level(&self, layer: usize, level: f32, fade_ms: u64) -> PyResult<()> {
+        let rate = self.rate;
+        let mut state = self.state();
+        let count = state.music_levels.len();
+        if layer >= count {
+            return Err(PyIndexError::new_err(format!(
+                "the music has {count} layer(s); there is no layer {layer}"
+            )));
+        }
+        state.music_levels[layer] = level;
+        let track = state.music_track;
+        for voice in state.music().filter(|voice| voice.track == track && voice.layer == layer) {
+            voice.level = Fade::new(voice.level.gain, level, fade_ms * u64::from(rate) / 1000, false);
+        }
+        Ok(())
+    }
+
+    /// Whether a track is still being decoded to play.
+    #[getter]
+    fn music_decoding(&self) -> bool {
+        self.state().music_pending
+    }
+
+    /// How many layers the current track has; 0 with none.
+    #[getter]
+    fn music_layer_count(&self) -> usize {
+        self.state().music_levels.len()
     }
 
     /// Fade the music out over `fade_ms`, then stop it.
@@ -755,19 +864,19 @@ impl NativeMixer {
         let mut state = self.state();
         state.music_generation += 1;
         state.music_pending = false;
+        state.music_levels.clear();
         if fade_ms == 0 {
             state.voices.retain(|v| v.group != GROUP_MUSIC);
             return;
         }
-        if let Some(music) = state.music() {
-            let from = music.fade.map_or(1.0, |fade| fade.gain);
-            music.fade = Some(Fade::new(from, 0.0, fade_ms * u64::from(rate) / 1000, true));
+        for music in state.music() {
+            music.fade_out(fade_ms * u64::from(rate) / 1000);
         }
     }
 
     /// Set the music track's loudness.
     fn set_music_gain(&self, gain: f32) {
-        if let Some(music) = self.state().music() {
+        for music in self.state().music() {
             music.gain_left = gain;
             music.gain_right = gain;
         }
@@ -777,7 +886,7 @@ impl NativeMixer {
     #[getter]
     fn music_playing(&self) -> bool {
         let mut state = self.state();
-        state.music_pending || state.music().is_some()
+        state.music_pending || state.music().next().is_some()
     }
 
     /// Mix the next `frames` frames and return them.
@@ -804,6 +913,7 @@ impl NativeMixer {
             state.voices.clear();
             state.music_generation += 1;
             state.music_pending = false;
+            state.music_levels.clear();
         }
         if let Output::Silent { running } = &self.output {
             running.store(false, Ordering::Relaxed);
@@ -845,53 +955,93 @@ enum MusicSource {
 }
 
 impl NativeMixer {
-    /// Replace the music with a track, decoded on a worker thread.
-    fn start_music(&self, source: MusicSource, looping: bool, fade_ms: u64, gain: f32) {
+    /// Replace the music with a track of one or more layers, decoded on a
+    /// worker thread.
+    ///
+    /// Without `crossfade` the current track stops now. With it, the
+    /// current track plays on until the new one has decoded, then fades
+    /// out over `fade_ms` while the new one fades in; if the new one fails
+    /// to decode, the current one carries on.
+    fn start_music(
+        &self,
+        sources: Vec<MusicSource>,
+        levels: Vec<f32>,
+        looping: bool,
+        fade_ms: u64,
+        gain: f32,
+        crossfade: bool,
+    ) {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let generation = {
             let mut state = self.state();
-            state.voices.retain(|v| v.group != GROUP_MUSIC);
+            if !crossfade {
+                state.voices.retain(|v| v.group != GROUP_MUSIC);
+            }
             state.music_generation += 1;
             state.music_pending = true;
+            state.music_track = id;
+            state.music_levels = levels;
             state.music_generation
         };
         let shared = self.shared.clone();
         let rate = self.rate;
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         thread::spawn(move || {
-            let decoded = match source {
-                MusicSource::File(path) => audio::decode_to_samples(&path),
-                MusicSource::Bytes(data, name) => audio::decode_bytes_to_samples(data, &name),
-            }
+            let mut layers = Vec::with_capacity(sources.len());
+            for source in sources {
+                let decoded = match source {
+                    MusicSource::File(path) => audio::decode_to_samples(&path),
+                    MusicSource::Bytes(data, name) => audio::decode_bytes_to_samples(data, &name),
+                }
                 .map(|(samples, from_rate, channels)| to_stereo_float(&samples, channels, from_rate, rate));
+                match decoded {
+                    Ok(samples) => layers.push(samples),
+                    Err(error) => {
+                        let mut state = lock(&shared);
+                        if state.music_generation == generation {
+                            state.music_pending = false;
+                        }
+                        eprintln!("pyguara audio: music {error}");
+                        return;
+                    }
+                }
+            }
+            let longest = layers.iter().map(Vec::len).max().unwrap_or(0);
             let mut state = lock(&shared);
             if state.music_generation != generation {
                 return;
             }
             state.music_pending = false;
-            let samples = match decoded {
-                Ok(samples) if !samples.is_empty() => samples,
-                Ok(_) => return,
-                Err(error) => {
-                    eprintln!("pyguara audio: music {error}");
-                    return;
-                }
-            };
-            let frames = (samples.len() / 2) as f64;
+            if longest == 0 {
+                return;
+            }
             let fade_frames = fade_ms * u64::from(rate) / 1000;
-            state.voices.push(Voice {
-                id,
-                group: GROUP_MUSIC,
-                samples: Arc::new(samples),
-                cursor: 0.0,
-                step: 1.0,
-                loop_start: 0.0,
-                loop_end: frames,
-                loops: if looping { -1 } else { 0 },
-                gain_left: gain,
-                gain_right: gain,
-                fade: (fade_frames > 0).then(|| Fade::new(0.0, 1.0, fade_frames, false)),
-                finished: false,
-            });
+            if crossfade {
+                for old in state.music() {
+                    old.fade_out(fade_frames);
+                }
+            }
+            let frames = (longest / 2) as f64;
+            for (layer, mut samples) in layers.into_iter().enumerate() {
+                samples.resize(longest, 0.0);
+                let level = state.music_levels.get(layer).copied().unwrap_or(1.0);
+                state.voices.push(Voice {
+                    id,
+                    group: GROUP_MUSIC,
+                    samples: Arc::new(samples),
+                    cursor: 0.0,
+                    step: 1.0,
+                    loop_start: 0.0,
+                    loop_end: frames,
+                    loops: if looping { -1 } else { 0 },
+                    gain_left: gain,
+                    gain_right: gain,
+                    fade: (fade_frames > 0).then(|| Fade::new(0.0, 1.0, fade_frames, false)),
+                    track: id,
+                    layer,
+                    level: Fade::steady(level),
+                    finished: false,
+                });
+            }
         });
     }
 }

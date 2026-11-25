@@ -173,12 +173,15 @@ class AudioCapability(Flag):
         LOOP_POINTS: Looping between two points inside a clip rather than
             over the whole file.
         BUS_EFFECTS: DSP attached to a bus (`set_bus_effects`).
+        INTERACTIVE_MUSIC: Crossfading from one track to the next, and a
+            track of several layers whose levels change while it plays.
     """
 
     NONE = 0
     PITCH = auto()
     LOOP_POINTS = auto()
     BUS_EFFECTS = auto()
+    INTERACTIVE_MUSIC = auto()
 
 
 @dataclass(frozen=True, slots=True)
