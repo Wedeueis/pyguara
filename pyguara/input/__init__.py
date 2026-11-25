@@ -18,6 +18,14 @@ from pyguara.input.events import (
     PlayerLeftEvent,
 )
 from pyguara.input.gamepad import GamepadManager
+from pyguara.input.gestures import (
+    ActionSequence,
+    Chord,
+    DoubleTap,
+    Gesture,
+    Hold,
+    Tap,
+)
 from pyguara.input.manager import InputManager
 from pyguara.input.protocols import IInputBackend, IJoystick
 from pyguara.input.types import (
@@ -35,10 +43,13 @@ from pyguara.input.types import (
 )
 
 __all__ = [
+    "ActionSequence",
     "ActionType",
     "BindingConflict",
     "BindingKey",
+    "Chord",
     "ConflictResolution",
+    "DoubleTap",
     "GamepadAxis",
     "GamepadAxisEvent",
     "GamepadButton",
@@ -47,6 +58,8 @@ __all__ = [
     "GamepadDisconnectedEvent",
     "GamepadManager",
     "GamepadState",
+    "Gesture",
+    "Hold",
     "IInputBackend",
     "IJoystick",
     "InputAction",
@@ -62,4 +75,5 @@ __all__ = [
     "PlayerLeftEvent",
     "PlayerRouter",
     "RebindResult",
+    "Tap",
 ]
