@@ -1,6 +1,7 @@
 """Application setup and dependency wiring."""
 
 from collections.abc import Callable
+from typing import Any
 
 from pyguara import crash, native
 from pyguara.application.application import Application
@@ -35,7 +36,7 @@ from pyguara.resources.loader import IResourceLoader
 from pyguara.resources.loaders.blob_loader import BlobLoader, TextLoader
 from pyguara.resources.loaders.data_loader import JsonLoader
 from pyguara.resources.manager import ResourceManager
-from pyguara.resources.types import Texture
+from pyguara.resources.types import AudioClip, Resource, Texture
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.scene.serializer import SceneSerializer
@@ -621,6 +622,16 @@ def _setup_container(
 
     container.register_instance(ResourceManager, res_manager)
 
+    # A prefab names a texture or a sound by its path. Loading it as the
+    # prefab is built makes a missing file fail there, naming the prefab,
+    # rather than as a string that fails when first drawn. The registry is
+    # process-wide, so the most recently built application's resources
+    # serve it.
+    for resource_type in (Texture, AudioClip):
+        component_registry.register_type_converter(
+            resource_type, _resource_converter(res_manager, resource_type)
+        )
+
     # Physics Engine
     physics_config = config_manager.config.physics
     physics_engine = create_physics_engine(physics_config)
@@ -703,6 +714,21 @@ def _setup_container(
     logger.info("Engine bootstrap complete. Handing over to Application.")
 
     return container
+
+
+def _resource_converter(
+    resources: ResourceManager, kind: type[Resource]
+) -> Callable[[Any], Resource]:
+    """Return a converter that loads a `kind` named by its path."""
+
+    def convert(value: Any) -> Resource:
+        if isinstance(value, kind):
+            return value
+        if not isinstance(value, str):
+            raise ValueError(f"a {kind.__name__} is named by its path, not {value!r}")
+        return resources.load(value, kind)
+
+    return convert
 
 
 def _register_core_components(registry: ComponentRegistry) -> None:

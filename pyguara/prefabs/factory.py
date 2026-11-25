@@ -102,15 +102,7 @@ class PrefabFactory:
                 error is destroyed with everything it owns.
             KeyError: If a custom deserializer references an unregistered type.
         """
-        ids = [entity_id] if entity_id else []
-        self._check_children(prefab, [source_path or prefab.name], ids)
-        taken = [i for i in ids if self._entity_manager.get_entity(i) is not None]
-        repeated = sorted({i for i in ids if ids.count(i) > 1})
-        if taken or repeated:
-            raise ValueError(
-                f"prefab {prefab.name!r} would create entities with ids already "
-                f"in use {taken} or used twice {repeated}"
-            )
+        self._check_tree(prefab, entity_id, source_path)
         built: list[Entity] = []
         try:
             return self._build(prefab, entity_id, overrides, source_path, built)
@@ -153,12 +145,9 @@ class PrefabFactory:
         # Create and add components. A component whose data cannot be
         # instantiated is an authoring error: let it raise rather than
         # returning a half-built entity that fails mysteriously at runtime.
-        for comp_name, comp_data in resolved_components.items():
-            if not self._registry.has(comp_name):
-                logger.warning(f"Component '{comp_name}' not registered, skipping")
-                continue
-
-            component = self._registry.create(comp_name, comp_data)
+        for component in self._components(
+            resolved_components, source_path or prefab.name
+        ):
             entity.add_component(component)
 
         # Create children, owned by this entity and parented to its Transform.
@@ -166,6 +155,90 @@ class PrefabFactory:
 
         logger.debug(f"Created entity from prefab '{prefab.name}': {entity.id}")
         return entity
+
+    def _components(self, data: dict[str, dict[str, Any]], prefab: str) -> list[Any]:
+        """Build every registered component in `data`.
+
+        Raises:
+            ValueError: If one cannot be built, including a resource it
+                names that does not load. Names the prefab and component.
+        """
+        components = []
+        for name, fields in data.items():
+            if not self._registry.has(name):
+                logger.warning(f"Component '{name}' not registered, skipping")
+                continue
+            try:
+                components.append(self._registry.create(name, fields))
+            except Exception as error:
+                raise ValueError(
+                    f"prefab {prefab!r}, component {name}: "
+                    f"{type(error).__name__}: {error}"
+                ) from error
+        return components
+
+    def check(self, prefab: PrefabData, source_path: str | None = None) -> None:
+        """Raise if `create` would, without creating anything.
+
+        Builds every component of the prefab and of its children, so each
+        resource they name is loaded, as `create` would. Run it as a game
+        loads its prefabs, to fail on a missing texture then, not mid-level.
+
+        Raises:
+            ValueError: For anything `create` raises for, before it would
+                create an entity. Names the prefab.
+        """
+        self._check_tree(prefab, None, source_path)
+        self._check_components(prefab, source_path)
+
+    def _check_components(self, prefab: PrefabData, source_path: str | None) -> None:
+        """Build, and discard, the components of a prefab and its children."""
+        self._components(self._resolve_inheritance(prefab), source_path or prefab.name)
+        for child in prefab.children:
+            assert self._prefab_resolver is not None  # checked above
+            data = self._prefab_resolver(child.prefab)
+            assert data is not None  # checked above
+            components = self._resolve_inheritance(data)
+            if child.overrides:
+                components = self._apply_overrides(components, child.overrides)
+            self.check(
+                PrefabData(
+                    name=data.name, components=components, children=data.children
+                ),
+                child.prefab,
+            )
+
+    def check_path(self, prefab_path: str) -> None:
+        """Raise if `create_from_path(prefab_path)` would.
+
+        Raises:
+            ValueError: If the prefab does not load, or as `check` does.
+        """
+        if self._prefab_resolver is None:
+            raise ValueError("checking a prefab by path needs a prefab resolver")
+        prefab = self._prefab_resolver(prefab_path)
+        if prefab is None:
+            raise ValueError(f"prefab {prefab_path!r} did not load")
+        self.check(prefab, prefab_path)
+
+    def _check_tree(
+        self, prefab: PrefabData, entity_id: str | None, source_path: str | None
+    ) -> None:
+        """Raise unless the prefab's children resolve and its ids are free.
+
+        Raises:
+            ValueError: As `_check_children`, or if an explicit entity id in
+                the tree is already in use or appears twice.
+        """
+        ids = [entity_id] if entity_id else []
+        self._check_children(prefab, [source_path or prefab.name], ids)
+        taken = [i for i in ids if self._entity_manager.get_entity(i) is not None]
+        repeated = sorted({i for i in ids if ids.count(i) > 1})
+        if taken or repeated:
+            raise ValueError(
+                f"prefab {prefab.name!r} would create entities with ids already "
+                f"in use {taken} or used twice {repeated}"
+            )
 
     def _check_children(
         self, prefab: PrefabData, chain: list[str], ids: list[str]
