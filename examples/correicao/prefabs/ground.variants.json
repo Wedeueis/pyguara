@@ -1,0 +1,9 @@
+{
+  "variants": {
+    "boulder": {
+      "base": "examples/correicao/prefabs/stone.prefab.json",
+      "multiply": {"Sprite": {"scale": {"x": 2, "y": 2}}},
+      "tags": ["boulder"]
+    }
+  }
+}

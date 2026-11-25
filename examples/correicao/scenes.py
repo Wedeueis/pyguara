@@ -1,8 +1,9 @@
 """Correição: a calango in the caatinga, and an army-ant raid closing in.
 
 The ground and the calango are entities with a `Sprite`, drawn by the base
-`Scene.render`; the ground is prefabs, scattered from a spawn table. The raid is an engine `Swarm`, which steers, animates and
-draws its ants natively, sorted among those sprites by layer. The raid's
+`Scene.render`; the ground is prefabs and a named variant of one,
+scattered from a spawn table. The raid is an engine `Swarm`, which steers,
+animates and draws its ants natively, sorted among those sprites by layer. The raid's
 size is the `ants` argument, so the same scene runs at 1,000 or at 10,000.
 
 Keys: WASD or the arrows to move; the calango pulses on its own. Until a
@@ -46,6 +47,7 @@ from pyguara.prefabs import (
     PrefabCache,
     PrefabFactory,
     load_spawn_table,
+    load_variants,
 )
 from pyguara.random.service import RandomService
 from pyguara.resources.manager import ResourceManager
@@ -148,8 +150,9 @@ class HordeScene(Scene):
     def _scatter_ground(self, resources: ResourceManager, rng: RandomStream) -> None:
         """Strew grass and stones over the whole world, most of it off screen.
 
-        Each is a prefab, picked from `ground.spawn.json`, whose sprites name
-        their textures by path; the registry loads them through `resources`.
+        Each is a prefab, or the boulder variant of the stone, picked from
+        `ground.spawn.json`; sprites name their textures by path, and the
+        registry loads them through `resources`.
         """
         registry = ComponentRegistry()
         registry.register(Transform)
@@ -158,7 +161,10 @@ class HordeScene(Scene):
             Texture,
             lambda path: resources.load(path, Texture),  # type: ignore[type-abstract]
         )
-        factory = PrefabFactory(self.entity_manager, registry, PrefabCache().load)
+        variants = load_variants(f"{PREFABS}/ground.variants.json")
+        factory = PrefabFactory(
+            self.entity_manager, registry, variants.resolver(PrefabCache().load)
+        )
         points = [
             Vector2(
                 round(rng.uniform(0.0, WORLD_SIZE)), round(rng.uniform(0.0, WORLD_SIZE))

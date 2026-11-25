@@ -7,6 +7,7 @@ templates with support for:
 - Child entity hierarchies
 - JSON/YAML serialization
 - Weighted spawn tables
+- Named variants
 """
 
 from pyguara.prefabs.factory import PrefabFactory
@@ -22,6 +23,7 @@ from pyguara.prefabs.types import (
     PrefabData,
     PrefabInstance,
 )
+from pyguara.prefabs.variants import PrefabVariant, VariantLibrary, load_variants
 
 __all__ = [
     # Types
@@ -38,6 +40,10 @@ __all__ = [
     "SpawnChoice",
     "SpawnTable",
     "load_spawn_table",
+    # Variants
+    "PrefabVariant",
+    "VariantLibrary",
+    "load_variants",
     # Loader
     "Prefab",
     "PrefabCache",

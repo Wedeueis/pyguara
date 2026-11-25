@@ -210,3 +210,54 @@ enemies = factory.spawn(table, rng, count=5, positions=spawn_points)
   `registry.register_type_converter(Texture, lambda path:
   resources.load(path, Texture))`. Correição scatters its ground this way
   (`examples/correicao/prefabs/`).
+
+## Named variants
+
+A variant is a prefab with some fields replaced and some numbers scaled,
+named once in a library instead of written as an `extends` file per
+variant or as overrides repeated at every spawn site.
+
+```json
+{
+  "variants": {
+    "elite_goblin": {
+      "base": "prefabs/goblin.prefab.json",
+      "overrides": {"Tag": {"name": "Elite goblin"}},
+      "multiply": {"Health": {"max_health": 1.5, "current": 1.5}},
+      "tags": ["elite"]
+    }
+  }
+}
+```
+
+```python
+from pyguara.prefabs import PrefabCache, PrefabFactory, load_variants
+
+variants = load_variants("data/enemies.variants.json")
+factory = PrefabFactory(manager, registry, variants.resolver(PrefabCache().load))
+elite = factory.create_from_path("elite_goblin")
+```
+
+- **Where a variant works:** `variants.resolver(base)` wraps a prefab
+  resolver. Any lookup through the factory can then name a variant
+  wherever it takes a prefab path: `create_from_path`, a spawn table's
+  choice, a child, or another variant's `base`.
+- **What a variant resolves to:**
+  - its base's component data, with the base's `extends` chain already
+    applied;
+  - its base's children;
+  - the tags of both.
+  - The entity's `PrefabInstance.prefab_path` is the variant's name.
+- **`multiply`** scales numbers the base already sets, nested as the
+  component data is. An `int` field stays an `int`, rounded to the
+  nearest. These all raise, naming the variant and the field:
+  - multiplying a field the base does not set, or one that is not a
+    number;
+  - a negative or non-finite factor;
+  - multiplying a field that `overrides` also sets.
+- **Names** contain no slash, backslash or dot, so a variant can never
+  shadow a prefab path. A variant whose base does not load resolves to
+  `None`, as a missing prefab does. A cycle of bases raises.
+- **Example:** Correição's boulder is its stone at twice the size,
+  scattered by the same spawn table
+  (`examples/correicao/prefabs/ground.variants.json`).
