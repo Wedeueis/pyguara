@@ -1,7 +1,7 @@
 """Correição: a calango in the caatinga, and an army-ant raid closing in.
 
 The ground and the calango are entities with a `Sprite`, drawn by the base
-`Scene.render`. The raid is an engine `Swarm`, which steers, animates and
+`Scene.render`; the ground is prefabs, scattered from a spawn table. The raid is an engine `Swarm`, which steers, animates and
 draws its ants natively, sorted among those sprites by layer. The raid's
 size is the `ants` argument, so the same scene runs at 1,000 or at 10,000.
 
@@ -41,12 +41,19 @@ from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input import keys
 from pyguara.input.events import OnActionEvent
 from pyguara.input.types import ActionType, InputDevice
+from pyguara.prefabs import (
+    ComponentRegistry,
+    PrefabCache,
+    PrefabFactory,
+    load_spawn_table,
+)
 from pyguara.random.service import RandomService
 from pyguara.resources.manager import ResourceManager
 from pyguara.resources.types import Texture
 from pyguara.scene.base import Scene
 
 ASSETS = "examples/correicao/assets"
+PREFABS = "examples/correicao/prefabs"
 DEFAULT_ANTS = 2000
 GROUND_DECALS = 4000
 
@@ -107,7 +114,7 @@ class HordeScene(Scene):
             return resources.load(f"{ASSETS}/{name}.png", Texture)  # type: ignore[type-abstract]
 
         view_radius = math.hypot(SCREEN_WIDTH, SCREEN_HEIGHT) / 2
-        self._scatter_ground([texture("tuft"), texture("stone")], rng)
+        self._scatter_ground(resources, rng)
         self._place_player([texture("calango_0"), texture("calango_1")])
 
         self.player_system = PlayerSystem(self.player, autopilot=self._autopilot)
@@ -138,19 +145,28 @@ class HordeScene(Scene):
         """Stop listening for the movement keys."""
         self.event_dispatcher.unsubscribe(OnActionEvent, self._on_action)
 
-    def _scatter_ground(self, decals: list[Texture], rng: RandomStream) -> None:
-        """Strew grass and stones over the whole world, most of it off screen."""
-        for _ in range(GROUND_DECALS):
-            entity = self.entity_manager.create_entity()
-            entity.add_component(
-                Transform(
-                    position=Vector2(
-                        round(rng.uniform(0.0, WORLD_SIZE)),
-                        round(rng.uniform(0.0, WORLD_SIZE)),
-                    )
-                )
+    def _scatter_ground(self, resources: ResourceManager, rng: RandomStream) -> None:
+        """Strew grass and stones over the whole world, most of it off screen.
+
+        Each is a prefab, picked from `ground.spawn.json`, whose sprites name
+        their textures by path; the registry loads them through `resources`.
+        """
+        registry = ComponentRegistry()
+        registry.register(Transform)
+        registry.register(Sprite)
+        registry.register_type_converter(
+            Texture,
+            lambda path: resources.load(path, Texture),  # type: ignore[type-abstract]
+        )
+        factory = PrefabFactory(self.entity_manager, registry, PrefabCache().load)
+        points = [
+            Vector2(
+                round(rng.uniform(0.0, WORLD_SIZE)), round(rng.uniform(0.0, WORLD_SIZE))
             )
-            entity.add_component(Sprite(texture=rng.choice(decals), layer=0))
+            for _ in range(GROUND_DECALS)
+        ]
+        table = load_spawn_table(f"{PREFABS}/ground.spawn.json")
+        factory.spawn(table, rng, count=GROUND_DECALS, positions=points)
 
     def _place_player(self, frames: list[Texture]) -> None:
         """Create the calango's entity, which follows `self.player` each frame."""

@@ -6,6 +6,7 @@ templates with support for:
 - Inheritance and overrides
 - Child entity hierarchies
 - JSON/YAML serialization
+- Weighted spawn tables
 """
 
 from pyguara.prefabs.factory import PrefabFactory
@@ -15,6 +16,7 @@ from pyguara.prefabs.registry import (
     get_component_registry,
     register_component,
 )
+from pyguara.prefabs.spawn_table import SpawnChoice, SpawnTable, load_spawn_table
 from pyguara.prefabs.types import (
     PrefabChild,
     PrefabData,
@@ -32,6 +34,10 @@ __all__ = [
     "register_component",
     # Factory
     "PrefabFactory",
+    # Spawn tables
+    "SpawnChoice",
+    "SpawnTable",
+    "load_spawn_table",
     # Loader
     "Prefab",
     "PrefabCache",

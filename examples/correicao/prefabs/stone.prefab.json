@@ -1,0 +1,7 @@
+{
+  "name": "stone",
+  "components": {
+    "Transform": {},
+    "Sprite": {"texture": "examples/correicao/assets/stone.png", "layer": 0}
+  }
+}

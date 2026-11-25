@@ -38,6 +38,7 @@ class ComponentRegistry:
         """Initialize an empty registry."""
         self._components: dict[str, type[Component]] = {}
         self._deserializers: dict[str, Callable[[dict[str, Any]], Any]] = {}
+        self._field_cache: dict[type, tuple[dict[str, Any], frozenset[str]]] = {}
         self._type_converters: dict[type, Callable[[Any], Any]] = {
             Vector2: self._convert_vector2,
             ModifiableValue: self._convert_modifiable,
@@ -163,6 +164,27 @@ class ComponentRegistry:
         # Fallback: try direct instantiation
         return component_type(**data)
 
+    def _fields_of(self, cls: type[Component]) -> tuple[dict[str, Any], frozenset[str]]:
+        """A dataclass's type hints and assignable field names, worked out once.
+
+        Resolving type hints evaluates every annotation, which costs far
+        more than building the component; a class's hints do not change.
+        """
+        known = self._field_cache.get(cls)
+        if known is None:
+            try:
+                hints = get_type_hints(cls)
+            except Exception:
+                hints = {}
+            assignable = frozenset(
+                f.name
+                for f in dataclasses.fields(cls)  # type: ignore[arg-type]
+                if not f.name.startswith("_")
+            )
+            known = (hints, assignable)
+            self._field_cache[cls] = known
+        return known
+
     def _instantiate_dataclass(
         self,
         cls: type[Component],
@@ -181,18 +203,7 @@ class ComponentRegistry:
             ValueError: If `data` names a field the component does not have.
         """
         converted_data: dict[str, Any] = {}
-
-        # Get type hints for field conversion
-        try:
-            hints = get_type_hints(cls)
-        except Exception:
-            hints = {}
-
-        assignable = {
-            f.name
-            for f in dataclasses.fields(cls)  # type: ignore[arg-type]
-            if not f.name.startswith("_")
-        }
+        hints, assignable = self._fields_of(cls)
 
         # A key that matches no field is an authoring mistake (a typo, a
         # renamed field, wrong component). Dropping it silently would hide
@@ -375,6 +386,7 @@ class ComponentRegistry:
         """
         self._components.clear()
         self._deserializers.clear()
+        self._field_cache.clear()
         self._type_converters = {
             Vector2: self._convert_vector2,
             ModifiableValue: self._convert_modifiable,
