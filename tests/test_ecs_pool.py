@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 
 from pyguara.ecs.entity import Entity
@@ -156,24 +158,35 @@ def test_entities_can_be_released_in_any_order() -> None:
     assert pool.get_active() == []
 
 
-def test_releasing_another_pools_entity_is_a_noop_even_when_ids_collide() -> None:
-    """Two pools sharing a manager can hold entities with the same id.
+def test_two_pools_naming_entities_alike_cannot_share_a_manager() -> None:
+    """A second pool whose factory reuses the first pool's ids is refused.
 
-    `EntityManager.create_entity` does not reject a duplicate id, and a
-    factory that names entities positionally -- `pooled_0`, `pooled_1`,
-    as this file's own `_factory` does -- gives every pool over the same
-    manager an identically-named set. So an id alone cannot identify which
-    pool an entity belongs to, which is why `release()` compares the
-    stored object rather than trusting the key.
+    `create_entity` rejects an id already in use, so the collision cannot
+    reach the pools: the second pool fails while it preallocates.
     """
     manager = EntityManager()
-    pool_a = EntityPool(manager, "a", size=1, factory=_factory)
-    pool_b = EntityPool(manager, "b", size=1, factory=_factory)
+    EntityPool(manager, "a", size=1, factory=_factory)
 
+    with pytest.raises(ValueError, match="'pooled_0' already exists"):
+        EntityPool(manager, "b", size=1, factory=_factory)
+
+
+def test_releasing_another_pools_entity_is_a_noop() -> None:
+    manager = EntityManager()
+
+    def named(prefix: str) -> Callable[[EntityManager, int], Entity]:
+        def factory(em: EntityManager, index: int) -> Entity:
+            entity = em.create_entity(f"{prefix}_{index}")
+            entity.add_component(Poolable())
+            return entity
+
+        return factory
+
+    pool_a = EntityPool(manager, "a", size=1, factory=named("a"))
+    pool_b = EntityPool(manager, "b", size=1, factory=named("b"))
     mine = pool_a.acquire()
     theirs = pool_b.acquire()
     assert mine is not None and theirs is not None
-    assert mine.id == theirs.id, "the collision this test exists for"
 
     pool_a.release(theirs)
 

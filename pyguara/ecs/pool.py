@@ -118,10 +118,9 @@ class EntityPool:
         covers releasing the same entity twice, and releasing an entity
         that belongs to a different pool.
 
-        The identity check is deliberate. Looking the id up and comparing
-        the stored object with `is` keeps exactly the semantics the old
-        list membership test had, rather than trusting an id to be unique
-        across every pool sharing an `EntityManager`.
+        The identity check is deliberate: an id is unique within one
+        `EntityManager`, but an entity from another manager can carry the
+        same id, so the stored object is compared with `is`.
         """
         if self._active.get(entity.id) is not entity:
             return
