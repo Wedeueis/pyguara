@@ -5,7 +5,7 @@ from collections.abc import Callable
 from pyguara.common.types import Rect, Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.widget import Widget
-from pyguara.ui.types import UIElementState, UIEventType
+from pyguara.ui.types import UIElementState, UIEventType, text_style
 
 
 class Checkbox(Widget):
@@ -42,7 +42,9 @@ class Checkbox(Widget):
 
     def measure(self, renderer: UIRenderer) -> None:
         """Recompute total width (box + label) from the label's text size."""
-        text_w, _ = renderer.get_text_size(self.label, 16)
+        text_w, _ = renderer.get_text_size(
+            self.label, 16, **text_style(self.theme.fonts)
+        )
         self.rect.width = self.box_size + self.label_spacing + text_w
 
     def render(self, renderer: UIRenderer) -> None:
@@ -85,7 +87,13 @@ class Checkbox(Widget):
         text_pos = Vector2(
             self.rect.x + self.box_size + self.label_spacing, self.rect.y
         )
-        renderer.draw_text(self.label, text_pos, self.theme.colors.text_body)
+        renderer.draw_text(
+            self.label,
+            text_pos,
+            self.theme.colors.text_body,
+            16,
+            **text_style(self.theme.fonts),
+        )
 
     def _process_input(
         self, event_type: UIEventType, position: Vector2, button: int

@@ -20,7 +20,7 @@ from pyguara.ui.components.button import Button
 from pyguara.ui.components.panel import Panel
 from pyguara.ui.design_system.skin import draw_bevel, draw_stamp_shadow
 from pyguara.ui.design_system.tokens import Guara, Rock, Sand, Verdant, Wood
-from pyguara.ui.types import UIElementState
+from pyguara.ui.types import UIElementState, text_style
 
 
 def case_label(text: str, *, uppercase: bool) -> str:
@@ -206,7 +206,8 @@ class BevelButton(Button):
         """
         label = case_label(self.text, uppercase=self.uppercase)
         size = self.theme.fonts.size_normal
-        w, h = renderer.get_text_size(label, size)
+        style = text_style(self.theme.fonts)
+        w, h = renderer.get_text_size(label, size, **style)
 
         renderer.draw_text(
             label,
@@ -215,6 +216,8 @@ class BevelButton(Button):
                 face.y + (face.height - h) // 2,
             ),
             self.text_color(),
+            size,
+            **style,
         )
 
 

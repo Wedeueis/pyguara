@@ -8,7 +8,7 @@ from pyguara.input import keys
 from pyguara.ui.clipboard import Clipboard, InMemoryClipboard
 from pyguara.ui.components.widget import Widget
 from pyguara.ui.text_layout import caret_index_at
-from pyguara.ui.types import UIEventType
+from pyguara.ui.types import UIEventType, text_style
 
 PADDING = 5
 """Pixels between the field's border and its text, on every side."""
@@ -426,7 +426,9 @@ class TextInput(Widget):
         return caret_index_at(
             self.text,
             offset,
-            lambda prefix: renderer.get_text_size(prefix, self.font_size)[0],
+            lambda prefix: renderer.get_text_size(
+                prefix, self.font_size, **text_style(self.theme.fonts)
+            )[0],
         )
 
     # --- frame ----------------------------------------------------------
@@ -478,7 +480,11 @@ class TextInput(Widget):
             if self.active and self.has_selection and not showing_placeholder:
                 self._draw_selection(renderer, text_x, text_y)
             renderer.draw_text(
-                display_text, Vector2(text_x, text_y), color, self.font_size
+                display_text,
+                Vector2(text_x, text_y),
+                color,
+                self.font_size,
+                **text_style(self.theme.fonts),
             )
             if self.active and self.caret_visible:
                 caret_x = text_x + self._width_to(renderer, self.cursor)
@@ -503,7 +509,9 @@ class TextInput(Widget):
         start, end = self.selection
         left = text_x + self._width_to(renderer, start)
         right = text_x + self._width_to(renderer, end)
-        _, height = renderer.get_text_size("", self.font_size)
+        _, height = renderer.get_text_size(
+            "", self.font_size, **text_style(self.theme.fonts)
+        )
         renderer.draw_rect(
             Rect(int(left), int(text_y), int(right - left), height),
             self._selection_color(),
@@ -530,7 +538,10 @@ class TextInput(Widget):
         Returns:
             The width in pixels.
         """
-        return int(renderer.get_text_size(self.text[:index], self.font_size)[0])
+        width = renderer.get_text_size(
+            self.text[:index], self.font_size, **text_style(self.theme.fonts)
+        )[0]
+        return int(width)
 
     def _update_scroll(self, renderer: UIRenderer) -> None:
         """Scroll horizontally so the caret stays inside the box.

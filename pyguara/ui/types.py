@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
 from enum import Enum, IntEnum, auto
+from typing import TypedDict
 
-from pyguara.common.types import Color  # FIX: Import Color
+from pyguara.common.types import Color
+from pyguara.resources.font import Font
 
 # --- Enums ---
 
@@ -407,13 +409,87 @@ class SpacingScheme:
 
 @dataclass
 class FontScheme:
-    """Font configuration for UI elements."""
+    """Font configuration for UI elements.
+
+    `regular`, `bold`, `italic` and `bold_italic` are the faces every widget
+    draws in, each a `Font` from `ResourceManager`. With none set, widgets
+    use the engine's default face. With any set, a widget asking for a
+    style whose face is missing raises (see `text_style`). `family` is a
+    label for tools and is not drawn with.
+    """
 
     family: str = "Arial"
     size_small: int = 12
     size_normal: int = 16
     size_large: int = 24
     size_title: int = 32
+    regular: Font | None = None
+    bold: Font | None = None
+    italic: Font | None = None
+    bold_italic: Font | None = None
+
+
+FONT_FACES = ("regular", "bold", "italic", "bold_italic")
+"""`FontScheme`'s face fields, in the order a theme file lists them."""
+
+
+class TextStyle(TypedDict, total=False):
+    """The keyword arguments a renderer's text calls take for one style.
+
+    Only those that differ from the default are present, so an unthemed
+    widget calls a renderer exactly as one that knows no fonts expects.
+    """
+
+    bold: bool
+    italic: bool
+    font: Font
+
+
+class LineStyle(TypedDict, total=False):
+    """The keyword arguments `get_line_height` takes: a face, where set."""
+
+    font: Font
+
+
+def line_style(style: TextStyle) -> LineStyle:
+    """Return the part of a text style `get_line_height` takes."""
+    return {"font": style["font"]} if "font" in style else {}
+
+
+def text_style(
+    fonts: FontScheme, bold: bool = False, italic: bool = False
+) -> TextStyle:
+    """Return how to ask a renderer for a style in a theme's fonts.
+
+    Spread into `draw_text` or `get_text_size`'s keyword arguments. Without
+    theme faces, the default face in that style.
+
+    Args:
+        fonts: The theme's font configuration.
+        bold: Whether the text is bold.
+        italic: Whether the text is italic.
+
+    Returns:
+        `font`, or `bold` and `italic` where set, for the renderer.
+
+    Raises:
+        ValueError: If the theme sets some faces but not this style's.
+    """
+    name = FONT_FACES[int(bold) | (int(italic) << 1)]
+    face: Font | None = getattr(fonts, name)
+    if face is not None:
+        return {"font": face}
+    if any(getattr(fonts, other) is not None for other in FONT_FACES):
+        raise ValueError(
+            f"the theme's fonts have no {name} face; set fonts.{name} to the "
+            f"Font for that style"
+        )
+    style: TextStyle = {}
+    if bold:
+        style["bold"] = True
+    if italic:
+        style["italic"] = True
+    return style
 
 
 @dataclass
