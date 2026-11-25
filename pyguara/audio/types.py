@@ -175,6 +175,7 @@ class AudioCapability(Flag):
         BUS_EFFECTS: DSP attached to a bus (`set_bus_effects`).
         INTERACTIVE_MUSIC: Crossfading from one track to the next, and a
             track of several layers whose levels change while it plays.
+        DUCKING: The music dipping while a chosen sound plays.
     """
 
     NONE = 0
@@ -182,6 +183,7 @@ class AudioCapability(Flag):
     LOOP_POINTS = auto()
     BUS_EFFECTS = auto()
     INTERACTIVE_MUSIC = auto()
+    DUCKING = auto()
 
 
 @dataclass(frozen=True, slots=True)
