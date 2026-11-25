@@ -194,6 +194,39 @@ audio.set_sfx_limit("sfx/hit.wav", max_voices=4, min_interval=0.03)
 - Calling it with both arguments at their defaults removes the limit.
   `get_sfx_limit` returns what is set.
 
+### Variation
+
+A footstep or a hit heard hundreds of times a run sounds mechanical as one
+clip at one pitch. A `SoundVariation` names several takes and how much each
+play may differ:
+
+```python
+from pyguara.audio import SoundVariation
+
+audio.set_sfx_variation(
+    "footstep",
+    SoundVariation(
+        ("sfx/step1.wav", "sfx/step2.wav", "sfx/step3.wav"),
+        pitch=(0.92, 1.08),
+        volume=(0.8, 1.0),
+    ),
+)
+audio.play_sfx_variation("footstep", volume=0.6)
+```
+
+- Each play picks a take, then a pitch and a volume, uniformly in the ranges.
+  The picked volume multiplies the play's own.
+- **No take plays twice in a row** when there are two or more, unless
+  `avoid_repeat=False`.
+- The picks are drawn from the `RandomService` stream named
+  `VARIATION_STREAM`, `"audio.variation"`, so a sound never moves a gameplay
+  stream, and a seeded run hears the same takes.
+- Varying pitch needs `AudioCapability.PITCH`. A backend without it refuses
+  the variation when it is set, not on its first play.
+- Each take is still its own sound to `set_sfx_limit`.
+- `play_sfx_variation` raises `KeyError` for a name never set.
+  `set_sfx_variation(name, None)` removes one.
+
 ### One-shot lifecycle
 
 A one-shot sound finishes on its own with no callback. `IAudioSystem`

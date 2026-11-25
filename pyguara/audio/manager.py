@@ -6,9 +6,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from pyguara.audio.audio_system import IAudioSystem
+from pyguara.audio.exceptions import UnsupportedAudioCapability
 from pyguara.audio.types import AudioCapability, SoundHandle
+from pyguara.common.random import RandomStream
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.log import get_logger
+from pyguara.random.service import RandomService
 from pyguara.resources.manager import ResourceManager
 from pyguara.resources.types import AudioClip
 
@@ -26,6 +29,58 @@ class SfxLimit:
 
     max_voices: int | None = None
     min_interval: float = 0.0
+
+
+VARIATION_STREAM = "audio.variation"
+"""The `RandomService` stream sound variations draw from."""
+
+
+@dataclass(frozen=True, slots=True)
+class SoundVariation:
+    """Several takes of one sound, and how much each play may differ.
+
+    A footstep or a hit heard hundreds of times a run sounds mechanical as
+    one clip at one pitch. Each play picks a take and a pitch and volume
+    in these ranges. See `AudioManager.set_sfx_variation`.
+
+    Attributes:
+        paths: The takes, as `play_sfx` names them.
+        pitch: The lowest and highest playback rate.
+        volume: The lowest and highest volume, multiplying the play's own.
+        avoid_repeat: Never pick the take played last, when there are two
+            or more.
+    """
+
+    paths: tuple[str, ...]
+    pitch: tuple[float, float] = (1.0, 1.0)
+    volume: tuple[float, float] = (1.0, 1.0)
+    avoid_repeat: bool = True
+
+    def __post_init__(self) -> None:
+        """Check the takes and ranges.
+
+        Raises:
+            ValueError: If there are no takes, or a range is not finite,
+                runs backwards, has a pitch at or below 0, or a volume
+                outside 0 to 1.
+        """
+        paths: object = self.paths
+        if not isinstance(paths, tuple) or not paths:
+            raise ValueError("a sound variation needs a tuple of at least one path")
+        for name, (low, high) in (("pitch", self.pitch), ("volume", self.volume)):
+            if not (math.isfinite(low) and math.isfinite(high)) or low > high:
+                raise ValueError(
+                    f"{name} must be a finite (low, high) range, got {(low, high)}"
+                )
+        if self.pitch[0] <= 0.0:
+            raise ValueError(f"pitch must be above 0, got {self.pitch}")
+        if self.volume[0] < 0.0 or self.volume[1] > 1.0:
+            raise ValueError(f"volume must be within 0 to 1, got {self.volume}")
+
+    @property
+    def varies_pitch(self) -> bool:
+        """Whether any play is at a rate other than 1."""
+        return self.pitch != (1.0, 1.0)
 
 
 class AudioManager:
@@ -51,6 +106,7 @@ class AudioManager:
         resource_manager: ResourceManager | None = None,
         event_dispatcher: EventDispatcher | None = None,
         clock: Callable[[], float] = time.monotonic,
+        random: RandomService | None = None,
     ) -> None:
         """Initialize the audio manager.
 
@@ -60,6 +116,9 @@ class AudioManager:
             event_dispatcher: Optional event dispatcher for audio events.
             clock: Seconds, for `SfxLimit.min_interval`. Real time, because a
                 sound is heard in real time; a test passes its own.
+            random: Where sound variations draw from, as its
+                `VARIATION_STREAM` stream, apart from gameplay's. Without
+                one, an unseeded stream of the manager's own.
         """
         self._audio_system = audio_system
         self._resource_manager = resource_manager
@@ -76,6 +135,14 @@ class AudioManager:
         self._limits: dict[str, SfxLimit] = {}
         self._voices: dict[str, list[SoundHandle]] = {}
         self._last_start: dict[str, float] = {}
+
+        # Sound variations by name, the take each played last, and the
+        # stream every pick is drawn from.
+        self._variations: dict[str, SoundVariation] = {}
+        self._last_take: dict[str, int] = {}
+        self._variation_random = (
+            random.stream(VARIATION_STREAM) if random is not None else RandomStream()
+        )
 
     # ========== Capabilities ==========
 
@@ -235,6 +302,63 @@ class AudioManager:
         ]
         self._voices[path] = playing
         return len(playing) < limit.max_voices
+
+    def set_sfx_variation(self, name: str, variation: SoundVariation | None) -> None:
+        """Name a set of takes `play_sfx_variation` picks from, or forget one.
+
+        Each take is still its own sound to `set_sfx_limit`, so a limit on
+        a take holds back only that take.
+
+        Args:
+            name: What `play_sfx_variation` calls it.
+            variation: The takes and ranges, or None to remove the name.
+
+        Raises:
+            UnsupportedAudioCapability: If the variation changes pitch and
+                the backend cannot.
+        """
+        self._last_take.pop(name, None)
+        if variation is None:
+            self._variations.pop(name, None)
+            return
+        if variation.varies_pitch and not (self.capabilities & AudioCapability.PITCH):
+            raise UnsupportedAudioCapability(
+                AudioCapability.PITCH, type(self._audio_system).__name__
+            )
+        self._variations[name] = variation
+
+    def get_sfx_variation(self, name: str) -> SoundVariation | None:
+        """Return the variation set under a name, or None if there is none."""
+        return self._variations.get(name)
+
+    def play_sfx_variation(self, name: str, volume: float = 1.0) -> SoundHandle | None:
+        """Play one take of a named variation, at a picked pitch and volume.
+
+        Args:
+            name: As `set_sfx_variation` named it.
+            volume: The play's volume, which the picked volume multiplies.
+
+        Returns:
+            A handle for the playing sound, or None as `play_sfx` returns it.
+
+        Raises:
+            KeyError: If no variation has that name.
+        """
+        variation = self._variations.get(name)
+        if variation is None:
+            raise KeyError(f"no sound variation is named {name!r}")
+        draw = self._variation_random
+        count = len(variation.paths)
+        last = self._last_take.get(name)
+        if variation.avoid_repeat and count > 1 and last is not None:
+            take = draw.randint(0, count - 2)
+            take += take >= last
+        else:
+            take = draw.randint(0, count - 1)
+        pitch = draw.uniform(*variation.pitch)
+        loudness = draw.uniform(*variation.volume)
+        self._last_take[name] = take
+        return self.play_sfx(variation.paths[take], volume * loudness, pitch=pitch)
 
     def stop_sfx(self, sound: SoundHandle) -> None:
         """Stop one playing sound effect.
