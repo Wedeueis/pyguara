@@ -134,6 +134,7 @@ class NativeAudioSystem:
             AudioCapability.PITCH
             | AudioCapability.LOOP_POINTS
             | AudioCapability.INTERACTIVE_MUSIC
+            | AudioCapability.DUCKING
         )
 
     # ========== Playing ==========
@@ -426,6 +427,27 @@ class NativeAudioSystem:
             IndexError: If the current music has no such layer.
         """
         self.mixer.set_music_layer_level(layer, float(level), max(0, fade_ms))
+
+    def duck_music(
+        self,
+        sound: SoundHandle,
+        depth: float,
+        attack_ms: int = 50,
+        release_ms: int = 500,
+    ) -> None:
+        """Dip the music under a sound, ramped per sample in the mixer.
+
+        Raises:
+            ValueError: If `depth` is outside 0 to 1.
+        """
+        if not (math.isfinite(depth) and 0.0 <= depth <= 1.0):
+            raise ValueError(f"a duck's depth must be from 0 to 1, got {depth}")
+        playing = self._playing.get(sound)
+        if playing is None:
+            return
+        self.mixer.duck_music(
+            playing.voice, float(depth), max(0, attack_ms), max(0, release_ms)
+        )
 
     def stop_music(self, fade_ms: int = 1000) -> None:
         """Fade the music out, then stop it."""

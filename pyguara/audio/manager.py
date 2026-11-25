@@ -6,6 +6,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from pyguara.audio.audio_system import IAudioSystem
+from pyguara.audio.exceptions import UnsupportedAudioCapability
 from pyguara.audio.types import AudioCapability, SoundHandle
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.log import get_logger
@@ -26,6 +27,21 @@ class SfxLimit:
 
     max_voices: int | None = None
     min_interval: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class SfxDucking:
+    """How far the music dips while one sound plays. See `set_sfx_ducking`.
+
+    Attributes:
+        depth: How far it dips: 0 not at all, 1 to silence.
+        attack_ms: How long the dip takes.
+        release_ms: How long coming back takes, once the sound ends.
+    """
+
+    depth: float
+    attack_ms: int = 50
+    release_ms: int = 500
 
 
 def _check_level(level: float) -> None:
@@ -87,6 +103,9 @@ class AudioManager:
         self._limits: dict[str, SfxLimit] = {}
         self._voices: dict[str, list[SoundHandle]] = {}
         self._last_start: dict[str, float] = {}
+
+        # Sounds the music dips under, by clip path.
+        self._ducking: dict[str, SfxDucking] = {}
 
     # ========== Capabilities ==========
 
@@ -191,7 +210,72 @@ class AudioManager:
             self._last_start[clip.path] = now
             if limit.max_voices is not None:
                 self._voices.setdefault(clip.path, []).append(sound)
+        ducking = self._ducking.get(clip.path)
+        if ducking is not None and sound is not None:
+            self._audio_system.duck_music(
+                sound, ducking.depth, ducking.attack_ms, ducking.release_ms
+            )
         return sound
+
+    def set_sfx_ducking(
+        self,
+        path: str,
+        depth: float | None,
+        *,
+        attack_ms: int = 50,
+        release_ms: int = 500,
+    ) -> None:
+        """Dip the music every time one sound plays, so it is not buried.
+
+        A boss roar, an explosion or a line of dialogue: while it plays the
+        music falls by `depth`, and it comes back after the sound ends.
+        Needs `AudioCapability.DUCKING`.
+
+        Args:
+            path: The sound, as `play_sfx` names it.
+            depth: How far the music dips, 0 to 1, or None to stop ducking
+                under this sound.
+            attack_ms: How long the dip takes.
+            release_ms: How long coming back takes.
+
+        Raises:
+            ValueError: If `depth` is outside 0 to 1, or a time is negative.
+            UnsupportedAudioCapability: On a backend without ducking.
+        """
+        if depth is None:
+            self._ducking.pop(path, None)
+            return
+        if not (math.isfinite(depth) and 0.0 <= depth <= 1.0):
+            raise ValueError(f"a duck's depth must be from 0 to 1, got {depth}")
+        if attack_ms < 0 or release_ms < 0:
+            raise ValueError(
+                f"attack_ms and release_ms must be at least 0, "
+                f"got {attack_ms} and {release_ms}"
+            )
+        if AudioCapability.DUCKING not in self.capabilities:
+            raise UnsupportedAudioCapability(
+                AudioCapability.DUCKING, type(self._audio_system).__name__
+            )
+        self._ducking[path] = SfxDucking(depth, attack_ms, release_ms)
+
+    def get_sfx_ducking(self, path: str) -> SfxDucking | None:
+        """Return how far the music dips under a sound, or None if it does not."""
+        return self._ducking.get(path)
+
+    def duck_music(
+        self,
+        sound: SoundHandle,
+        depth: float,
+        attack_ms: int = 50,
+        release_ms: int = 500,
+    ) -> None:
+        """Dip the music while one playing sound plays; see `set_sfx_ducking`.
+
+        Raises:
+            ValueError: If `depth` is outside 0 to 1.
+            UnsupportedAudioCapability: On a backend without ducking.
+        """
+        self._audio_system.duck_music(sound, depth, attack_ms, release_ms)
 
     def set_sfx_limit(
         self, path: str, *, max_voices: int | None = None, min_interval: float = 0.0

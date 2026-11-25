@@ -628,3 +628,11 @@ def test_pygame_refuses_layered_music(audio_system: PygameAudioSystem) -> None:
         audio_system.play_music_layers(["a.ogg", "b.ogg"], [1.0, 1.0])
     with pytest.raises(UnsupportedAudioCapability):
         audio_system.set_music_layer(0, 0.5)
+
+
+def test_pygame_refuses_ducking(audio_system: PygameAudioSystem) -> None:
+    from pyguara.audio.exceptions import UnsupportedAudioCapability
+    from pyguara.audio.types import new_sound_handle
+
+    with pytest.raises(UnsupportedAudioCapability):
+        audio_system.duck_music(new_sound_handle(), 0.5)

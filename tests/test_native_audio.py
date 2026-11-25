@@ -254,6 +254,7 @@ class TestTheProtocol:
             AudioCapability.PITCH
             | AudioCapability.LOOP_POINTS
             | AudioCapability.INTERACTIVE_MUSIC
+            | AudioCapability.DUCKING
         )
 
     def test_bus_effects_are_still_declined(self, system: NativeAudioSystem) -> None:
