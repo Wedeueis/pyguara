@@ -659,6 +659,24 @@ impl NativeSwarm {
             .collect()
     }
 
+    /// Each given agent's seek target, or `None` for one with none.
+    fn seek_targets(&self, ids: Vec<u64>) -> PyResult<Vec<Option<Point>>> {
+        ids.iter()
+            .map(|&id| {
+                self.resolve(id).map(|slot| {
+                    self.has_seek[slot].then(|| Point::of(self.seek_x[slot], self.seek_y[slot]))
+                })
+            })
+            .collect()
+    }
+
+    /// Seconds each given agent has been alive, the clock its clip runs on.
+    fn ages(&self, ids: Vec<u64>) -> PyResult<Vec<f64>> {
+        ids.iter()
+            .map(|&id| self.resolve(id).map(|slot| self.time - self.born[slot]))
+            .collect()
+    }
+
     /// The kind index of each given agent.
     fn kinds_of(&self, ids: Vec<u64>) -> PyResult<Vec<usize>> {
         ids.iter()

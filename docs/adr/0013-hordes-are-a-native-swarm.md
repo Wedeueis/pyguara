@@ -1,6 +1,6 @@
 # ADR 0013: Hordes are a native swarm, not entities
 
-**Status:** Accepted 2026-11-24. Increments 1, 3, 4, 5 and 6 are built, and criterion 1 is met: a 10,000-ant Correição ticks in 8.4-9.2 ms. Increment 2, the neighbour cap, was built, measured slower and dropped. Increment 7, promotion, is left.
+**Status:** Accepted and built, 2026-11-24. Criteria 1 to 7 are met; a 10,000-ant Correição ticks in 8.4-9.2 ms. Increment 2, the neighbour cap, was built, measured slower and dropped.
 **Scope:** A new subsystem, `pyguara/ai/swarm.py` over `rust/src/swarm.rs`.
 `pyguara/ecs/` is not touched.
 
@@ -173,7 +173,13 @@ The swarm also supports **promotion**:
 - `adopt(entity)` does the reverse.
 
 That is how one ant gets individual logic: a boss, a carried one, a
-selected one.
+selected one. Built in increment 7:
+
+- **Continuity:** a promoted agent keeps its position, velocity, seek
+  target and look, and its clip carries on from the frame it showed.
+- **Flocking:** it no longer flocks with the swarm, since a
+  `FlockingSystem` steers among entities.
+- **Adoption:** an adopted entity's clip starts over.
 
 ### 8. What the swarm does not do
 
