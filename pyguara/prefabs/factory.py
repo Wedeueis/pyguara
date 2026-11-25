@@ -230,6 +230,8 @@ class PrefabFactory:
             ValueError: As `_check_children`, or if an explicit entity id in
                 the tree is already in use or appears twice.
         """
+        if not prefab.children and not entity_id:
+            return
         ids = [entity_id] if entity_id else []
         self._check_children(prefab, [source_path or prefab.name], ids)
         taken = [i for i in ids if self._entity_manager.get_entity(i) is not None]

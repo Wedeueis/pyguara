@@ -180,6 +180,7 @@ class ComponentRegistry:
         known = self._field_cache.get(cls)
         if known is None:
             hints, unresolved = _resolve_hints(cls)
+            hints = {name: _unwrap_optional(hint) for name, hint in hints.items()}
             assignable = frozenset(
                 f.name
                 for f in dataclasses.fields(cls)  # type: ignore[arg-type]
@@ -243,23 +244,18 @@ class ComponentRegistry:
     def _convert_value(self, value: Any, target_type: Any) -> Any:
         """Convert a value to the target type.
 
-        A field typed `X | None` converts through `X`. A type with no
-        converter takes the value as it is.
+        A type with no converter takes the value as it is.
 
         Args:
             value: Raw value from serialized data.
-            target_type: The field's resolved type.
+            target_type: The field's resolved type, `X | None` already
+                unwrapped to `X`.
 
         Returns:
             Converted value.
         """
         if value is None:
             return None
-
-        if get_origin(target_type) in (Union, types.UnionType):
-            members = [t for t in get_args(target_type) if t is not type(None)]
-            if len(members) == 1:
-                target_type = members[0]
 
         if target_type in self._type_converters:
             return self._type_converters[target_type](value)
@@ -343,8 +339,8 @@ class ComponentRegistry:
         """
         from pyguara.common.components import Transform
 
-        unknown = set(data) - _TRANSFORM_FIELDS
-        if unknown:
+        if not _TRANSFORM_FIELDS.issuperset(data):
+            unknown = set(data) - _TRANSFORM_FIELDS
             raise ValueError(
                 f"Transform has no field(s) {sorted(unknown)}; "
                 f"valid fields: {sorted(_TRANSFORM_FIELDS)}"
@@ -449,6 +445,15 @@ def _resolve_hints(cls: type) -> tuple[dict[str, Any], dict[str, str]]:
     return resolved, unresolved
 
 
+def _unwrap_optional(hint: Any) -> Any:
+    """Return `X` for a hint of `X | None`, so the field converts as `X`."""
+    if get_origin(hint) in (Union, types.UnionType):
+        members = [t for t in get_args(hint) if t is not type(None)]
+        if len(members) == 1:
+            return members[0]
+    return hint
+
+
 def _is_number(value: Any) -> bool:
     return isinstance(value, int | float) and not isinstance(value, bool)
 
@@ -461,7 +466,7 @@ def _convert_vector2(value: Any) -> Vector2:
     """
     if isinstance(value, Vector2):
         return value
-    if isinstance(value, dict) and set(value) == {"x", "y"}:
+    if isinstance(value, dict) and len(value) == 2 and "x" in value and "y" in value:
         x, y = value["x"], value["y"]
     elif isinstance(value, list | tuple) and len(value) == 2:
         x, y = value
