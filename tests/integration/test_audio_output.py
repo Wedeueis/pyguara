@@ -29,6 +29,8 @@ from tools.audio_capture import (
     SEAM_AMPLITUDE,
     SEAM_FREQ,
     SEAM_PERIODS,
+    SeamCheck,
+    _left_channel,
     capture_asset,
     capture_native,
     capture_tone_loop,
@@ -124,6 +126,30 @@ def test_a_silent_capture_is_reported_as_silent(tmp_path: Path) -> None:
     assert capture.peak == 0
 
 
+def test_gap_evidence_tells_dropped_from_inserted(tmp_path: Path) -> None:
+    """The control for `_gap_evidence`: both kinds of gap, told apart."""
+    tone = (
+        SEAM_AMPLITUDE * np.sin(2 * math.pi * SEAM_FREQ * np.arange(4000) / RATE)
+    ).astype(np.int16)
+    silence = np.zeros(512, dtype=np.int16)
+    seam = SeamCheck(3, 0, 0, 0, [])
+    cases = {
+        "dropped": np.concatenate([tone[:53], silence, tone[565:]]),
+        "inserted": np.concatenate([tone[:53], silence, tone[53:]]),
+    }
+    reports = {}
+    for name, mono in cases.items():
+        path = tmp_path / f"{name}.raw"
+        path.write_bytes(np.column_stack([mono, mono]).tobytes())
+        gaps = read_capture(path).interior_silence
+        assert [length for _, length in gaps] == [512]
+        reports[name] = _gap_evidence(path, gaps, seam)
+
+    assert "shifted by [0] frames" in reports["dropped"]
+    assert "shifted by [12] frames" in reports["inserted"]
+    assert "52 sounding frames before it" in reports["dropped"]
+
+
 @pytest.mark.parametrize("stray_bytes", [1, 2, 3])
 def test_a_capture_cut_inside_a_frame_reads_its_whole_frames(
     tmp_path: Path, stray_bytes: int
@@ -143,13 +169,54 @@ def test_a_capture_cut_inside_a_frame_reads_its_whole_frames(
     assert capture.peak == 1200
 
 
+def _gap_evidence(path: Path, gaps: list[tuple[int, int]], seam: SeamCheck) -> str:
+    """Describe a gap well enough to tell a dropped buffer from a late one.
+
+    The tone has a 100-frame period. If it resumes after the gap in the
+    phase an unbroken sine would have, samples were replaced by silence;
+    shifted by the gap's length, silence was inserted. Also prints what
+    came before the gap, which may not be the tone at all.
+    """
+    mono = _left_channel(path)
+    lines = [f"seam: offset {seam.phase_offset}, max |delta| {seam.max_delta}"]
+    first = int(np.flatnonzero(mono != 0)[0])
+    for start, length in gaps[:3]:
+        before = mono[first:start]
+        lines.append(
+            f"gap {start}+{length}: {len(before)} sounding frames before it, "
+            f"peak {int(np.abs(before).max()) if len(before) else 0}, "
+            f"head {mono[first : min(start, first + 16)].tolist()}"
+        )
+        end = start + length
+        after = mono[end : end + 300]
+        phases = [
+            shift
+            for shift in range(100)
+            if np.abs(
+                after
+                - SEAM_AMPLITUDE
+                * np.sin(
+                    2
+                    * math.pi
+                    * SEAM_FREQ
+                    * (np.arange(len(after)) + end - shift)
+                    / RATE
+                )
+            ).max()
+            <= 2
+        ]
+        lines.append(f"  resumes at sine phase shifted by {phases} frames (mod 100)")
+    return "\n".join(lines)
+
+
 def test_queued_loop_is_sample_contiguous(audio_env: None, tmp_path: Path) -> None:
     """`Channel.queue` joins segments with no gap and no dropped sample."""
     capture, seam = capture_tone_loop(tmp_path / "seam.raw", laps=3)
 
     assert not capture.is_silent
     assert capture.interior_silence == [], (
-        f"silence inside a continuous loop: {capture.interior_silence}"
+        f"silence inside a continuous loop: {capture.interior_silence}\n"
+        + _gap_evidence(tmp_path / "seam.raw", capture.interior_silence, seam)
     )
     assert seam.contiguous, (
         f"loop seam is not sample-exact: max |delta| {seam.max_delta} "
