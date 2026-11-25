@@ -134,9 +134,8 @@ class ResourceManager:
         # the same paths they would have on disk.
         for listed in assets.files_under(root_path, recursive=recursive):
             file_path = Path(listed)
-            extension = file_path.suffix.lower()
             # Only index files we know how to load
-            if extension not in self._extension_map:
+            if self._match_loader(file_path.name) is None:
                 continue
 
             str_path = str(file_path)
@@ -477,11 +476,26 @@ class ResourceManager:
         Raises:
             ValueError: If no loader handles the extension.
         """
-        extension = os.path.splitext(actual_path)[1].lower()
-        loader = self._extension_map.get(extension)
-        if not loader:
+        loader = self._match_loader(actual_path)
+        if loader is None:
+            extension = os.path.splitext(actual_path)[1].lower()
             raise ValueError(f"No loader registered for extension: {extension}")
         return loader
+
+    def _match_loader(self, path: str) -> IResourceLoader | None:
+        """Return the loader for the longest registered suffix of a file name.
+
+        `goblin.prefab.json` goes to a `.prefab.json` loader before a
+        `.json` one, whichever was registered first.
+        """
+        name = os.path.basename(path).lower()
+        start = name.find(".", 1)
+        while start != -1:
+            loader = self._extension_map.get(name[start:])
+            if loader is not None:
+                return loader
+            start = name.find(".", start + 1)
+        return None
 
     def _meta_for(self, actual_path: str, loader: IResourceLoader) -> AssetMeta | None:
         """Load a path's sidecar metadata, if its loader uses metadata.
@@ -524,11 +538,8 @@ class ResourceManager:
             ResourceError: If the loader fails; a loader's own error is wrapped
                 in `ResourceLoadError`.
         """
+        loader = self._loader_for(actual_path)
         extension = os.path.splitext(actual_path)[1].lower()
-        loader = self._extension_map.get(extension)
-
-        if not loader:
-            raise ValueError(f"No loader registered for extension: {extension}")
 
         logger.debug("Loading resource: %s", actual_path)
 
