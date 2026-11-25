@@ -67,6 +67,36 @@ So the pattern for an asset a scene must hold for its whole life is
 `load()` then `acquire()` in `on_enter()`, and `release()` (or a blanket
 `unload_unused()`) in `on_exit()`.
 
+## Dependencies
+
+A resource loaded while another is loading is that one's **dependency**:
+an atlas depends on its page textures, and a loader that calls `load()`
+for the files it names depends on each of them. The manager records this
+by itself.
+
+- **A dependency stays cached while a dependent is.** `release()` to 0,
+  `unload()`, `unload_unused()` and the cache budget all leave it alone.
+  `unload(name, force=True)` does not.
+- **Evicting the dependent frees it.** `unload_unused()` then takes a
+  dependency whose last dependent it evicted, in the same call.
+- **Reloading a dependency rebuilds its dependents**, each after
+  everything it depends on. See below.
+- **A resource that depends on itself**, directly or through others,
+  raises `ResourceLoadError` naming the chain.
+
+`dependencies_of(name)` and `dependents_of(name)` read the graph. For a
+resource put together in code rather than by a loader, `build(key, type,
+builder)` caches the `Resource` `builder` returns, records what it loads as
+dependencies, and runs it again when one of them reloads:
+
+```python
+level = resources.build(
+    "level:cave",
+    LevelData,
+    lambda: LevelData(resources.load("cave.png", Texture), ...),
+)
+```
+
 ## Cache budget
 
 `unload_unused()` is all-or-nothing and manual, so a long run that visits
@@ -117,12 +147,15 @@ levels.
 
 `reload(name)` re-runs the loader for a cached resource, re-reading its
 `.meta` sidecar too, and swaps the new instance into the cache. The
-reference count is preserved.
+reference count is preserved. Then it reloads every cached resource that
+depends on it, in `dependents_of(name)` order. If one fails, whatever
+reloaded before it stays reloaded.
 
 Callers that already hold the **previous** instance keep that stale object —
 `reload()` swaps the cache entry, it does not mutate the old object. Call
 `load()` again after a reload to pick up the new one. This is what the
-asset hot-reload loop in [Dev Tools](dev.md) does.
+asset hot-reload loop in [Dev Tools](dev.md) does; it fires
+`ResourceReloaded` for the dependents it rebuilt too.
 
 ## `.meta` sidecar import settings
 
@@ -150,10 +183,12 @@ and `save_meta()` writes one back.
 ## Atlases
 
 `load_atlas(texture_path, json_path)` loads a packed-sprite texture plus a
-JSON region map and returns an `Atlas`. It `acquire()`s the underlying
-texture so `unload_unused()` will not pull it out from under the atlas; drop
-it with `unload(texture_path, force=True)`. A malformed region map raises
-`InvalidMetadataError` with line/column info.
+JSON region map and returns an `Atlas`, cached under `json_path`. A second
+call returns the same atlas. The atlas depends on its page textures, so
+they stay loaded while it is cached, and reloading a page rebuilds it.
+
+Each call pins the atlas; drop each with `unload(json_path)`. A malformed
+region map raises `InvalidMetadataError` with line/column info.
 
 ## Files the engine does not interpret
 
