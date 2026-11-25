@@ -564,8 +564,11 @@ def _setup_container(
     _register_core_components(component_registry)
     container.register_instance(ComponentRegistry, component_registry)
 
-    prefab_cache = PrefabCache()
-    container.register_instance(PrefabCache, prefab_cache)
+    # One loader for the cache scenes resolve through and for the resource
+    # manager, so migrations a game sets on it reach every prefab it loads.
+    prefab_loader = PrefabLoader()
+    container.register_instance(PrefabLoader, prefab_loader)
+    container.register_instance(PrefabCache, PrefabCache(prefab_loader))
 
     # 5.2 Coroutine Manager for scripted sequences
     coroutine_manager = CoroutineManager()
@@ -698,11 +701,9 @@ def _setup_container(
         ),
     )
 
-    # The prefab loader, with the resource manager and in the container, so a
-    # game can give it migrations: `container.get(PrefabLoader).migrations`.
-    prefab_loader = PrefabLoader()
+    # The same prefab loader, so a game can give it migrations:
+    # `container.get(PrefabLoader).migrations`.
     res_manager.register_loader(prefab_loader)
-    container.register_instance(PrefabLoader, prefab_loader)
 
     # 9. The Application itself, as a singleton rather than an instance, so
     # it is built on the first `container.get(Application)` -- after

@@ -149,3 +149,34 @@ def test_the_application_shares_its_prefab_loader() -> None:
     # The same object the resource manager loads prefabs with, so migrations
     # set on it reach every prefab the game loads.
     assert any(registered is loader for registered in resources._extension_map.values())
+
+
+def test_migrations_set_on_the_application_reach_a_scenes_spawns(
+    tmp_path: Path,
+) -> None:
+    from pyguara.application.bootstrap import create_headless_application
+    from pyguara.scene.base import Scene
+
+    path = _write(
+        tmp_path, "goblin", {"name": "goblin", "components": {"Label": {"text": "gob"}}}
+    )
+    application = create_headless_application()
+    application.container.get(PrefabLoader).migrations = _manager()
+
+    class _Level(Scene):
+        def on_enter(self) -> None:
+            pass
+
+        def on_exit(self) -> None:
+            pass
+
+        def update(self, dt: float) -> None:
+            pass
+
+    scene = _Level("level")
+    scene.resolve_dependencies(application.container)
+
+    entity = scene.prefab_factory.create_from_path(path)
+
+    assert entity is not None
+    assert entity.get_component(Tag).name == "v3:gob"
