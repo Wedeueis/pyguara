@@ -528,6 +528,7 @@ class Application:
             # Gamepad state must be fresh before poll_events() drains this
             # frame's SDL events, since that pump is what keeps pygame's
             # internal joystick device list current.
+            self._input_manager.advance(frame_time)
             self._input_manager.update()
             self._process_input(frame_time)
             if profiler is not None:
@@ -631,6 +632,7 @@ class Application:
             frame = player.advance_frame()
             if recorded_dt is None or frame is None:
                 break
+            self._input_manager.advance(recorded_dt)
             for recorded_event in frame.events:
                 self._input_manager.process_replayed_event(recorded_event)
             self._simulate(recorded_dt, profiler)
@@ -651,6 +653,7 @@ class Application:
         self._event_dispatcher.cancel_delayed()
         self._accumulator = self._replay_start_accumulator
         self._replay_restart()
+        self._input_manager.reset_timing()
         player.start_playback()
 
     def _window_closed_during_frame(self) -> bool:
@@ -838,6 +841,7 @@ class Application:
         # and consumed by nothing.
         self._rng().reseed(data.metadata.seed)
 
+        self._input_manager.reset_timing()
         self._replay_player = ReplayPlayer(data)
         self._replay_player.start_playback()
         self._replay_controls = ReplayControls(

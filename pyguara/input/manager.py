@@ -1,5 +1,6 @@
 """Core input processing system."""
 
+import math
 from typing import Any
 
 from pyguara.events.dispatcher import EventDispatcher
@@ -15,12 +16,14 @@ from pyguara.input.coop import PlayerRouter
 from pyguara.input.events import (
     GamepadAxisEvent,
     GamepadButtonEvent,
+    GamepadDisconnectedEvent,
     InputContextChangedEvent,
     OnActionEvent,
     OnMouseEvent,
     OnRawKeyEvent,
 )
 from pyguara.input.gamepad import GamepadManager
+from pyguara.input.gestures import ActionTracker, Fired, Gesture
 from pyguara.input.protocols import IInputBackend
 from pyguara.input.types import (
     ActionType,
@@ -77,6 +80,11 @@ class InputManager:
         self._registered_actions: dict[str, InputAction] = {}
         self._recorder: ReplayRecorder | None = None
 
+        # Input time, in seconds, moved by advance(); what buffering, holds
+        # and gestures measure against.
+        self._time = 0.0
+        self._tracker = ActionTracker()
+
         # GamepadManager owns hot-plug, per-button/axis state, and deadzone
         # filtering; bound gamepad Actions are driven off the
         # GamepadButtonEvent/GamepadAxisEvent it fires on state changes.
@@ -85,6 +93,9 @@ class InputManager:
         )
         self._dispatcher.subscribe(GamepadButtonEvent, self._on_gamepad_button)
         self._dispatcher.subscribe(GamepadAxisEvent, self._on_gamepad_axis)
+        self._dispatcher.subscribe(
+            GamepadDisconnectedEvent, self._on_gamepad_disconnected
+        )
 
     @property
     def gamepad(self) -> GamepadManager:
@@ -148,6 +159,115 @@ class InputManager:
             context: The context to make active.
         """
         self.context = context
+
+    @property
+    def time(self) -> float:
+        """Input time in seconds: the sum of every `advance` so far."""
+        return self._time
+
+    def advance(self, seconds: float) -> None:
+        """Move input time on by one frame, and fire any hold that is due.
+
+        `Application` calls this once a frame with the frame's real,
+        unscaled duration, and with each recorded duration during a replay,
+        so buffering and gestures replay exactly. Code driving an
+        `InputManager` without `Application` must call it itself.
+
+        Args:
+            seconds: The frame's duration.
+
+        Raises:
+            ValueError: If `seconds` is negative or not finite.
+        """
+        if not (math.isfinite(seconds) and seconds >= 0.0):
+            raise ValueError(f"input time moves on by 0 or more seconds, got {seconds}")
+        self._time += seconds
+        self._dispatch_gestures(self._tracker.advance(self._time))
+
+    def reset_timing(self) -> None:
+        """Forget what is held, buffered and part-way through a gesture.
+
+        A replay calls it when it starts or rewinds, so nothing pressed
+        before carries into it. The gestures themselves are kept.
+        """
+        self._tracker.reset()
+
+    def add_gesture(self, gesture: Gesture) -> None:
+        """Start recognising a hold, tap, double-tap, chord or sequence.
+
+        When the gesture is made, an `OnActionEvent` named after it is
+        dispatched for the player who made it, and it is buffered like a
+        press of an action.
+
+        Args:
+            gesture: The gesture. The actions it watches must be registered.
+
+        Raises:
+            ValueError: If an action it watches is not registered, its name
+                is a registered action's, or a gesture already has its name.
+        """
+        missing = [
+            name for name in gesture.watches if name not in self._registered_actions
+        ]
+        if missing:
+            raise ValueError(
+                f"gesture {gesture.name!r} watches unregistered actions {missing}; "
+                "register them first"
+            )
+        if gesture.name in self._registered_actions:
+            raise ValueError(
+                f"gesture {gesture.name!r} has the name of a registered action"
+            )
+        self._tracker.add(gesture)
+
+    def remove_gesture(self, name: str) -> None:
+        """Stop recognising the gesture `name`.
+
+        Raises:
+            KeyError: If no gesture has that name.
+        """
+        self._tracker.remove(name)
+
+    @property
+    def gestures(self) -> tuple[Gesture, ...]:
+        """The gestures being recognised, in the order they were added."""
+        return self._tracker.gestures
+
+    def was_pressed_within(self, action: str, seconds: float, player: int = 0) -> bool:
+        """Whether `player` pressed `action`, or made that gesture, in the last `seconds`.
+
+        The press stays buffered until it is too old or `consume_press`
+        takes it, so this alone answers the same press more than once.
+
+        Raises:
+            ValueError: If `seconds` is negative or not finite.
+        """
+        if not (math.isfinite(seconds) and seconds >= 0.0):
+            raise ValueError(f"a buffer window is 0 or more seconds, got {seconds}")
+        pressed = self._tracker.last_press(action, player)
+        return pressed is not None and self._time - pressed <= seconds
+
+    def consume_press(self, action: str, seconds: float, player: int = 0) -> bool:
+        """Take a press of `action` made in the last `seconds`, if there is one.
+
+        Pressing jump just before landing and calling this on landing jumps
+        once: a taken press is not reported again.
+
+        Raises:
+            ValueError: If `seconds` is negative or not finite.
+        """
+        if not self.was_pressed_within(action, seconds, player):
+            return False
+        self._tracker.forget_press(action, player)
+        return True
+
+    def is_held(self, action: str, player: int = 0) -> bool:
+        """Whether any key or button is holding `action` down for `player`."""
+        return self._tracker.is_held(action, player)
+
+    def held_for(self, action: str, player: int = 0) -> float:
+        """Seconds `player` has held `action` down, or 0 while it is up."""
+        return self._tracker.held_for(action, player, self._time)
 
     def attach_recorder(self, recorder: ReplayRecorder) -> None:
         """Start feeding every processed input event to `recorder`.
@@ -263,6 +383,18 @@ class InputManager:
             self._recorder.record_gamepad_button(
                 event.button.value, event.is_pressed, event.controller_id
             )
+
+    def _on_gamepad_disconnected(self, event: GamepadDisconnectedEvent) -> None:
+        """Let go of every action an unplugged pad was holding."""
+
+        def from_pad(source: object) -> bool:
+            return (
+                isinstance(source, tuple)
+                and source[0] == InputDevice.GAMEPAD
+                and source[2] == event.controller_id
+            )
+
+        self._dispatch_gestures(self._tracker.release_matching(from_pad, self._time))
 
     def _on_gamepad_axis(self, event: GamepadAxisEvent) -> None:
         """Translate a GamepadManager axis-state change into bound Actions."""
@@ -391,7 +523,16 @@ class InputManager:
         controller_id: int | None = None,
     ) -> None:
         """Handle binary inputs (Buttons/Keys)."""
+        player = self._player_of(device, controller_id)
+        if player is None:
+            return
         actions = self._bindings.get_actions(device, code, self._context)
+        source = (device, code, controller_id)
+        if is_down:
+            registered = [a for a in actions if a in self._registered_actions]
+            fired = self._tracker.press(source, player, registered, self._time)
+        else:
+            fired = self._tracker.release(source, self._time)
 
         for action_name in actions:
             action_def = self._registered_actions.get(action_name)
@@ -417,6 +558,8 @@ class InputManager:
 
             if should_dispatch:
                 self._dispatch_action(action_name, value, device, controller_id)
+
+        self._dispatch_gestures(fired)
 
     def _handle_axis(
         self, axis_index: int, value: float, controller_id: int | None = None
@@ -456,12 +599,9 @@ class InputManager:
         assignment for is dropped here rather than dispatched: an
         unassigned second gamepad does nothing until it joins.
         """
-        player = 0
-        if self._player_router is not None:
-            resolved = self._player_router.player_for(device, controller_id)
-            if resolved is None:
-                return
-            player = resolved
+        player = self._player_of(device, controller_id)
+        if player is None:
+            return
 
         event = OnActionEvent(
             action_name=name,
@@ -471,3 +611,22 @@ class InputManager:
             source=self,
         )
         self._dispatcher.dispatch(event)
+
+    def _player_of(self, device: InputDevice, controller_id: int | None) -> int | None:
+        """The player a device drives: 0 with no router, None if unassigned."""
+        if self._player_router is None:
+            return 0
+        return self._player_router.player_for(device, controller_id)
+
+    def _dispatch_gestures(self, fired: Fired) -> None:
+        """Dispatch an `OnActionEvent` for each gesture just made."""
+        for player, name in fired:
+            self._dispatcher.dispatch(
+                OnActionEvent(
+                    action_name=name,
+                    context=self._context.value,
+                    value=1.0,
+                    player=player,
+                    source=self,
+                )
+            )

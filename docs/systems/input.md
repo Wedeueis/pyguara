@@ -51,6 +51,67 @@ An `ANALOG` action only responds to a bound **axis**; a digital key bound to
 one produces nothing. Likewise a `PRESS`/`RELEASE`/`HOLD` action bound to an
 axis does nothing — axes drive `ANALOG` only.
 
+## Buffering and held time
+
+Input has its own clock. `Application` moves it on once a frame by the
+frame's real duration, not scaled by `time_scale`, and by each recorded
+duration during a replay, so everything below replays on the same frame.
+`input_manager.time` reads it; code running an `InputManager` without
+`Application` calls `advance(seconds)` itself.
+
+```python
+# Pressed jump up to 100 ms before landing still jumps, once.
+if body.on_ground and input_manager.consume_press("jump", 0.1):
+    body.jump()
+
+# Charge for as long as attack is held.
+charge = min(input_manager.held_for("attack") / 1.5, 1.0)
+```
+
+| Method | Answers |
+| --- | --- |
+| `was_pressed_within(action, seconds, player=0)` | whether the action was pressed, or a gesture of that name made, that recently |
+| `consume_press(action, seconds, player=0)` | the same, and takes the press so it is not answered again |
+| `is_held(action, player=0)` | whether any key or button holds it down |
+| `held_for(action, player=0)` | how long it has been held, 0 while up |
+
+These track every registered action whatever its `ActionType`, and per
+player when a `PlayerRouter` is in use. An action bound to two keys is held
+until both are up. A release lets go of what its key pressed even after
+the context has changed, and an unplugged pad lets go of everything it held.
+`reset_timing()` forgets all of it; a replay calls it as it starts and when
+it rewinds.
+
+## Gestures
+
+A gesture is made from actions, so it follows rebinding and every device
+bound to them. When one is made, an `OnActionEvent` under its name is
+dispatched for that player, and it is buffered like a press.
+
+```python
+from pyguara.input import ActionSequence, Chord, DoubleTap, Hold, Tap
+
+input_manager.add_gesture(Hold("charge", "attack", seconds=0.5))
+input_manager.add_gesture(Tap("jab", "attack", max_seconds=0.2))
+input_manager.add_gesture(DoubleTap("dash", "right", window=0.3))
+input_manager.add_gesture(Chord("special", ("attack", "jump"), window=0.1))
+input_manager.add_gesture(ActionSequence("slam", ("down", "down", "attack")))
+```
+
+| Gesture | Made when |
+| --- | --- |
+| `Hold` | the action has been held for `seconds`; once per press |
+| `Tap` | the action is released within `max_seconds` of its press |
+| `DoubleTap` | the action is pressed again within `window`; a third press starts a new pair |
+| `Chord` | every action is down, all pressed within `window` of one another, in any order |
+| `ActionSequence` | the actions are pressed in order, each within `window` of the last; presses of other actions are ignored |
+
+The actions a gesture watches must be registered first, and its name must
+not be a registered action's. The plain action still fires as well: a
+double-tap of `right` is two `right` presses and a `dash`. A gesture never
+watches another gesture. `remove_gesture(name)` stops one; `gestures`
+lists them.
+
 ## Bindings
 
 ```python
@@ -92,7 +153,7 @@ manager that emitted them).
 
 | Event | Fields |
 | --- | --- |
-| `OnActionEvent` | `action_name`, `context`, `value` |
+| `OnActionEvent` | `action_name`, `context`, `value`, `player` |
 | `OnRawKeyEvent` | `key_code`, `is_down`, `modifiers` |
 | `OnMouseEvent` | `position`, `button`, `is_down`, `is_motion` |
 | `InputContextChangedEvent` | `old_context`, `new_context` |
