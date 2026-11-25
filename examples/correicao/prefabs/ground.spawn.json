@@ -1,6 +1,7 @@
 {
   "choices": [
-    {"prefab": "examples/correicao/prefabs/tuft.prefab.json", "weight": 3},
-    {"prefab": "examples/correicao/prefabs/stone.prefab.json", "weight": 1}
+    {"prefab": "examples/correicao/prefabs/tuft.prefab.json", "weight": 6},
+    {"prefab": "examples/correicao/prefabs/stone.prefab.json", "weight": 2},
+    {"prefab": "boulder", "weight": 1}
   ]
 }
