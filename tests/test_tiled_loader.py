@@ -128,9 +128,26 @@ def test_load_tmx_result_produces_correct_collision_rects(tmp_path: Path) -> Non
     assert rects == [Rect(0, 0, 16, 16), Rect(16, 16, 16, 16)]
 
 
-def test_load_tmx_rejects_non_square_tiles(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="non-square"):
-        load_tmx(_write(tmp_path, _NON_SQUARE_MAP))
+def test_load_tmx_reads_rectangular_tiles(tmp_path: Path) -> None:
+    tilemap = load_tmx(_write(tmp_path, _NON_SQUARE_MAP))
+
+    assert (tilemap.tile_width, tilemap.tile_height) == (16, 32)
+    assert tilemap.collision_rects("ground") == [
+        Rect(0, 0, 16, 32),
+        Rect(16, 32, 16, 32),
+    ]
+
+
+@pytest.mark.parametrize("orientation", ["isometric", "staggered", "hexagonal"])
+def test_load_tmx_refuses_orientations_other_than_orthogonal(
+    tmp_path: Path, orientation: str
+) -> None:
+    source = _NON_SQUARE_MAP.replace(
+        'orientation="orthogonal"', f'orientation="{orientation}"'
+    )
+
+    with pytest.raises(ValueError, match=orientation):
+        load_tmx(_write(tmp_path, source))
 
 
 # The two rejections these replace were real, documented decisions -- and

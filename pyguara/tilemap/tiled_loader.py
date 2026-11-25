@@ -5,9 +5,9 @@ CSV, as base64 (uncompressed, gzip or zlib) or as `<tile gid="...">`
 elements; layers nested inside `<group>`; and `<objectgroup>` object
 layers.
 
-Refused, each with an error naming it: non-square tiles, `zstd`
-compression, and infinite maps (`<data>` split into `<chunk>`
-elements).
+Refused, each with an error naming it: orientations other than
+orthogonal, `zstd` compression, and infinite maps (`<data>` split into
+`<chunk>` elements). Tiles may be rectangular.
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ def load_tmx(path: str | Path) -> Tilemap:
         game reads.
 
     Raises:
-        ValueError: The map uses non-square tiles, an unsupported layer
+        ValueError: The map is not orthogonal, uses an unsupported layer
             encoding or compression, or is an infinite map.
         FileNotFoundError: An external tileset's `source` does not
             resolve.
@@ -79,10 +79,11 @@ def load_tmx(path: str | Path) -> Tilemap:
 
     tile_width = int(root.attrib["tilewidth"])
     tile_height = int(root.attrib["tileheight"])
-    if tile_width != tile_height:
+    orientation = root.attrib.get("orientation", "orthogonal")
+    if orientation != "orthogonal":
         raise ValueError(
-            f"non-square tiles are not supported ({tile_width}x{tile_height}); "
-            f"Tilemap.tile_size is a single edge length"
+            f"{orientation} maps are not supported, only orthogonal ones: a "
+            f"Tilemap places cells on a rectangular grid"
         )
     if root.attrib.get("infinite") == "1":
         raise ValueError(
@@ -92,7 +93,7 @@ def load_tmx(path: str | Path) -> Tilemap:
         )
 
     tilemap = Tilemap(
-        tile_size=tile_width,
+        tile_size=(tile_width, tile_height),
         tilesets=[
             _parse_tileset(element, map_path.parent)
             for element in root.findall("tileset")

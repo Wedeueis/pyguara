@@ -13,7 +13,9 @@ from collections.abc import Sequence
 from pyguara.common.types import Rect
 
 
-def merge_tile_rects(solid: Sequence[Sequence[bool]], tile_size: int) -> list[Rect]:
+def merge_tile_rects(
+    solid: Sequence[Sequence[bool]], tile_size: int | tuple[int, int]
+) -> list[Rect]:
     """Cover the solid tiles with as few rectangles as the greedy pass finds.
 
     Runs of solid tiles are joined along a row, then rows whose runs line up
@@ -23,7 +25,8 @@ def merge_tile_rects(solid: Sequence[Sequence[bool]], tile_size: int) -> list[Re
 
     Args:
         solid: Row-major grid, `solid[y][x]` true where a tile blocks.
-        tile_size: Edge length of one tile in pixels.
+        tile_size: A tile's `(width, height)` in pixels, or one number for
+            a square tile.
 
     Returns:
         World-space rectangles covering exactly the solid tiles, in
@@ -31,6 +34,7 @@ def merge_tile_rects(solid: Sequence[Sequence[bool]], tile_size: int) -> list[Re
     """
     if not solid or not solid[0]:
         return []
+    tile_w, tile_h = (tile_size, tile_size) if isinstance(tile_size, int) else tile_size
 
     height = len(solid)
     width = len(solid[0])
@@ -67,10 +71,10 @@ def merge_tile_rects(solid: Sequence[Sequence[bool]], tile_size: int) -> list[Re
 
             rects.append(
                 Rect(
-                    x * tile_size,
-                    y * tile_size,
-                    (run_end - x + 1) * tile_size,
-                    (bottom - y + 1) * tile_size,
+                    x * tile_w,
+                    y * tile_h,
+                    (run_end - x + 1) * tile_w,
+                    (bottom - y + 1) * tile_h,
                 )
             )
             x = run_end + 1

@@ -20,21 +20,42 @@ class Tilemap:
     class is for.
     """
 
-    def __init__(self, tile_size: int, tilesets: list[Tileset] | None = None) -> None:
+    def __init__(
+        self,
+        tile_size: int | tuple[int, int],
+        tilesets: list[Tileset] | None = None,
+    ) -> None:
         """Create an empty map.
 
         Args:
-            tile_size: Edge length of one tile in pixels. Tiles are square
-                -- `merge_tile_rects` underneath `TileLayer.collision_rects`
-                takes one size, not a width/height pair.
+            tile_size: A tile's `(width, height)` in pixels, or one number
+                for a square tile.
             tilesets: The tilesets this map draws tile ids from. Their
                 `first_gid` ranges should not overlap; on an overlap, the
                 last matching tileset in this list wins.
+
+        Raises:
+            ValueError: If the size is not one or two positive whole numbers.
         """
-        self.tile_size = tile_size
+        self.tile_width, self.tile_height = _tile_size(tile_size)
         self.tilesets = list(tilesets) if tilesets is not None else []
         self.layers: dict[str, TileLayer] = {}
         self.object_layers: dict[str, ObjectLayer] = {}
+
+    @property
+    def tile_size(self) -> int:
+        """A square tile's edge length in pixels.
+
+        Raises:
+            ValueError: If the tiles are not square; read `tile_width` and
+                `tile_height` instead.
+        """
+        if self.tile_width != self.tile_height:
+            raise ValueError(
+                f"this map's tiles are {self.tile_width}x{self.tile_height}, "
+                f"not square; read tile_width and tile_height"
+            )
+        return self.tile_width
 
     def add_layer(self, name: str, layer: TileLayer) -> None:
         """Add a layer under `name`, replacing any existing layer there."""
@@ -95,5 +116,23 @@ class Tilemap:
             KeyError: If no layer is registered under `layer_name`.
         """
         return self.layers[layer_name].collision_rects(
-            self.properties_for, self.tile_size
+            self.properties_for, (self.tile_width, self.tile_height)
         )
+
+
+def _tile_size(value: object) -> tuple[int, int]:
+    """Read a tile size as `(width, height)`.
+
+    Raises:
+        ValueError: If it is not one or two positive whole numbers.
+    """
+    pair = (value, value) if not isinstance(value, tuple) else value
+    if len(pair) != 2 or not all(
+        isinstance(side, int) and not isinstance(side, bool) and side > 0
+        for side in pair
+    ):
+        raise ValueError(
+            f"a tile size is a positive whole number of pixels, or a "
+            f"(width, height) pair of them, not {value!r}"
+        )
+    return pair[0], pair[1]

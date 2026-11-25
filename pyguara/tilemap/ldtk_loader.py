@@ -316,8 +316,8 @@ def _build_level(
 def _grid_size(level: Mapping[str, Any], instances: list[Mapping[str, Any]]) -> int:
     """Return the one grid size every layer in the level agrees on.
 
-    `Tilemap.tile_size` is a single integer, so a level whose layers use
-    different grid sizes cannot be represented -- which LDtk does allow,
+    A `Tilemap` has one tile size for every layer, so a level whose layers
+    use different grid sizes cannot be represented -- which LDtk does allow,
     and which would otherwise show up as a collision grid silently
     offset from the art.
 
@@ -340,7 +340,7 @@ def _grid_size(level: Mapping[str, Any], instances: list[Mapping[str, Any]]) -> 
     if len(sizes) > 1:
         raise ValueError(
             f"level '{level.get('identifier')}' mixes grid sizes "
-            f"{sorted(sizes)}; Tilemap.tile_size is a single value, so the "
+            f"{sorted(sizes)}; a Tilemap has one tile size, so the "
             f"layers would be drawn at different scales on one grid"
         )
     return sizes.pop()

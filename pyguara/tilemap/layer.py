@@ -49,7 +49,8 @@ class TileLayer:
             if len(tiles) != height or any(len(row) != width for row in tiles):
                 raise ValueError(f"tiles must be {height} rows of {width} columns each")
             self._tiles = [list(row) for row in tiles]
-        self._collision_rects: list[Rect] | None = None
+        # The merge, and the tile size it was made for.
+        self._collision_rects: tuple[tuple[int, int], list[Rect]] | None = None
 
     def get_tile(self, cell: Cell) -> int:
         """Return the global tile id at `cell`, or `EMPTY_GID` if none."""
@@ -70,7 +71,7 @@ class TileLayer:
     def collision_rects(
         self,
         properties_for: Callable[[int], Mapping[str, Any]],
-        tile_size: int,
+        tile_size: int | tuple[int, int],
     ) -> list[Rect]:
         """Return merged collision rectangles for every tile marked solid.
 
@@ -81,12 +82,14 @@ class TileLayer:
             properties_for: Resolves a gid to its tile's custom properties;
                 a tile is solid iff `properties_for(gid)["solid"]` is
                 truthy. Normally `Tilemap.properties_for`.
-            tile_size: Edge length of one tile in pixels.
+            tile_size: A tile's `(width, height)` in pixels, or one number
+                for a square tile.
         """
-        if self._collision_rects is None:
+        size = (tile_size, tile_size) if isinstance(tile_size, int) else tile_size
+        if self._collision_rects is None or self._collision_rects[0] != size:
             solid = [
                 [bool(properties_for(gid).get("solid", False)) for gid in row]
                 for row in self._tiles
             ]
-            self._collision_rects = merge_tile_rects(solid, tile_size)
-        return self._collision_rects
+            self._collision_rects = (size, merge_tile_rects(solid, size))
+        return self._collision_rects[1]
