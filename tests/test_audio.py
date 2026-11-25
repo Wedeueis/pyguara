@@ -609,3 +609,22 @@ def test_audio_manager_limits_voices_on_the_real_mixer(
 
     manager.stop_sfx(first)
     assert manager.play_sfx_clip(clip) is not None
+
+
+def test_pygame_refuses_a_crossfade(
+    audio_system: PygameAudioSystem, mock_music: Any
+) -> None:
+    from pyguara.audio.exceptions import UnsupportedAudioCapability
+
+    with pytest.raises(UnsupportedAudioCapability):
+        audio_system.play_music("music.ogg", crossfade=True)
+    mock_music.play.assert_not_called()
+
+
+def test_pygame_refuses_layered_music(audio_system: PygameAudioSystem) -> None:
+    from pyguara.audio.exceptions import UnsupportedAudioCapability
+
+    with pytest.raises(UnsupportedAudioCapability):
+        audio_system.play_music_layers(["a.ogg", "b.ogg"], [1.0, 1.0])
+    with pytest.raises(UnsupportedAudioCapability):
+        audio_system.set_music_layer(0, 0.5)

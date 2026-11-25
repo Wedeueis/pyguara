@@ -95,9 +95,10 @@ MIT engine, but the wheel distributes it.
 
 ## Optional capabilities
 
-Three features cannot be expressed by every mixer: per-play **pitch**, **loop
-points** inside a clip, and **DSP on a bus**. `PygameAudioSystem`, the default,
-expresses none of them; `NativeAudioSystem` expresses the first two. Each is
+Four features cannot be expressed by every mixer: per-play **pitch**, **loop
+points** inside a clip, **DSP on a bus**, and **interactive music**.
+`PygameAudioSystem` expresses none of them; `NativeAudioSystem` expresses all
+but bus effects. Each is
 declared through `AudioCapability` and
 declined by **raising** `UnsupportedAudioCapability`, so a request a backend
 cannot honour fails where it was made.
@@ -123,6 +124,7 @@ raise instead of returning `None`.
 | `PITCH` | `pitch=` on either `play_sfx` | no — the mixer resamples at load and plays at its own rate | yes |
 | `LOOP_POINTS` | `loop_start=` / `loop_end=` | no — `Channel.play` takes a loop *count* and nothing else | yes |
 | `BUS_EFFECTS` | `set_bus_effects(bus, [...])` | no — a channel's only processing is a left/right gain pair | no — needs the device, see below |
+| `INTERACTIVE_MUSIC` | `crossfade=` on `play_music`, `play_music_layers`, `set_music_layer` | no — `mixer.music` plays one track | yes |
 
 **Loop points from a `.meta` sidecar warn instead of raising.** `AudioMeta`
 carries `loop_start` / `loop_end`, and those are the asset describing itself
@@ -149,6 +151,36 @@ and `is_music_playing` control it; `get_current_music()` returns the path
 
 Music volume follows the `music` bus and the `master` bus: changing either
 re-applies immediately to the playing stream.
+
+### Crossfades and layers
+
+Both need `AudioCapability.INTERACTIVE_MUSIC`.
+
+```python
+# The next area's theme fades in as this one fades out.
+audio.play_music("music/caves.ogg", fade_ms=2000, crossfade=True)
+
+# Stems of one cue, started on the same sample; the combat lead starts silent.
+audio.play_music_layers(
+    ["music/fight_drums.ogg", "music/fight_bass.ogg", "music/fight_lead.ogg"],
+    levels=[1.0, 1.0, 0.0],
+)
+audio.set_music_layer(2, 1.0, fade_ms=800)  # a fight starts
+audio.set_music_layer(2, 0.0, fade_ms=3000)  # and ends
+```
+
+- **A crossfade starts once the new track has decoded.** Until then the old
+  one plays on at full level, so a long decode leaves no gap. If the new
+  track fails to decode, the old one carries on.
+- **Layers start together, on one sample,** after every one of them has
+  decoded. A shorter layer is padded with silence to the longest, so looping
+  layers stay in step.
+- A level moves over `fade_ms`, ramped per sample in the mixer. A level set
+  while the piece is still decoding is where that layer starts.
+- `get_music_layers()` returns the current paths, one per layer.
+  `get_current_music()` returns the first.
+- `set_music_layer` raises `IndexError` for a layer the music doesn't have,
+  and `ValueError` for a level outside 0 to 1.
 
 ## Sound effects and handles
 

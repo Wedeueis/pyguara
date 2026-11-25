@@ -130,7 +130,11 @@ class NativeAudioSystem:
     @property
     def capabilities(self) -> AudioCapability:
         """Report pitch and loop points."""
-        return AudioCapability.PITCH | AudioCapability.LOOP_POINTS
+        return (
+            AudioCapability.PITCH
+            | AudioCapability.LOOP_POINTS
+            | AudioCapability.INTERACTIVE_MUSIC
+        )
 
     # ========== Playing ==========
 
@@ -365,11 +369,15 @@ class NativeAudioSystem:
     def _music_gain(self) -> float:
         return self._bus_manager.get_effective_volume("music")
 
-    def play_music(self, path: str, loop: bool = True, fade_ms: int = 1000) -> None:
+    def play_music(
+        self, path: str, loop: bool = True, fade_ms: int = 1000, crossfade: bool = False
+    ) -> None:
         """Decode a track off the frame, then play it, fading in.
 
         A file that cannot be decoded plays nothing and is reported; the
-        game carries on, as it did when `pygame.mixer.music` failed.
+        game carries on, as it did when `pygame.mixer.music` failed. With
+        `crossfade`, the current track plays on until the new one has
+        decoded, and carries on if it fails to.
         """
         try:
             data = assets.read_bytes(path)
@@ -377,8 +385,47 @@ class NativeAudioSystem:
             logger.error("Failed to play music '%s': %s", path, error)
             return
         self.mixer.play_music_bytes(
-            data, path, loop, max(0, fade_ms), self._music_gain()
+            data, path, loop, max(0, fade_ms), self._music_gain(), crossfade
         )
+
+    def play_music_layers(
+        self,
+        paths: Sequence[str],
+        levels: Sequence[float],
+        loop: bool = True,
+        fade_ms: int = 1000,
+        crossfade: bool = False,
+    ) -> None:
+        """Decode every layer off the frame, then start them on one sample.
+
+        A shorter layer is padded with silence to the longest, so looping
+        layers stay in step. A layer that cannot be read or decoded plays
+        nothing of the piece, and is reported.
+        """
+        data = []
+        for path in paths:
+            try:
+                data.append(assets.read_bytes(path))
+            except OSError as error:
+                logger.error("Failed to play music '%s': %s", path, error)
+                return
+        self.mixer.play_music_layers_bytes(
+            data,
+            list(paths),
+            [float(level) for level in levels],
+            loop,
+            max(0, fade_ms),
+            self._music_gain(),
+            crossfade,
+        )
+
+    def set_music_layer(self, layer: int, level: float, fade_ms: int = 500) -> None:
+        """Move one layer to a level, ramping in the mixer, sample by sample.
+
+        Raises:
+            IndexError: If the current music has no such layer.
+        """
+        self.mixer.set_music_layer_level(layer, float(level), max(0, fade_ms))
 
     def stop_music(self, fade_ms: int = 1000) -> None:
         """Fade the music out, then stop it."""

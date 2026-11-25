@@ -2,7 +2,7 @@
 
 import math
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from pyguara.audio.audio_system import IAudioSystem
@@ -83,6 +83,16 @@ class SoundVariation:
         return self.pitch != (1.0, 1.0)
 
 
+def _check_level(level: float) -> None:
+    """Refuse a layer level outside 0 to 1.
+
+    Raises:
+        ValueError: If `level` is not a finite number from 0 to 1.
+    """
+    if not (math.isfinite(level) and 0.0 <= level <= 1.0):
+        raise ValueError(f"a music layer's level must be from 0 to 1, got {level}")
+
+
 class AudioManager:
     """High-level audio manager that coordinates the audio system.
 
@@ -127,8 +137,9 @@ class AudioManager:
         # Track loaded audio clips
         self._loaded_clips: dict[str, AudioClip] = {}
 
-        # Current music track
+        # Current music track, and its layers: one for a plain track.
         self._current_music: str | None = None
+        self._music_layers: tuple[str, ...] = ()
 
         # Per-sound limits, by clip path, and what each limited sound is doing.
         self._clock = clock
@@ -378,16 +389,92 @@ class AudioManager:
 
     # ========== Music Methods ==========
 
-    def play_music(self, path: str, loop: bool = True, fade_ms: int = 1000) -> None:
+    def play_music(
+        self, path: str, loop: bool = True, fade_ms: int = 1000, crossfade: bool = False
+    ) -> None:
         """Play background music from a file.
 
         Args:
             path: Path to the music file.
             loop: Whether to loop the music.
             fade_ms: Fade-in duration in milliseconds.
+            crossfade: Fade the current track out over `fade_ms` as this
+                one fades in; needs `AudioCapability.INTERACTIVE_MUSIC`.
+
+        Raises:
+            UnsupportedAudioCapability: If `crossfade` is asked of a backend
+                without it.
         """
-        self._audio_system.play_music(path, loop, fade_ms)
+        self._audio_system.play_music(path, loop, fade_ms, crossfade)
         self._current_music = path
+        self._music_layers = (path,)
+
+    def play_music_layers(
+        self,
+        paths: Sequence[str],
+        levels: Sequence[float] | None = None,
+        loop: bool = True,
+        fade_ms: int = 1000,
+        crossfade: bool = False,
+    ) -> None:
+        """Play several tracks as layers of one piece, started in step.
+
+        Stems of one cue -- drums, bass, a combat lead -- whose levels
+        `set_music_layer` moves while they play, so the music follows the
+        game without cutting. Needs `AudioCapability.INTERACTIVE_MUSIC`.
+
+        Args:
+            paths: Each layer's file. Layer `i` is `paths[i]`.
+            levels: Each layer's starting level, 0 to 1; every layer at 1
+                when None.
+            loop: Whether to loop the piece.
+            fade_ms: Fade-in duration in milliseconds.
+            crossfade: As `play_music`.
+
+        Raises:
+            ValueError: If there are no paths, `levels` is not one per path,
+                or a level is outside 0 to 1.
+            UnsupportedAudioCapability: On a backend without it.
+        """
+        paths = tuple(paths)
+        if not paths:
+            raise ValueError("layered music needs at least one path")
+        chosen = (1.0,) * len(paths) if levels is None else tuple(levels)
+        if len(chosen) != len(paths):
+            raise ValueError(
+                f"{len(chosen)} levels for {len(paths)} layers; give one per layer"
+            )
+        for level in chosen:
+            _check_level(level)
+        self._audio_system.play_music_layers(paths, chosen, loop, fade_ms, crossfade)
+        self._current_music = paths[0]
+        self._music_layers = paths
+
+    def set_music_layer(self, layer: int, level: float, fade_ms: int = 500) -> None:
+        """Move one layer of the current music to a level, over `fade_ms`.
+
+        Args:
+            layer: The layer, as its index in `play_music_layers`' paths.
+            level: Its new level, 0 to 1.
+            fade_ms: How long the move takes.
+
+        Raises:
+            ValueError: If `level` is outside 0 to 1.
+            IndexError: If the current music has no such layer.
+            UnsupportedAudioCapability: On a backend without
+                `AudioCapability.INTERACTIVE_MUSIC`.
+        """
+        _check_level(level)
+        if not 0 <= layer < len(self._music_layers):
+            raise IndexError(
+                f"the music has {len(self._music_layers)} layer(s); "
+                f"there is no layer {layer}"
+            )
+        self._audio_system.set_music_layer(layer, level, fade_ms)
+
+    def get_music_layers(self) -> tuple[str, ...]:
+        """Return the current music's layers, one path each; empty with none."""
+        return self._music_layers
 
     def stop_music(self, fade_ms: int = 1000) -> None:
         """Stop the currently playing music.
@@ -397,6 +484,7 @@ class AudioManager:
         """
         self._audio_system.stop_music(fade_ms)
         self._current_music = None
+        self._music_layers = ()
 
     def pause_music(self) -> None:
         """Pause the currently playing music."""
@@ -411,7 +499,7 @@ class AudioManager:
         return self._audio_system.is_music_playing()
 
     def get_current_music(self) -> str | None:
-        """Get the path of the currently playing music, if any."""
+        """Get the path of the current music, or its first layer's; None with none."""
         return self._current_music
 
     # ========== Volume Control ==========
@@ -514,5 +602,6 @@ class AudioManager:
         self.stop_music(fade_ms=0)
         self._loaded_clips.clear()
         self._current_music = None
+        self._music_layers = ()
         self._voices.clear()
         self._last_start.clear()
