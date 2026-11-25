@@ -98,3 +98,18 @@ def test_an_empty_grid_yields_nothing() -> None:
     """No tiles, no colliders -- and no crash on the empty case."""
     assert merge_tile_rects([], TILE) == []
     assert merge_tile_rects(grid(["...", "..."]), TILE) == []
+
+
+def test_rectangular_tiles_scale_each_axis_by_its_own_size() -> None:
+    rects = merge_tile_rects(grid(["##.", "##.", "..#"]), (16, 8))
+
+    assert [(r.x, r.y, r.width, r.height) for r in rects] == [
+        (0, 0, 32, 16),
+        (32, 16, 16, 8),
+    ]
+
+
+def test_a_square_size_as_a_pair_matches_the_single_number() -> None:
+    solid = grid(["#.#", "###"])
+
+    assert merge_tile_rects(solid, (TILE, TILE)) == merge_tile_rects(solid, TILE)
