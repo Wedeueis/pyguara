@@ -339,11 +339,20 @@ class KeyBindingManager:
                     try:
                         device = InputDevice[binding["device"]]
                         code = binding["code"]
-                        self.bind(device, code, action, context)
                     except (KeyError, TypeError) as e:
                         logger.warning(
                             f"Invalid binding data for action '{action}': {e}"
                         )
+                        continue
+                    # A bool is an int, and a "32" would bind but never match
+                    # a lookup, since keys compare by integer code.
+                    if not isinstance(code, int) or isinstance(code, bool):
+                        logger.warning(
+                            f"Invalid binding data for action '{action}': "
+                            f"code must be an integer, got {code!r}"
+                        )
+                        continue
+                    self.bind(device, code, action, context)
 
         logger.info("Imported key bindings")
 

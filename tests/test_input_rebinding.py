@@ -400,6 +400,9 @@ class TestSerialization:
                         {"device": "KEYBOARD", "code": 32},  # good
                         {"device": "HOLOGRAM", "code": 5},  # unknown device
                         {"code": 9},  # missing "device"
+                        {"device": "KEYBOARD", "code": "13"},  # a string code
+                        {"device": "KEYBOARD", "code": True},  # a bool code
+                        {"device": "KEYBOARD", "code": 13.0},  # a float code
                     ]
                 },
                 "nonsense_context": {"x": [{"device": "KEYBOARD", "code": 1}]},
