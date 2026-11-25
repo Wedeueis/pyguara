@@ -288,11 +288,10 @@ enemies = factory.spawn(table, rng, count=5, positions=spawn_points)
   `Transform.position` from `positions`, in order, when they are given.
   Every pick is resolved before anything is created, so a choice whose
   prefab does not load raises and spawns nothing.
-- **Textures:** a prefab whose `Sprite` names its texture by path needs
-  a converter, registered against the game's resource manager:
-  `registry.register_type_converter(Texture, lambda path:
-  resources.load(path, Texture))`. Correição scatters its ground this way
-  (`examples/correicao/prefabs/`).
+- **Textures:** a prefab's `Sprite` names its texture by path, and a
+  scene's `prefab_factory` loads it (see "Resources a prefab names").
+  Correição scatters its ground this way, after checking each prefab with
+  `check_path` (`examples/correicao/prefabs/`).
 
 ## Named variants
 

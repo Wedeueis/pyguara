@@ -13,11 +13,14 @@ by hand, and none has a horde in a world larger than the screen. So this
 one is built to be the measurement:
 
 - **It uses the engine's own paths.** The ground and the calango are
-  entities with a `Sprite`, drawn by the base `Scene.render`. The raid is
+  prefabs, built by the scene's own `prefab_factory` and checked as the
+  scene starts; the ground is picked from a spawn table, its boulder a
+  named variant of the stone. Each is an entity with a `Sprite`, drawn by
+  the base `Scene.render`. The raid is
   an engine `Swarm`, which steers, animates and draws its ants natively,
   sorted among those sprites by layer.
 - **The world is larger than the screen.** It is about five screens on
-  each side, strewn with 4,000 tufts and stones, and the camera follows the
+  each side, strewn with 4,000 tufts, stones and boulders, and the camera follows the
   calango. At any moment most of the sprites are off screen, as in any
   scrolling game.
 - **The raid's size is one argument.** `HordeScene(ants=...)`, or
