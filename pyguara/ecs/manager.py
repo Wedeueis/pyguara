@@ -126,6 +126,9 @@ class EntityManager:
 
         Returns:
             The newly registered entity.
+
+        Raises:
+            ValueError: If a live entity already has `entity_id`.
         """
         entity = Entity(entity_id)
         self.add_entity(entity)
@@ -172,12 +175,20 @@ class EntityManager:
             RuntimeError: If the entity has already been removed. Removal is
                 terminal; re-registering a soft-dead entity would produce one
                 that is reachable by id but invisible to every query.
+            ValueError: If a live entity already has this id, the same object
+                included. Replacing it would leave the old one in every
+                component index, returned by queries but not by id.
         """
         if entity._is_removed:
             raise RuntimeError(
                 f"Entity {entity.id} has been removed; cannot add_entity() a dead "
                 f"entity. Removal is terminal -- use Entity.clone() to make a "
                 f"fresh, re-addable entity instead."
+            )
+        if entity.id in self._entities:
+            raise ValueError(
+                f"an entity with id {entity.id!r} already exists in this world; "
+                f"remove it first, or use another id"
             )
 
         self._entities[entity.id] = entity
