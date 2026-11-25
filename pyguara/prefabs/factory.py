@@ -95,10 +95,42 @@ class PrefabFactory:
             The created entity with all components.
 
         Raises:
-            ValueError: If the prefab's `extends` chain contains a cycle, or a
-                component's serialized data cannot be converted to its type.
+            ValueError: If the prefab's `extends` chain contains a cycle, a
+                child prefab does not resolve or contains its own ancestor,
+                or a component's serialized data cannot be converted to its
+                type. Nothing is left behind: an entity built before the
+                error is destroyed with everything it owns.
             KeyError: If a custom deserializer references an unregistered type.
         """
+        ids = [entity_id] if entity_id else []
+        self._check_children(prefab, [source_path or prefab.name], ids)
+        taken = [i for i in ids if self._entity_manager.get_entity(i) is not None]
+        repeated = sorted({i for i in ids if ids.count(i) > 1})
+        if taken or repeated:
+            raise ValueError(
+                f"prefab {prefab.name!r} would create entities with ids already "
+                f"in use {taken} or used twice {repeated}"
+            )
+        built: list[Entity] = []
+        try:
+            return self._build(prefab, entity_id, overrides, source_path, built)
+        except BaseException:
+            # Every entity, not just the root: a child is linked to its
+            # parent only once it is built, so a half-built subtree is not
+            # reached by the cascade.
+            for entity in reversed(built):
+                self._entity_manager.remove_entity(entity.id)
+            raise
+
+    def _build(
+        self,
+        prefab: PrefabData,
+        entity_id: str | None,
+        overrides: dict[str, dict[str, Any]] | None,
+        source_path: str | None,
+        built: list[Entity],
+    ) -> Entity:
+        """Create one entity and its children, recording each in `built`."""
         # Resolve inheritance
         resolved_components = self._resolve_inheritance(prefab)
 
@@ -108,6 +140,7 @@ class PrefabFactory:
 
         # Create entity
         entity = self._entity_manager.create_entity(entity_id)
+        built.append(entity)
 
         # Add prefab metadata component
         entity.add_component(
@@ -128,11 +161,45 @@ class PrefabFactory:
             component = self._registry.create(comp_name, comp_data)
             entity.add_component(component)
 
-        # Create children and parent them to this entity's Transform.
-        self._create_children(prefab.children, entity)
+        # Create children, owned by this entity and parented to its Transform.
+        self._create_children(prefab.children, entity, built)
 
         logger.debug(f"Created entity from prefab '{prefab.name}': {entity.id}")
         return entity
+
+    def _check_children(
+        self, prefab: PrefabData, chain: list[str], ids: list[str]
+    ) -> None:
+        """Raise unless every child, at every depth, resolves and ends.
+
+        Run before anything is created, so a prefab with a missing child
+        fails without spawning its parent first. Appends every child's
+        explicit entity id to `ids`.
+
+        Raises:
+            ValueError: If a child does not resolve, a child contains its
+                own ancestor, or there are children and no resolver.
+        """
+        if not prefab.children:
+            return
+        if self._prefab_resolver is None:
+            raise ValueError(
+                f"prefab {prefab.name!r} has children, and the factory has no "
+                f"prefab resolver to load them"
+            )
+        for child in prefab.children:
+            if child.prefab in chain:
+                cycle = " -> ".join([*chain, child.prefab])
+                raise ValueError(f"prefab child cycle: {cycle}")
+            data = self._prefab_resolver(child.prefab)
+            if data is None:
+                raise ValueError(
+                    f"prefab {prefab.name!r} has child {child.prefab!r}, "
+                    f"which did not load"
+                )
+            if child.name:
+                ids.append(child.name)
+            self._check_children(data, [*chain, child.prefab], ids)
 
     def create_from_path(
         self,
@@ -343,30 +410,27 @@ class PrefabFactory:
         self,
         children: list[PrefabChild],
         parent_entity: Entity,
+        built: list[Entity],
     ) -> list[Entity]:
-        """Create child entities and parent them to `parent_entity`.
+        """Create child entities, owned by `parent_entity`.
 
-        Each child's Transform (if it has one) is attached to the parent's
-        Transform via `set_parent(Transform, ..., keep_world_transform=False)`,
-        so the child's authored position is treated as local to the parent and
-        the child follows the parent when it moves. `PrefabChild.offset` is
-        added to that local position.
+        Each child is linked with `EntityManager.set_parent`, so destroying
+        the parent destroys it. Its Transform, if both have one, is attached
+        to the parent's with `keep_world_transform=False`: the child's
+        authored position, plus `PrefabChild.offset`, is local to the parent.
 
         Args:
             children: List of child prefab references.
             parent_entity: The parent entity.
+            built: Every entity created so far, appended to.
 
         Returns:
             List of created child entities.
+
+        Raises:
+            ValueError: If a child prefab does not resolve.
         """
         if not children:
-            return []
-
-        if not self._prefab_resolver:
-            logger.warning(
-                "Prefab declares children but the factory has no prefab_resolver; "
-                "children skipped"
-            )
             return []
 
         parent_transform = (
@@ -378,17 +442,16 @@ class PrefabFactory:
         created: list[Entity] = []
 
         for child in children:
-            child_prefab = self._prefab_resolver(child.prefab)
-            if not child_prefab:
-                logger.warning(f"Child prefab not found: {child.prefab}")
-                continue
-
-            child_entity = self.create(
-                child_prefab,
-                entity_id=child.name,
-                overrides=child.overrides,
-                source_path=child.prefab,
+            child_prefab = (
+                self._prefab_resolver(child.prefab) if self._prefab_resolver else None
             )
+            if child_prefab is None:
+                raise ValueError(f"child prefab {child.prefab!r} did not load")
+
+            child_entity = self._build(
+                child_prefab, child.name, child.overrides, child.prefab, built
+            )
+            self._entity_manager.set_parent(child_entity.id, parent_entity.id)
 
             child_transform = (
                 child_entity.get_component(Transform)

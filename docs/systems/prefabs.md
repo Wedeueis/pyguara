@@ -80,17 +80,31 @@ recursing until the stack runs out.
 ## Children
 
 `PrefabData.children` is a list of `PrefabChild(prefab, offset, name,
-overrides)`. Each child is instantiated as its **own entity** and its
-`Transform` is parented to the parent entity's `Transform`
-(`set_parent(..., keep_world_transform=False)`):
+overrides)`. Each child is instantiated as its **own entity**, linked to
+its parent twice:
 
-- The child's authored position is treated as **local** to the parent.
-- `offset` (`{"x": .., "y": ..}`) is added to that local position.
-- Moving the parent entity moves the children with it.
+- **Ownership:** `entity_manager.set_parent(child, parent)`, so destroying
+  the parent destroys its children, and theirs. Destroying a child leaves
+  the parent.
+- **Position:** the child's `Transform` is parented to the parent's
+  (`set_parent(..., keep_world_transform=False)`). Its authored position is
+  **local** to the parent, `offset` (`{"x": .., "y": ..}`) is added to it,
+  and moving the parent moves the child.
 
-A child needs a resolver to be found (the per-scene factory has one); without
-one, children are skipped with a warning. A child with an `offset` but no
-`Transform` component logs a warning and the offset is ignored.
+A child with an `offset` but no `Transform` logs a warning and the offset
+is ignored.
+
+**`create()` checks the whole tree before building any of it.** Each of
+these raises `ValueError` with nothing created:
+
+- a child, at any depth, that does not resolve, or a prefab with children
+  and a factory with no resolver;
+- a prefab that contains itself, directly or through its children;
+- a child `name`, used as its entity id, that is already in use or
+  appears twice in the tree.
+
+If building fails partway, on component data for example, every entity
+created so far is destroyed before the error propagates.
 
 ## Instantiation and metadata
 
@@ -104,8 +118,8 @@ prefab) and the `instance_overrides` that were applied.
 and passes it as `source_path`, so instances carry the real file path.
 
 A component whose data cannot be built (unknown field, bad enum value, type
-mismatch) makes `create()` **raise** rather than return a half-populated
-entity. An unregistered component name is skipped with a warning — register
+mismatch) makes `create()` **raise**, destroying what it had built, rather
+than return a half-populated entity. An unregistered component name is skipped with a warning — register
 it if it is meant to be there.
 
 ## File format

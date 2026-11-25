@@ -465,22 +465,19 @@ class TestPrefabChildren:
             kid.get_component(PrefabInstance).prefab_path == "enemies/child.prefab.json"
         )
 
-    def test_children_without_resolver_are_skipped_with_a_warning(
-        self, prefab_factory, entity_manager, caplog
+    def test_children_without_a_resolver_raise_and_create_nothing(
+        self, prefab_factory, entity_manager
     ):
-        import logging
-
         parent = PrefabData(
             name="Parent",
             components={"Tag": {"name": "p"}},
             children=[PrefabChild(prefab="child")],
         )
         # no resolver set
-        with caplog.at_level(logging.WARNING):
-            entity = prefab_factory.create(parent)
+        with pytest.raises(ValueError, match="no prefab resolver"):
+            prefab_factory.create(parent)
 
-        assert "resolver" in caplog.text.lower()
-        assert list(entity_manager.get_all_entities()) == [entity]
+        assert list(entity_manager.get_all_entities()) == []
 
     def test_offset_without_a_child_transform_warns(
         self, prefab_factory, entity_manager, caplog
