@@ -7,6 +7,7 @@ semantic Actions, with runtime rebinding and per-context bindings.
 from pyguara.input.binding import BindingKey, KeyBindingManager
 from pyguara.input.coop import PlayerRouter
 from pyguara.input.events import (
+    BindingCaptureEndedEvent,
     GamepadAxisEvent,
     GamepadButtonEvent,
     GamepadDisconnectedEvent,
@@ -44,6 +45,7 @@ from pyguara.input.types import (
 
 __all__ = [
     "ActionSequence",
+    "BindingCaptureEndedEvent",
     "ActionType",
     "BindingConflict",
     "BindingKey",

@@ -264,6 +264,10 @@ class ActionTracker:
         since = self._down_since.get((player, action))
         return 0.0 if since is None else now - since
 
+    def is_source_down(self, source: object) -> bool:
+        """Whether `source` is down, so a press of it is a repeat."""
+        return source in self._sources
+
     def last_press(self, action: str, player: int) -> float | None:
         """When `player` last pressed `action` or made that gesture, if ever."""
         return self._last_press.get((player, action))

@@ -230,6 +230,36 @@ result, conflict = bindings.rebind(
 `ERROR` raises instead of returning. A `SWAP` of an action that had no prior
 binding has no key to trade back and returns `UNBOUND`.
 
+`rebind()` replaces the action's bindings on every device. With
+`device_only=True` it replaces only those on the new key's device, and a
+`SWAP` trades only among them, so a keyboard rebind keeps the pad's
+button. `unbind(action, context, device)` likewise removes one device's.
+
+### Capturing the next press
+
+A settings screen asks for the next key or button rather than a code:
+
+```python
+input_manager.capture_binding("jump", InputContext.GAMEPLAY)
+
+def on_capture_ended(event: BindingCaptureEndedEvent) -> None:
+    if event.result is None:
+        ...  # cancelled with Escape
+    else:
+        ...  # bound to (event.device, event.code); event.conflict says who lost it
+```
+
+The next fresh press on one of `devices` (all three by default) becomes the
+binding on that device only, through `rebind(..., device_only=True)` with
+`resolution` (`SWAP` by default; `ERROR` is refused, since it would raise
+mid-frame). That press and its release reach nothing else, not even raw
+key events, and neither does the `cancel_key` (`ESCAPE`, or None) that ends
+it unbound. A key already held when the capture starts is not taken, so a
+held Enter does not bind itself. `player=` takes presses only from one
+co-op player's devices. `capturing` names the action waiting, and
+`cancel_capture()` ends it from code; starting another capture cancels
+the first.
+
 ```python
 data = bindings.export_bindings()   # dict, ready for json.dump
 bindings.import_bindings(data)       # replaces all current bindings

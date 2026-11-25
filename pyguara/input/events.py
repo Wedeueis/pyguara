@@ -5,7 +5,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pyguara.events.protocols import Event
-from pyguara.input.types import GamepadAxis, GamepadButton, InputDevice
+from pyguara.input.types import (
+    BindingConflict,
+    GamepadAxis,
+    GamepadButton,
+    InputDevice,
+    RebindResult,
+)
 
 # `timestamp` uses `default_factory=time.time` rather than a `0.0` default:
 # the engine's other event dataclasses (`pyguara/events/*.py`) settled on this
@@ -133,5 +139,23 @@ class PlayerLeftEvent(Event):
     player: int
     device: InputDevice
     controller_id: int | None
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None
+
+
+@dataclass
+class BindingCaptureEndedEvent(Event):
+    """Fired when `InputManager.capture_binding` ends, bound or cancelled.
+
+    `result` is None when it was cancelled, and `device` and `code` then
+    say nothing. `conflict` names the actions that lost or swapped the key.
+    """
+
+    action: str
+    context: str
+    device: InputDevice | None
+    code: int | None
+    result: RebindResult | None
+    conflict: BindingConflict | None = None
     timestamp: float = field(default_factory=time.time)
     source: Any = None
