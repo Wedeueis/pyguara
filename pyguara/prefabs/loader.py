@@ -11,6 +11,7 @@ from typing import Any
 
 from pyguara import assets
 from pyguara.log import get_logger
+from pyguara.persistence.migration import MigrationError, MigrationManager
 from pyguara.prefabs.types import PrefabChild, PrefabData
 from pyguara.resources.types import Resource
 
@@ -56,7 +57,23 @@ class PrefabLoader:
 
     Supports JSON (.prefab.json, .json) and YAML (.prefab.yaml, .yaml, .prefab.yml)
     file formats.
+
+    With `migrations`, a file whose `version` is older than the manager's
+    `current_version` is upgraded on load, one registered step at a time,
+    before it is parsed; the loaded prefab reports the current version.
+
+    Attributes:
+        migrations: Upgrades old prefab files, or None to load every version
+            as written.
     """
+
+    def __init__(self, migrations: MigrationManager | None = None) -> None:
+        """Create a loader.
+
+        Args:
+            migrations: Upgrades old prefab files as they load.
+        """
+        self.migrations = migrations
 
     @property
     def supported_extensions(self) -> list[str]:
@@ -155,6 +172,7 @@ class PrefabLoader:
                 f"Prefab '{source_path}' must contain a mapping at the top "
                 f"level, got {type(raw).__name__}"
             )
+        raw = self._migrate(raw, source_path)
 
         # Required field
         name = raw.get("name")
@@ -180,6 +198,34 @@ class PrefabLoader:
             extends=extends,
             tags=tags,
         )
+
+    def _migrate(self, raw: dict[str, Any], source_path: str) -> dict[str, Any]:
+        """Upgrade a file's data to the current version, when there are migrations.
+
+        Raises:
+            ValueError: If the version is not a whole number from 1, is newer
+                than the migrations know, has no path to the current version,
+                or a step fails. The message names the file.
+        """
+        if self.migrations is None:
+            return raw
+        version = raw.get("version", 1)
+        if isinstance(version, bool) or not isinstance(version, int) or version < 1:
+            raise ValueError(
+                f"Prefab '{source_path}' has version {version!r}; a version is a "
+                f"whole number from 1"
+            )
+        try:
+            migrated = self.migrations.migrate(raw, version)
+        except (ValueError, MigrationError) as error:
+            raise ValueError(f"Prefab '{source_path}': {error}") from error
+        if not isinstance(migrated, dict):
+            raise ValueError(
+                f"Prefab '{source_path}': a migration returned "
+                f"{type(migrated).__name__}, not a mapping"
+            )
+        migrated["version"] = self.migrations.current_version
+        return migrated
 
     def _parse_children(self, children_raw: list[dict[str, Any]]) -> list[PrefabChild]:
         """Parse child prefab references.
