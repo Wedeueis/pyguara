@@ -122,6 +122,29 @@ mismatch) makes `create()` **raise**, destroying what it had built, rather
 than return a half-populated entity. An unregistered component name is skipped with a warning — register
 it if it is meant to be there.
 
+## Resources a prefab names
+
+A `Texture` or `AudioClip` field takes the file's path, and the
+application's component registry loads it through the `ResourceManager` as
+the prefab is built:
+
+```json
+{"components": {"Sprite": {"texture": "sprites/goblin.png"}}}
+```
+
+- **A file that does not load fails `create()`** with a `ValueError`
+  naming the prefab and the component, e.g. `prefab
+  'enemies/goblin.prefab.json', component Sprite: FileNotFoundError: ...`.
+  The original error is its `__cause__`. Before the registry loaded
+  textures, the path stayed a string and failed only when drawn.
+- **`factory.check(prefab)` and `factory.check_path(path)`** raise wherever
+  `create` would, without creating an entity. They build, then discard,
+  every component of the prefab and its children, with each child's
+  overrides. Run them as a game loads, to fail on a missing texture then
+  rather than mid-level; the resources stay cached for the real spawn.
+- **The registry is process-wide**, so in a process that builds several
+  applications, the most recent one's resource manager serves it.
+
 ## File format
 
 ```json
