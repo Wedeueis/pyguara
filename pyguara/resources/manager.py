@@ -12,7 +12,7 @@ import json
 import os
 import time
 from collections import OrderedDict
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from functools import partial
 from pathlib import Path
 from typing import Any, TypeVar
@@ -44,13 +44,12 @@ T = TypeVar("T", bound=Resource)
 class ResourceManager:
     """Orchestrate the loading, caching, and lifecycle of game resources.
 
-    - ``load()`` is a cache-get: a miss reads from disk and caches. The
-      resource sits in the cache unpinned (reference count 0).
+    - ``load()`` is a cache-get, leaving the resource unpinned (count 0).
     - ``acquire()`` and ``release()`` pin and unpin, and must be balanced.
-      A ``release()`` that drops the count to 0 evicts at once.
     - ``unload_unused()`` evicts every resource whose count is 0, and
       ``unload(path, force=True)`` evicts regardless of the count.
-    - ``reload()`` re-reads a cached resource, keeping its count.
+    - What loads during a load is a dependency: kept while a dependent is
+      cached, except by ``force``, and ``reload()`` rebuilds its dependents.
 
     Example:
         A `.meta` sidecar (`hero.png.meta` for `hero.png`) supplies import
@@ -79,6 +78,15 @@ class ResourceManager:
         self._path_index: dict[str, str] = {}
         self._reference_counts: dict[str, int] = {}
         self._meta_loader = meta_loader or get_meta_loader()
+
+        # The dependency graph, both directions, by resolved key. Edges are
+        # recorded while a resource loads: whatever it loads in the
+        # meantime, it depends on. `_loading` is the stack of keys whose
+        # loader or builder is running.
+        self._dependencies: dict[str, set[str]] = {}
+        self._dependents: dict[str, set[str]] = {}
+        self._loading: list[str] = []
+        self._builders: dict[str, Callable[[], Resource]] = {}
 
         # None means unbounded, which is the behaviour every existing
         # caller already has. A budget is opted into.
@@ -189,6 +197,7 @@ class ResourceManager:
                     f"but {resource_type.__name__} was requested."
                 )
             self._cache.move_to_end(actual_path)
+            self._record_dependency(actual_path)
             return res
 
         # 3. Load from disk
@@ -207,7 +216,140 @@ class ResourceManager:
         # the caller asked for should never be the thing evicted to make
         # room for itself, however small the budget.
         self.evict_to_budget(protect=actual_path)
+        self._record_dependency(actual_path)
 
+        return resource
+
+    def build(
+        self, key: str, resource_type: type[T], builder: Callable[[], Resource]
+    ) -> T:
+        """Cache a resource assembled from others, rebuilt when one reloads.
+
+        On a miss `builder` runs, and every resource it loads becomes a
+        dependency of `key`. On a hit it does not run. The result is
+        cached unpinned, like a `load()`.
+
+        Args:
+            key: The cache key to keep it under.
+            resource_type: The class it must be.
+            builder: Makes it, loading what it needs through this manager.
+
+        Returns:
+            The cached or newly built resource.
+
+        Raises:
+            TypeError: If the cached or built resource is not `resource_type`.
+        """
+        if key in self._cache:
+            cached = self._cache[key]
+            if not isinstance(cached, resource_type):
+                raise TypeError(
+                    f"Resource '{key}' is cached as {type(cached).__name__}, "
+                    f"but {resource_type.__name__} was requested."
+                )
+            self._cache.move_to_end(key)
+            self._record_dependency(key)
+            return cached
+
+        resource = self._run_builder(key, builder, resource_type)
+        self._builders[key] = builder
+        self._cache[key] = resource
+        self._reference_counts[key] = 0
+        self.evict_to_budget(protect=key)
+        self._record_dependency(key)
+        return resource
+
+    def dependencies_of(self, path_or_name: str) -> list[str]:
+        """Return the keys a resource loaded while it loaded, sorted."""
+        key = self._path_index.get(path_or_name, path_or_name)
+        return sorted(self._dependencies.get(key, ()))
+
+    def dependents_of(self, path_or_name: str) -> list[str]:
+        """Return every cached resource built on this one, in reload order.
+
+        Direct and indirect dependents, each after everything it depends on
+        in the list, which is the order `reload()` rebuilds them in.
+        """
+        key = self._path_index.get(path_or_name, path_or_name)
+        order: list[str] = []
+        seen = {key}
+
+        def visit(node: str) -> None:
+            for dependent in sorted(self._dependents.get(node, ())):
+                if dependent not in seen and dependent in self._cache:
+                    seen.add(dependent)
+                    visit(dependent)
+                    order.append(dependent)
+
+        visit(key)
+        order.reverse()
+        return order
+
+    def _record_dependency(self, key: str) -> None:
+        """Note that the resource now loading depends on `key`."""
+        if self._loading and self._loading[-1] != key:
+            dependent = self._loading[-1]
+            self._dependencies.setdefault(dependent, set()).add(key)
+            self._dependents.setdefault(key, set()).add(dependent)
+
+    def _forget_dependencies(self, key: str) -> set[str]:
+        """Drop the edges from `key` to what it depends on, returning them."""
+        dependencies = self._dependencies.pop(key, set())
+        for dependency in dependencies:
+            dependents = self._dependents.get(dependency)
+            if dependents is not None:
+                dependents.discard(key)
+                if not dependents:
+                    del self._dependents[dependency]
+        return dependencies
+
+    def _restore_dependencies(self, key: str, dependencies: set[str]) -> None:
+        """Put back edges `_forget_dependencies` removed."""
+        self._forget_dependencies(key)
+        if dependencies:
+            self._dependencies[key] = set(dependencies)
+            for dependency in dependencies:
+                self._dependents.setdefault(dependency, set()).add(key)
+
+    def _has_cached_dependent(self, key: str) -> bool:
+        """Whether a cached resource depends on `key`."""
+        return any(d in self._cache for d in self._dependents.get(key, ()))
+
+    def _enter_loading(self, key: str, requested_as: str | None) -> None:
+        """Push `key` onto the loading stack, refusing a cycle.
+
+        Raises:
+            ResourceLoadError: If `key` is already loading further down.
+        """
+        if key in self._loading:
+            cycle = self._loading[self._loading.index(key) :] + [key]
+            raise ResourceLoadError(
+                key, "depends on itself: " + " -> ".join(cycle), name=requested_as
+            )
+        self._loading.append(key)
+
+    def _run_builder(
+        self, key: str, builder: Callable[[], Resource], resource_type: type[T]
+    ) -> T:
+        """Run a builder with `key` loading, and type-check its result.
+
+        Raises:
+            TypeError: If the builder returns the wrong type.
+        """
+        self._enter_loading(key, None)
+        try:
+            resource = builder()
+        except BaseException:
+            self._forget_dependencies(key)
+            raise
+        finally:
+            self._loading.pop()
+        if not isinstance(resource, resource_type):
+            self._forget_dependencies(key)
+            raise TypeError(
+                f"The builder for '{key}' returned {type(resource).__name__}, "
+                f"expected {resource_type.__name__}."
+            )
         return resource
 
     # ------------------------------------------------------------------
@@ -545,6 +687,7 @@ class ResourceManager:
 
         # Check for meta-aware loader and load metadata
         meta = None
+        self._enter_loading(actual_path, requested_as)
         try:
             if isinstance(loader, IMetaAwareLoader):
                 meta = self._meta_loader.load_meta(actual_path)
@@ -555,8 +698,10 @@ class ResourceManager:
                 resource = loader.load(actual_path)
         except ResourceError:
             # Already carries its own context -- re-wrapping would bury it.
+            self._forget_unless_cached(actual_path)
             raise
         except Exception as e:
+            self._forget_unless_cached(actual_path)
             # A loader's own `FileNotFoundError` or `pygame.error` names
             # neither the asset the caller asked for nor, clearly, the path
             # the index resolved it to. `load_atlas()` already wrapped its
@@ -564,8 +709,11 @@ class ResourceManager:
             raise ResourceLoadError(
                 actual_path, f"{type(e).__name__}: {e}", name=requested_as
             ) from e
+        finally:
+            self._loading.pop()
 
         if not isinstance(resource, resource_type):
+            self._forget_unless_cached(actual_path)
             raise TypeError(
                 f"Loader for {extension} returned {type(resource).__name__}, "
                 f"expected {resource_type.__name__}."
@@ -577,15 +725,18 @@ class ResourceManager:
 
         return resource
 
+    def _forget_unless_cached(self, key: str) -> None:
+        """Drop a failed first load's edges; a failed reload's are restored."""
+        if key not in self._cache:
+            self._forget_dependencies(key)
+
     def reload(self, path_or_name: str) -> Resource:
-        """Re-read a cached resource from disk and swap it in place.
+        """Re-read a cached resource, then rebuild everything that depends on it.
 
-        Runs the registered loader again (re-reading the `.meta` sidecar too,
-        if the loader is meta-aware) and replaces the cached instance. The
-        reference count is preserved.
-
-        The old instance is not mutated: a caller holding it keeps a stale
-        object, and must ``load()`` again to get the new one.
+        Runs the loader again (re-reading a meta-aware loader's `.meta`
+        sidecar) and swaps the cached instance, keeping its reference count.
+        Then each cached dependent is reloaded, in `dependents_of` order. An
+        old instance is not mutated: its holder must `load()` again.
 
         Args:
             path_or_name: The full path or indexed filename of the asset.
@@ -598,6 +749,8 @@ class ResourceManager:
             ValueError: If no loader is registered for the file extension.
             TypeError: If the file now loads as a different type than the
                 cached instance.
+            ResourceLoadError: If it or a dependent fails to load. Whatever
+                reloaded before the failure stays reloaded.
         """
         actual_path = self._path_index.get(path_or_name, path_or_name)
 
@@ -606,22 +759,36 @@ class ResourceManager:
                 f"Cannot reload a resource that is not loaded: {path_or_name}"
             )
 
-        old_type = type(self._cache[actual_path])
+        dependents = self.dependents_of(actual_path)
+        resource = self._reload_one(actual_path)
+        for dependent in dependents:
+            if dependent in self._cache:
+                self._reload_one(dependent)
+        return resource
+
+    def _reload_one(self, key: str) -> Resource:
+        """Reload one cached resource, re-recording what it depends on."""
+        old_type = type(self._cache[key])
         # Drop any cached .meta so import settings changed on disk take effect.
-        self._meta_loader.invalidate(actual_path)
-        resource = self._load_from_disk(actual_path, old_type)
+        self._meta_loader.invalidate(key)
+        previous = self._forget_dependencies(key)
+        try:
+            builder = self._builders.get(key)
+            if builder is not None:
+                resource: Resource = self._run_builder(key, builder, old_type)
+            else:
+                resource = self._load_from_disk(key, old_type)
+        except BaseException:
+            self._restore_dependencies(key, previous)
+            raise
 
-        # Released, not merely overwritten. Hot-reload is the one path that
-        # replaces a live resource, so before this it leaked one driver
-        # allocation per file save -- the most-exercised leak of the set,
-        # and the least visible, because a development session never runs
-        # long enough for it to matter and a shipped game never hits it.
-        # The reference count survives: callers that acquired the old
-        # instance still hold a claim on the key.
-        self._evict_entry(actual_path, drop_refcount=False)
+        # Released, not merely overwritten: the old instance may hold a
+        # driver allocation. The reference count survives, because callers
+        # that acquired the old instance still hold a claim on the key.
+        self._evict_entry(key, drop_refcount=False)
 
-        self._cache[actual_path] = resource
-        logger.debug("Reloaded resource: %s", actual_path)
+        self._cache[key] = resource
+        logger.debug("Reloaded resource: %s", key)
         return resource
 
     def acquire(self, path_or_name: str) -> None:
@@ -680,6 +847,8 @@ class ResourceManager:
 
         if drop_refcount:
             self._reference_counts.pop(key, None)
+            self._forget_dependencies(key)
+            self._builders.pop(key, None)
 
     def release(self, path_or_name: str) -> None:
         """Decrement the reference count for a resource.
@@ -712,16 +881,20 @@ class ResourceManager:
 
         self._reference_counts[actual_path] -= 1
 
-        # Auto-unload when ref count reaches zero
-        if self._reference_counts[actual_path] == 0:
+        # Auto-unload when ref count reaches zero, unless a cached resource
+        # is built on it.
+        if self._reference_counts[actual_path] == 0 and not self._has_cached_dependent(
+            actual_path
+        ):
             self._evict_entry(actual_path)
             logger.debug("Auto-unloaded resource (ref count 0): %s", actual_path)
 
     def unload(self, path_or_name: str, force: bool = False) -> None:
-        """Remove a resource from the cache, allowing the garbage collector to free memory.
+        """Drop a reference to a resource, evicting it when none are left.
 
-        By default, this decrements the reference count and only removes the resource
-        when the count reaches zero. Use force=True to bypass reference counting.
+        Without `force`, one reference is dropped, and the resource is
+        evicted once it has none and no cached resource depends on it. With
+        `force`, it is evicted regardless.
 
         Args:
             path_or_name (str): The identifier used to load the resource.
@@ -733,48 +906,47 @@ class ResourceManager:
             return  # Already unloaded
 
         if force:
-            # Force unload regardless of ref count
             self._evict_entry(actual_path)
             logger.debug("Force unloaded resource: %s", actual_path)
+            return
+
+        if self._reference_counts.get(actual_path, 0) > 0:
+            self._reference_counts[actual_path] -= 1
+        if self._reference_counts.get(actual_path, 0) > 0:
+            logger.debug(
+                "Decremented ref count for %s (now %d)",
+                actual_path,
+                self._reference_counts[actual_path],
+            )
+        elif self._has_cached_dependent(actual_path):
+            logger.debug("Kept %s: a cached resource depends on it", actual_path)
         else:
-            # Respect reference counting (same as release())
-            if (
-                actual_path not in self._reference_counts
-                or self._reference_counts[actual_path] <= 0
-            ):
-                # No references, safe to unload
-                self._evict_entry(actual_path)
-                logger.debug("Unloaded resource: %s", actual_path)
-            else:
-                # Has references, just decrement
-                self._reference_counts[actual_path] -= 1
-                if self._reference_counts[actual_path] == 0:
-                    self._evict_entry(actual_path)
-                    logger.debug("Unloaded resource (ref count 0): %s", actual_path)
-                else:
-                    logger.debug(
-                        "Decremented ref count for %s (now %d)",
-                        actual_path,
-                        self._reference_counts[actual_path],
-                    )
+            self._evict_entry(actual_path)
+            logger.debug("Unloaded resource: %s", actual_path)
 
     def unload_unused(self) -> int:
-        """Batch-unload all resources with zero reference count.
+        """Evict every resource with no references and no cached dependent.
 
-        This is useful for cleanup between scenes or game states.
+        A dependency whose last dependent this evicts goes too. Useful for
+        cleanup between scenes or game states.
 
         Returns:
             int: The number of resources unloaded.
         """
-        to_unload = [
-            path for path, count in self._reference_counts.items() if count == 0
-        ]
-
-        for path in to_unload:
-            self._evict_entry(path)
-            logger.debug("Batch unloaded resource: %s", path)
-
-        return len(to_unload)
+        unloaded = 0
+        while True:
+            to_unload = [
+                path
+                for path in self._cache
+                if self._reference_counts.get(path, 0) == 0
+                and not self._has_cached_dependent(path)
+            ]
+            if not to_unload:
+                return unloaded
+            for path in to_unload:
+                self._evict_entry(path)
+                logger.debug("Batch unloaded resource: %s", path)
+            unloaded += len(to_unload)
 
     # ------------------------------------------------------------------
     # Cache budget
@@ -856,6 +1028,8 @@ class ResourceManager:
                 continue
             if self._reference_counts.get(path, 0) > 0:
                 continue
+            if self._has_cached_dependent(path):
+                continue
             size = self._cache[path].size_bytes
             if size <= 0:
                 # Evicting something of unknown size frees an unknown
@@ -928,11 +1102,10 @@ class ResourceManager:
     def load_atlas(self, atlas_path: str, metadata_path: str) -> Atlas:
         """Load a sprite atlas with its metadata.
 
-        This method loads both the atlas texture and its JSON metadata file,
-        parsing the sprite regions and creating an Atlas object for convenient
-        access to packed sprites. An atlas of several pages names the other
-        pages' images in its metadata, and they are loaded from beside
-        `atlas_path`.
+        The atlas is cached under `metadata_path`, as a dependent of its page
+        textures: they stay loaded while it is cached, and reloading one
+        rebuilds it. Each call pins it; drop each with `unload(metadata_path)`. An atlas of several pages names the other pages' images
+        in its metadata, and they are loaded from beside `atlas_path`.
 
         Args:
             atlas_path (str): Path to the atlas texture image.
@@ -953,6 +1126,18 @@ class ResourceManager:
                 "assets/atlas/characters.json"
             )
             region = atlas.get_region("player_idle")
+        """
+        key = self._path_index.get(metadata_path, metadata_path)
+        atlas = self.build(key, Atlas, partial(self._read_atlas, atlas_path, key))
+        self.acquire(key)
+        return atlas
+
+    def _read_atlas(self, atlas_path: str, metadata_path: str) -> Atlas:
+        """Read an atlas's region map and load its pages.
+
+        Raises:
+            InvalidMetadataError: If the region map is missing or malformed.
+            ResourceLoadError: If a page fails to load.
         """
         # Check metadata file exists first (fail fast)
         if not assets.is_file(metadata_path):
@@ -1020,13 +1205,9 @@ class ResourceManager:
             except Exception as e:
                 raise ResourceLoadError(page_path, str(e)) from e
 
-        # The Atlas holds its textures for its whole lifetime; pin them so
-        # unload_unused() cannot pull one out from under the atlas. Drop each
-        # with unload(path, force=True) when the atlas is finished.
-        for page_path in page_paths:
-            self.acquire(page_path)
-
-        atlas = Atlas(texture=pages[0], regions=regions, pages=pages)
+        atlas = Atlas(
+            texture=pages[0], regions=regions, pages=pages, path=metadata_path
+        )
 
         logger.debug("Loaded atlas '%s' with %d regions", atlas_path, len(regions))
 

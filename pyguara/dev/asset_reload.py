@@ -18,6 +18,7 @@ from pathlib import Path
 
 from pyguara.dev.file_watcher import PollingFileWatcher
 from pyguara.log import get_logger
+from pyguara.resources.exceptions import ResourceError
 from pyguara.resources.manager import ResourceManager
 
 logger = get_logger(__name__)
@@ -117,7 +118,8 @@ class AssetReloadWatcher:
         """Apply queued reloads. Call once per frame, on the main thread.
 
         Returns:
-            The cache keys successfully reloaded this call.
+            The cache keys reloaded this call, each followed by the
+            dependents its reload rebuilt.
         """
         if time.monotonic() - self._last_refresh >= _REFRESH_INTERVAL:
             self.refresh()
@@ -128,16 +130,20 @@ class AssetReloadWatcher:
 
         reloaded: list[str] = []
         for key in dict.fromkeys(pending):  # de-dup, preserve order
+            if key in reloaded:
+                continue
+            dependents = self._rm.dependents_of(key)
             try:
                 self._rm.reload(key)
             except KeyError:
                 # Unloaded between the change and now -- nothing to reload.
                 continue
-            except (ValueError, TypeError) as exc:
+            except (ValueError, TypeError, ResourceError) as exc:
                 logger.error("Asset hot-reload failed for %s: %s", key, exc)
                 continue
             logger.info("Hot-reloaded asset: %s", key)
             reloaded.append(key)
+            reloaded.extend(d for d in dependents if d not in reloaded)
         return reloaded
 
     def _on_file_changed(self, abspath: str) -> None:

@@ -9,9 +9,10 @@ reads it back.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from pyguara.common.types import Rect, Vector2
-from pyguara.resources.types import Texture
+from pyguara.resources.types import Resource, Texture
 
 
 @dataclass
@@ -56,11 +57,12 @@ class AtlasRegion:
         )
 
 
-class Atlas:
+class Atlas(Resource):
     """A collection of packed sprites within one or more textures.
 
     Provides fast lookup of sprite regions by name. An atlas too big for one
-    texture has several pages, and each region names its own.
+    texture has several pages, and each region names its own. Its pages are
+    resources of their own, so its size counts nothing.
 
     Attributes:
         pages (list[Texture]): The packed textures, page 0 first.
@@ -72,6 +74,7 @@ class Atlas:
         texture: Texture,
         regions: dict[str, AtlasRegion],
         pages: list[Texture] | None = None,
+        path: str = "",
     ):
         """Initialize the atlas.
 
@@ -79,11 +82,13 @@ class Atlas:
             texture (Texture): The first page's texture.
             regions (Dict[str, AtlasRegion]): Mapping of sprite names to regions.
             pages: Every page's texture, `texture` first. None means one page.
+            path: The region map it was read from, if any.
 
         Raises:
             ValueError: If `pages` does not start with `texture`, or a region
                 names a page the atlas does not have.
         """
+        super().__init__(path)
         self.pages = [texture] if pages is None else list(pages)
         if not self.pages or self.pages[0] is not texture:
             raise ValueError("an atlas's pages must start with its texture")
@@ -94,6 +99,11 @@ class Atlas:
                     f"atlas has {len(self.pages)}"
                 )
         self.regions = regions
+
+    @property
+    def native_handle(self) -> Any:
+        """The atlas itself: the backend objects are its pages'."""
+        return self
 
     @property
     def texture(self) -> Texture:
