@@ -18,6 +18,7 @@ from pyguara.audio.exceptions import AudioError, UnsupportedAudioCapability
 from pyguara.audio.manager import (
     VARIATION_STREAM,
     AudioManager,
+    SfxDucking,
     SfxLimit,
     SoundVariation,
 )
@@ -41,6 +42,7 @@ __all__ = [
     # Core system
     "IAudioSystem",
     "AudioManager",
+    "SfxDucking",
     "SfxLimit",
     "SoundVariation",
     "VARIATION_STREAM",

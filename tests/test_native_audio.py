@@ -251,7 +251,10 @@ class TestTheProtocol:
 
     def test_it_reports_exactly_what_it_does(self, system: NativeAudioSystem) -> None:
         assert system.capabilities == (
-            AudioCapability.PITCH | AudioCapability.LOOP_POINTS
+            AudioCapability.PITCH
+            | AudioCapability.LOOP_POINTS
+            | AudioCapability.INTERACTIVE_MUSIC
+            | AudioCapability.DUCKING
         )
 
     def test_bus_effects_are_still_declined(self, system: NativeAudioSystem) -> None:

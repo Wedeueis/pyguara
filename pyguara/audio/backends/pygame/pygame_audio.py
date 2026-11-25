@@ -499,8 +499,17 @@ class PygameAudioSystem:
 
     # ========== Music Control ==========
 
-    def play_music(self, path: str, loop: bool = True, fade_ms: int = 1000) -> None:
-        """Stream background music from disk."""
+    def play_music(
+        self, path: str, loop: bool = True, fade_ms: int = 1000, crossfade: bool = False
+    ) -> None:
+        """Stream background music from disk.
+
+        Raises:
+            UnsupportedAudioCapability: If `crossfade` is asked for:
+                `pygame.mixer.music` plays one track.
+        """
+        if crossfade:
+            require_capability(self, AudioCapability.INTERACTIVE_MUSIC)
         try:
             if assets.in_pack(path):
                 # From memory, the format named by the extension.
@@ -512,6 +521,43 @@ class PygameAudioSystem:
             pygame.mixer.music.set_volume(self._get_effective_music_volume())
         except pygame.error as e:
             logger.error("Failed to play music '%s': %s", path, e, exc_info=True)
+
+    def play_music_layers(
+        self,
+        paths: Sequence[str],
+        levels: Sequence[float],
+        loop: bool = True,
+        fade_ms: int = 1000,
+        crossfade: bool = False,
+    ) -> None:
+        """Refuse: `pygame.mixer.music` plays one track.
+
+        Raises:
+            UnsupportedAudioCapability: Always.
+        """
+        require_capability(self, AudioCapability.INTERACTIVE_MUSIC)
+
+    def set_music_layer(self, layer: int, level: float, fade_ms: int = 500) -> None:
+        """Refuse: `pygame.mixer.music` plays one track.
+
+        Raises:
+            UnsupportedAudioCapability: Always.
+        """
+        require_capability(self, AudioCapability.INTERACTIVE_MUSIC)
+
+    def duck_music(
+        self,
+        sound: SoundHandle,
+        depth: float,
+        attack_ms: int = 50,
+        release_ms: int = 500,
+    ) -> None:
+        """Refuse: `pygame.mixer` has no envelope to dip the music with.
+
+        Raises:
+            UnsupportedAudioCapability: Always.
+        """
+        require_capability(self, AudioCapability.DUCKING)
 
     def stop_music(self, fade_ms: int = 1000) -> None:
         """Stop the currently playing music."""
