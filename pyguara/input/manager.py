@@ -1,6 +1,7 @@
 """Core input processing system."""
 
 import math
+from dataclasses import dataclass
 from typing import Any
 
 from pyguara.events.dispatcher import EventDispatcher
@@ -14,6 +15,7 @@ from pyguara.events.input import (
 from pyguara.input.binding import KeyBindingManager
 from pyguara.input.coop import PlayerRouter
 from pyguara.input.events import (
+    BindingCaptureEndedEvent,
     GamepadAxisEvent,
     GamepadButtonEvent,
     GamepadDisconnectedEvent,
@@ -24,13 +26,17 @@ from pyguara.input.events import (
 )
 from pyguara.input.gamepad import GamepadManager
 from pyguara.input.gestures import ActionTracker, Fired, Gesture
+from pyguara.input.keys import ESCAPE
 from pyguara.input.protocols import IInputBackend
 from pyguara.input.types import (
     ActionType,
+    BindingConflict,
+    ConflictResolution,
     GamepadConfig,
     InputAction,
     InputContext,
     InputDevice,
+    RebindResult,
 )
 from pyguara.log import get_logger
 from pyguara.replay.recorder import ReplayRecorder
@@ -44,6 +50,18 @@ def _replayed_position(event: RecordedInputEvent) -> tuple[int, int]:
     if event.position is None:
         return (0, 0)
     return (int(event.position[0]), int(event.position[1]))
+
+
+@dataclass(frozen=True, slots=True)
+class _Capture:
+    """A binding capture waiting for its press."""
+
+    action: str
+    context: InputContext
+    devices: frozenset[InputDevice]
+    resolution: ConflictResolution
+    cancel_key: int | None
+    player: int | None
 
 
 class InputManager:
@@ -84,6 +102,11 @@ class InputManager:
         # and gestures measure against.
         self._time = 0.0
         self._tracker = ActionTracker()
+
+        # The binding being captured, if any, and the sources whose press it
+        # took, so their release is taken too.
+        self._capture: _Capture | None = None
+        self._taken: set[tuple[InputDevice, int, int | None]] = set()
 
         # GamepadManager owns hot-plug, per-button/axis state, and deadzone
         # filtering; bound gamepad Actions are driven off the
@@ -269,6 +292,66 @@ class InputManager:
         """Seconds `player` has held `action` down, or 0 while it is up."""
         return self._tracker.held_for(action, player, self._time)
 
+    def capture_binding(
+        self,
+        action: str,
+        context: InputContext = InputContext.GAMEPLAY,
+        *,
+        devices: tuple[InputDevice, ...] = (
+            InputDevice.KEYBOARD,
+            InputDevice.MOUSE,
+            InputDevice.GAMEPAD,
+        ),
+        resolution: ConflictResolution = ConflictResolution.SWAP,
+        cancel_key: int | None = ESCAPE,
+        player: int | None = None,
+    ) -> None:
+        """Bind `action` to the next key or button pressed, for a settings screen.
+
+        The press replaces the action's binding on that device only, and
+        reaches nothing else, nor does its release. `cancel_key` ends the
+        capture unbound. Either way a `BindingCaptureEndedEvent` follows.
+        Starting a capture while one is waiting cancels the first.
+
+        Args:
+            action: The registered action to bind.
+            context: The context the binding is for.
+            devices: The devices a press is taken from; others pass through.
+            resolution: What happens to an action the key was bound to.
+            cancel_key: The keyboard key that cancels, or None for none.
+            player: Take presses only from this player's devices, or None.
+
+        Raises:
+            ValueError: If the action is not registered, `devices` is empty,
+                or `resolution` is `ERROR`.
+        """
+        if action not in self._registered_actions:
+            raise ValueError(f"cannot capture a binding for unregistered {action!r}")
+        if not devices:
+            raise ValueError("a capture needs at least one device to listen to")
+        if resolution == ConflictResolution.ERROR:
+            raise ValueError(
+                "a capture cannot raise on a conflict mid-frame; "
+                "choose SWAP, UNBIND or ALLOW"
+            )
+        self.cancel_capture()
+        self._capture = _Capture(
+            action, context, frozenset(devices), resolution, cancel_key, player
+        )
+
+    @property
+    def capturing(self) -> str | None:
+        """The action a binding is being captured for, or None."""
+        return None if self._capture is None else self._capture.action
+
+    def cancel_capture(self) -> bool:
+        """End a waiting capture unbound; False if there was none."""
+        capture = self._capture
+        if capture is None:
+            return False
+        self._end_capture(capture, None, None, None, None)
+        return True
+
     def attach_recorder(self, recorder: ReplayRecorder) -> None:
         """Start feeding every processed input event to `recorder`.
 
@@ -373,6 +456,13 @@ class InputManager:
 
     def _on_gamepad_button(self, event: GamepadButtonEvent) -> None:
         """Translate a GamepadManager button-state change into bound Actions."""
+        if self._captured(
+            InputDevice.GAMEPAD,
+            event.button.value,
+            event.is_pressed,
+            event.controller_id,
+        ):
+            return
         self._handle_input(
             InputDevice.GAMEPAD,
             event.button.value,
@@ -453,6 +543,8 @@ class InputManager:
 
         if isinstance(event, (KeyDownEvent, KeyUpEvent)):
             is_down = isinstance(event, KeyDownEvent)
+            if self._captured(InputDevice.KEYBOARD, event.key_code, is_down, None):
+                return
             modifiers = set(event.modifiers)
             self._handle_input(InputDevice.KEYBOARD, event.key_code, is_down=is_down)
 
@@ -475,6 +567,8 @@ class InputManager:
 
         # --- Mouse Buttons ---
         elif isinstance(event, MouseButtonEvent):
+            if self._captured(InputDevice.MOUSE, event.button, event.is_down, None):
+                return
             self._handle_input(InputDevice.MOUSE, event.button, is_down=event.is_down)
 
             if self._recorder is not None and self._recorder.is_recording:
@@ -630,3 +724,61 @@ class InputManager:
                     source=self,
                 )
             )
+
+    def _captured(
+        self, device: InputDevice, code: int, is_down: bool, controller_id: int | None
+    ) -> bool:
+        """Take a press for a waiting capture, or the release of one taken."""
+        source = (device, code, controller_id)
+        if not is_down:
+            if source in self._taken:
+                self._taken.discard(source)
+                return True
+            return False
+        capture = self._capture
+        if capture is None or self._tracker.is_source_down(source):
+            return False
+        if device == InputDevice.KEYBOARD and code == capture.cancel_key:
+            self._taken.add(source)
+            self._end_capture(capture, None, None, None, None)
+            return True
+        if device not in capture.devices:
+            return False
+        if (
+            capture.player is not None
+            and self._player_of(device, controller_id) != capture.player
+        ):
+            return False
+        self._taken.add(source)
+        result, conflict = self._bindings.rebind(
+            capture.action,
+            device,
+            code,
+            capture.context,
+            capture.resolution,
+            device_only=True,
+        )
+        self._end_capture(capture, device, code, result, conflict)
+        return True
+
+    def _end_capture(
+        self,
+        capture: _Capture,
+        device: InputDevice | None,
+        code: int | None,
+        result: RebindResult | None,
+        conflict: BindingConflict | None,
+    ) -> None:
+        """Clear the capture and announce how it ended."""
+        self._capture = None
+        self._dispatcher.dispatch(
+            BindingCaptureEndedEvent(
+                action=capture.action,
+                context=capture.context.value,
+                device=device,
+                code=code,
+                result=result,
+                conflict=conflict,
+                source=self,
+            )
+        )

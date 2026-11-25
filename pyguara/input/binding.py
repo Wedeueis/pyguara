@@ -102,17 +102,24 @@ class KeyBindingManager:
         """
         return self._action_bindings.get(context.value, {}).get(action, [])
 
-    def unbind(self, action: str, context: InputContext) -> None:
-        """Remove all bindings for an action.
+    def unbind(
+        self, action: str, context: InputContext, device: InputDevice | None = None
+    ) -> None:
+        """Remove an action's bindings, on every device or on one.
 
         Args:
             action: Action name to unbind.
             context: Input context to modify.
+            device: Only remove the bindings on this device, or None for all.
         """
         ctx_name = context.value
 
         # Get bindings for this action
-        bindings = self._action_bindings.get(ctx_name, {}).get(action, [])
+        bindings = [
+            key
+            for key in self._action_bindings.get(ctx_name, {}).get(action, [])
+            if device is None or key[0] == device
+        ]
 
         # Remove from primary bindings map
         ctx_bindings = self._bindings.get(ctx_name, {})
@@ -123,7 +130,14 @@ class KeyBindingManager:
                     del ctx_bindings[key]
 
         # Remove from reverse mapping
-        if ctx_name in self._action_bindings:
+        remaining = [
+            key
+            for key in self._action_bindings.get(ctx_name, {}).get(action, [])
+            if key not in bindings
+        ]
+        if remaining:
+            self._action_bindings[ctx_name][action] = remaining
+        elif ctx_name in self._action_bindings:
             self._action_bindings[ctx_name].pop(action, None)
 
         logger.debug(f"Unbound action '{action}' from context '{ctx_name}'")
@@ -185,6 +199,8 @@ class KeyBindingManager:
         new_code: int,
         context: InputContext,
         resolution: ConflictResolution = ConflictResolution.ERROR,
+        *,
+        device_only: bool = False,
     ) -> tuple[RebindResult, BindingConflict | None]:
         """Rebind an action to a new key with conflict handling.
 
@@ -194,6 +210,8 @@ class KeyBindingManager:
             new_code: New key/button code.
             context: Input context to modify.
             resolution: Strategy for handling conflicts.
+            device_only: Replace only the action's bindings on `new_device`,
+                keeping those on other devices, and swap only among them.
 
         Returns:
             Tuple of ``(result, conflict_info)``. ``conflict_info`` is ``None``
@@ -220,6 +238,7 @@ class KeyBindingManager:
             )
 
         result = RebindResult.SUCCESS
+        scope = new_device if device_only else None
 
         if conflicting_actions:
             if resolution == ConflictResolution.ERROR:
@@ -229,13 +248,17 @@ class KeyBindingManager:
                 )
             elif resolution == ConflictResolution.SWAP:
                 # Get current bindings for this action
-                old_bindings = self.get_bindings_for_action(action, context)
+                old_bindings = [
+                    key
+                    for key in self.get_bindings_for_action(action, context)
+                    if scope is None or key[0] == scope
+                ]
 
                 # Unbind conflicting actions from new key
                 self.unbind_key(new_device, new_code, context)
 
                 # Unbind this action from old keys
-                self.unbind(action, context)
+                self.unbind(action, context, scope)
 
                 # Bind this action to new key
                 self.bind(new_device, new_code, action, context)
@@ -254,7 +277,7 @@ class KeyBindingManager:
                 self.unbind_key(new_device, new_code, context)
 
                 # Unbind this action from old keys
-                self.unbind(action, context)
+                self.unbind(action, context, scope)
 
                 # Bind to new key
                 self.bind(new_device, new_code, action, context)
@@ -262,7 +285,7 @@ class KeyBindingManager:
                 result = RebindResult.UNBOUND
             elif resolution == ConflictResolution.ALLOW:
                 # Unbind this action from old keys
-                self.unbind(action, context)
+                self.unbind(action, context, scope)
 
                 # Allow multiple actions on same key
                 self.bind(new_device, new_code, action, context)
@@ -270,7 +293,7 @@ class KeyBindingManager:
                 result = RebindResult.SUCCESS
         else:
             # No conflict, simple rebind
-            self.unbind(action, context)
+            self.unbind(action, context, scope)
             self.bind(new_device, new_code, action, context)
 
         logger.debug(
