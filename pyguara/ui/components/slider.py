@@ -5,7 +5,7 @@ from collections.abc import Callable
 from pyguara.common.types import Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.widget import Widget
-from pyguara.ui.types import UIElementState, UIEventType
+from pyguara.ui.types import UIElementState, UIEventType, text_style
 
 
 class Slider(Widget):
@@ -102,6 +102,7 @@ class Slider(Widget):
                 Vector2(self.rect.x + track_width + self.VALUE_GAP, self.rect.y),
                 colors.text_body,
                 self.theme.fonts.size_small,
+                **text_style(self.theme.fonts),
             )
 
     def _value_text(self) -> str:
@@ -113,7 +114,9 @@ class Slider(Widget):
         if not self.show_value:
             return 0
         width, _ = renderer.get_text_size(
-            self._value_text(), self.theme.fonts.size_small
+            self._value_text(),
+            self.theme.fonts.size_small,
+            **text_style(self.theme.fonts),
         )
         return width + self.VALUE_GAP
 

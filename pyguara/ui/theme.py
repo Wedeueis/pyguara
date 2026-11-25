@@ -6,17 +6,22 @@ import json
 from copy import deepcopy
 from dataclasses import asdict, fields
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pyguara import assets
 from pyguara.common.types import Color
+from pyguara.resources.font import Font
 from pyguara.ui.types import (
+    FONT_FACES,
     BorderScheme,
     ColorScheme,
     FontScheme,
     ShadowScheme,
     SpacingScheme,
 )
+
+if TYPE_CHECKING:
+    from pyguara.resources.manager import ResourceManager
 
 
 class ThemeValidationError(Exception):
@@ -111,23 +116,28 @@ class UITheme:
             "name": self.name,
             "colors": scheme_to_dict(self.colors),
             "spacing": asdict(self.spacing),
-            "fonts": asdict(self.fonts),
+            "fonts": fonts_to_dict(self.fonts),
             "borders": scheme_to_dict(self.borders),
             "shadows": scheme_to_dict(self.shadows),
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> UITheme:
+    def from_dict(
+        cls, data: dict[str, Any], resources: ResourceManager | None = None
+    ) -> UITheme:
         """Create theme from dictionary.
 
         Args:
             data: Theme configuration dictionary.
+            resources: Loads the font files the theme names. Needed only
+                when it names some.
 
         Returns:
             UITheme instance.
 
         Raises:
-            ThemeValidationError: If data is invalid.
+            ThemeValidationError: If data is invalid, or names a font file
+                with no `resources` to load it.
         """
         if not isinstance(data, dict):
             raise ThemeValidationError("Theme data must be a dictionary")
@@ -173,7 +183,7 @@ class UITheme:
                 name=data.get("name", "unnamed"),
                 colors=dict_to_scheme(ColorScheme, data.get("colors", {})),
                 spacing=SpacingScheme(**data.get("spacing", {})),
-                fonts=FontScheme(**data.get("fonts", {})),
+                fonts=fonts_from_dict(data.get("fonts", {}), resources),
                 borders=dict_to_scheme(BorderScheme, data.get("borders", {})),
                 shadows=dict_to_scheme(ShadowScheme, data.get("shadows", {})),
             )
@@ -192,11 +202,14 @@ class UITheme:
         return json.dumps(self.to_dict(), indent=indent)
 
     @classmethod
-    def from_json(cls, json_str: str) -> UITheme:
+    def from_json(
+        cls, json_str: str, resources: ResourceManager | None = None
+    ) -> UITheme:
         """Create theme from JSON string.
 
         Args:
             json_str: JSON string containing theme data.
+            resources: Loads the font files the theme names, as `from_dict`.
 
         Returns:
             UITheme instance.
@@ -206,7 +219,7 @@ class UITheme:
         """
         try:
             data = json.loads(json_str)
-            return cls.from_dict(data)
+            return cls.from_dict(data, resources)
         except json.JSONDecodeError as e:
             raise ThemeValidationError(f"Invalid JSON: {e}") from e
 
@@ -222,11 +235,14 @@ class UITheme:
             f.write(self.to_json())
 
     @classmethod
-    def load(cls, path: Path | str) -> UITheme:
+    def load(
+        cls, path: Path | str, resources: ResourceManager | None = None
+    ) -> UITheme:
         """Load theme from JSON file.
 
         Args:
             path: File path to load from.
+            resources: Loads the font files the theme names, as `from_dict`.
 
         Returns:
             UITheme instance.
@@ -239,7 +255,43 @@ class UITheme:
         if not assets.is_file(path):
             raise FileNotFoundError(f"Theme file not found: {path}")
 
-        return cls.from_json(assets.read_text(path))
+        return cls.from_json(assets.read_text(path), resources)
+
+
+def fonts_to_dict(fonts: FontScheme) -> dict[str, Any]:
+    """Write a font scheme as JSON values, each face as its file's path."""
+    result = asdict(fonts)
+    for face in FONT_FACES:
+        font = getattr(fonts, face)
+        result[face] = None if font is None else font.path
+    return result
+
+
+def fonts_from_dict(
+    data: dict[str, Any], resources: ResourceManager | None
+) -> FontScheme:
+    """Read a font scheme, loading each face's file through `resources`.
+
+    Raises:
+        ThemeValidationError: If a face is not a path, or names a file with
+            no `resources` to load it.
+    """
+    if not isinstance(data, dict):
+        raise ThemeValidationError("Scheme data for FontScheme must be a dictionary")
+    kwargs = dict(data)
+    for face in FONT_FACES:
+        path = kwargs.get(face)
+        if path is None:
+            continue
+        if not isinstance(path, str):
+            raise ThemeValidationError(f"fonts.{face} must be a font file's path")
+        if resources is None:
+            raise ThemeValidationError(
+                f"the theme names a font file for fonts.{face} ({path}); "
+                f"pass resources= to load it"
+            )
+        kwargs[face] = resources.load(path, Font)
+    return FontScheme(**kwargs)
 
 
 # Global default (can be swapped at runtime)

@@ -239,6 +239,9 @@ A `Font` is one face. Passing `bold=` or `italic=` with it raises
 a missing style differently, so neither does. A `.ttc` collection is not
 claimed, since the pygame renderer opens only its first face.
 
+A UI theme names the faces its widgets draw in; see
+[the design system](ui-design-system.md#fonts).
+
 ## Packed assets: `pyguara.assets`
 
 Every engine loader reads files through `pyguara.assets`, never `open()`, so

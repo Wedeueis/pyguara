@@ -109,6 +109,29 @@ call punches a transparent hole in the element. `bevel_edges()` mixes the
 highlight into the fill colour on the CPU instead, which gives the same
 result on both backends and is deterministic enough to assert in a test.
 
+## Fonts
+
+A theme's `fonts` names the faces every stock widget draws in: `regular`,
+`bold`, `italic` and `bold_italic`, each a `Font` loaded through
+`ResourceManager`. With none set, widgets use the engine's default face.
+
+```python
+theme = cerrado_dusk()
+theme.fonts.regular = resources.load("fonts/Inter-Regular.ttf", Font)
+theme.fonts.bold = resources.load("fonts/Inter-Bold.ttf", Font)
+set_theme(theme)
+```
+
+A theme that sets some faces must set every style its text uses. `[i]` in a
+`RichLabel` under a theme with no `italic` face raises `ValueError`, naming
+the missing face, rather than drawing upright text. A widget asks for a face
+through `pyguara.ui.types.text_style(theme.fonts, bold, italic)`, which a
+custom widget can call too.
+
+A saved theme writes each face as its file's path. Loading one that names
+fonts takes the resource manager: `UITheme.load(path, resources)`.
+`fonts.family` is a label only and is not drawn with.
+
 ## Seeing it work
 
 `examples/guara_falcao` is the worked example: a title screen, a HUD, a pause

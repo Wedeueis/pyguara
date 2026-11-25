@@ -13,7 +13,13 @@ from pyguara.ui.rich_text import (
     plain_text,
     wrap_spans,
 )
-from pyguara.ui.types import TextAlign
+from pyguara.ui.types import (
+    FONT_FACES,
+    LineStyle,
+    TextAlign,
+    line_style,
+    text_style,
+)
 
 
 class RichLabel(Widget):
@@ -92,11 +98,16 @@ class RichLabel(Widget):
     def _size_of(self, style: SpanStyle) -> int:
         return style.size if style.size is not None else self.font_size
 
+    def _line_style(self, style: SpanStyle) -> LineStyle:
+        return line_style(text_style(self.theme.fonts, style.bold, style.italic))
+
     def _span_size(
         self, renderer: UIRenderer, text: str, style: SpanStyle
     ) -> tuple[int, int]:
         return renderer.get_text_size(
-            text, self._size_of(style), bold=style.bold, italic=style.italic
+            text,
+            self._size_of(style),
+            **text_style(self.theme.fonts, style.bold, style.italic),
         )
 
     def measure(self, renderer: UIRenderer) -> None:
@@ -106,6 +117,7 @@ class RichLabel(Widget):
             self.font_size,
             None if self._auto_size else self.rect.width,
             id(renderer),
+            tuple(getattr(self.theme.fonts, face) for face in FONT_FACES),
         )
         if key == self._wrap_key:
             return
@@ -125,8 +137,15 @@ class RichLabel(Widget):
         for line in self._lines:
             self._line_tops.append(top)
             top += max(
-                (renderer.get_line_height(self._size_of(s.style)) for s in line.spans),
-                default=renderer.get_line_height(self.font_size),
+                (
+                    renderer.get_line_height(
+                        self._size_of(s.style), **self._line_style(s.style)
+                    )
+                    for s in line.spans
+                ),
+                default=renderer.get_line_height(
+                    self.font_size, **line_style(text_style(self.theme.fonts))
+                ),
             )
         # The last line has no line after it, so it takes no leading.
         last = self._line_tops[-1] + self._line_heights[-1]
@@ -137,7 +156,9 @@ class RichLabel(Widget):
     def _height_of(self, line: StyledLine, renderer: UIRenderer) -> int:
         """Return how tall a line's largest run is."""
         if not line.spans:
-            return renderer.get_text_size("", self.font_size)[1]
+            return renderer.get_text_size(
+                "", self.font_size, **text_style(self.theme.fonts)
+            )[1]
         return max(self._span_size(renderer, "", span.style)[1] for span in line.spans)
 
     def render(self, renderer: UIRenderer) -> None:
@@ -178,6 +199,5 @@ class RichLabel(Widget):
             Vector2(x, self.rect.y + top + line_height - height),
             style.color or default_color,
             self._size_of(style),
-            bold=style.bold,
-            italic=style.italic,
+            **text_style(self.theme.fonts, style.bold, style.italic),
         )

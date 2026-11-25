@@ -3,7 +3,7 @@
 from pyguara.common.types import Color, Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.widget import Widget
-from pyguara.ui.types import UIElementState
+from pyguara.ui.types import UIElementState, text_style
 
 
 class Button(Widget):
@@ -90,9 +90,12 @@ class Button(Widget):
             renderer: The UI renderer to draw through.
         """
         size = self.theme.fonts.size_normal
-        w, h = renderer.get_text_size(self.text, size)
+        style = text_style(self.theme.fonts)
+        w, h = renderer.get_text_size(self.text, size, **style)
 
         text_x = self.rect.x + (self.rect.width - w) // 2
         text_y = self.rect.y + (self.rect.height - h) // 2
 
-        renderer.draw_text(self.text, Vector2(text_x, text_y), self.text_color())
+        renderer.draw_text(
+            self.text, Vector2(text_x, text_y), self.text_color(), size, **style
+        )

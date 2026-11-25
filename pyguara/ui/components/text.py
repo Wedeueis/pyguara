@@ -6,7 +6,7 @@ from pyguara.common.types import Color, Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.widget import Widget
 from pyguara.ui.text_layout import wrap_text
-from pyguara.ui.types import TextAlign
+from pyguara.ui.types import TextAlign, line_style, text_style
 
 
 class Label(Widget):
@@ -71,17 +71,21 @@ class Label(Widget):
         number of lines; an auto-sizing one takes its width from the
         widest line.
         """
+        style = text_style(self.theme.fonts)
         key = (
             self.text,
             self.font_size,
             None if self._auto_size else self.rect.width,
             id(renderer),
+            style.get("font"),
         )
         if key != self._wrap_key:
             self._lines = wrap_text(
                 self.text,
                 None if self._auto_size else int(self.rect.width),
-                lambda candidate: renderer.get_text_size(candidate, self.font_size)[0],
+                lambda candidate: renderer.get_text_size(
+                    candidate, self.font_size, **style
+                )[0],
             )
             self._wrap_key = key
 
@@ -89,14 +93,16 @@ class Label(Widget):
         # a line happens to contain, and it is the font's own advance rather
         # than a line's height: the two differ by the leading the font asks
         # for, and setting by height runs a block one pixel short per line.
-        self._line_height = renderer.get_line_height(self.font_size)
+        self._line_height = renderer.get_line_height(
+            self.font_size, **line_style(style)
+        )
         # The last line has no line after it, so it takes no leading -- which
         # also leaves a one-line label exactly as tall as its text.
-        last_line = renderer.get_text_size("", self.font_size)[1]
+        last_line = renderer.get_text_size("", self.font_size, **style)[1]
         if self._auto_size:
             self.rect.width = max(
                 (
-                    renderer.get_text_size(line, self.font_size)[0]
+                    renderer.get_text_size(line, self.font_size, **style)[0]
                     for line in self._lines
                 ),
                 default=0,
@@ -113,11 +119,12 @@ class Label(Widget):
         self.measure(renderer)
 
         final_color = self._custom_color or self.theme.colors.text
+        style = text_style(self.theme.fonts)
         for index, line in enumerate(self._lines):
             if not line:
                 # Nothing to draw, but the line still takes its height.
                 continue
-            text_width, _ = renderer.get_text_size(line, self.font_size)
+            text_width, _ = renderer.get_text_size(line, self.font_size, **style)
             if self.align == TextAlign.CENTER:
                 x = self.rect.x + (self.rect.width - text_width) // 2
             elif self.align == TextAlign.RIGHT:
@@ -129,6 +136,7 @@ class Label(Widget):
                 Vector2(x, self.rect.y + index * self._line_height),
                 final_color,
                 self.font_size,
+                **style,
             )
 
     @property
