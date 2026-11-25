@@ -4,8 +4,8 @@
     uv run python tools/prefab_spawn_probe.py --count 10000
 
 Spawns Correição's ground, a `Transform` and a `Sprite` per prefab, picked
-from `ground.spawn.json`, through `PrefabFactory.spawn`, each at its own
-position. Textures are stand-ins, so the figure is the factory's own cost.
+from `ground.spawn.json` (whose boulder is a named variant), through
+`PrefabFactory.spawn`, each at its own position. Textures are stand-ins, so the figure is the factory's own cost.
 Best of five, in milliseconds, and per spawn in microseconds.
 """
 
@@ -28,10 +28,12 @@ from pyguara.prefabs import (  # noqa: E402
     PrefabCache,
     PrefabFactory,
     load_spawn_table,
+    load_variants,
 )
 from pyguara.resources.types import Texture  # noqa: E402
 
 TABLE = "examples/correicao/prefabs/ground.spawn.json"
+VARIANTS = "examples/correicao/prefabs/ground.variants.json"
 
 
 class _Texture(Texture):
@@ -54,7 +56,8 @@ def probe(count: int) -> float:
     registry.register(Transform)
     registry.register(Sprite)
     registry.register_type_converter(Texture, _Texture)
-    factory = PrefabFactory(EntityManager(), registry, PrefabCache().load)
+    resolver = load_variants(VARIANTS).resolver(PrefabCache().load)
+    factory = PrefabFactory(EntityManager(), registry, resolver)
     table = load_spawn_table(TABLE)
     points = [Vector2(i, i) for i in range(count)]
     start = time.perf_counter()

@@ -1,0 +1,7 @@
+{
+  "name": "calango",
+  "components": {
+    "Transform": {},
+    "Sprite": {"texture": "examples/correicao/assets/calango_0.png", "layer": 20}
+  }
+}

@@ -1,10 +1,11 @@
 """Correição: a calango in the caatinga, and an army-ant raid closing in.
 
 The ground and the calango are entities with a `Sprite`, drawn by the base
-`Scene.render`; the ground is prefabs and a named variant of one,
-scattered from a spawn table. The raid is an engine `Swarm`, which steers,
-animates and draws its ants natively, sorted among those sprites by layer. The raid's
-size is the `ants` argument, so the same scene runs at 1,000 or at 10,000.
+`Scene.render`. Both are prefabs, checked as the scene starts; the ground,
+which includes a named variant of the stone, is scattered from a spawn
+table. The raid is an engine `Swarm`, which steers, animates and draws its
+ants natively, sorted among those sprites by layer. The raid's size is the
+`ants` argument, so the same scene runs at 1,000 or at 10,000.
 
 Keys: WASD or the arrows to move; the calango pulses on its own. Until a
 key is pressed it walks a loop by itself.
@@ -42,13 +43,7 @@ from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input import keys
 from pyguara.input.events import OnActionEvent
 from pyguara.input.types import ActionType, InputDevice
-from pyguara.prefabs import (
-    ComponentRegistry,
-    PrefabCache,
-    PrefabFactory,
-    load_spawn_table,
-    load_variants,
-)
+from pyguara.prefabs import PrefabCache, SpawnTable, load_spawn_table, load_variants
 from pyguara.random.service import RandomService
 from pyguara.resources.manager import ResourceManager
 from pyguara.resources.types import Texture
@@ -56,6 +51,7 @@ from pyguara.scene.base import Scene
 
 ASSETS = "examples/correicao/assets"
 PREFABS = "examples/correicao/prefabs"
+PLAYER_PREFAB = f"{PREFABS}/calango.prefab.json"
 DEFAULT_ANTS = 2000
 GROUND_DECALS = 4000
 
@@ -116,7 +112,8 @@ class HordeScene(Scene):
             return resources.load(f"{ASSETS}/{name}.png", Texture)  # type: ignore[type-abstract]
 
         view_radius = math.hypot(SCREEN_WIDTH, SCREEN_HEIGHT) / 2
-        self._scatter_ground(resources, rng)
+        ground = self._load_prefabs()
+        self._scatter_ground(ground, rng)
         self._place_player([texture("calango_0"), texture("calango_1")])
 
         self.player_system = PlayerSystem(self.player, autopilot=self._autopilot)
@@ -147,40 +144,55 @@ class HordeScene(Scene):
         """Stop listening for the movement keys."""
         self.event_dispatcher.unsubscribe(OnActionEvent, self._on_action)
 
-    def _scatter_ground(self, resources: ResourceManager, rng: RandomStream) -> None:
-        """Strew grass and stones over the whole world, most of it off screen.
+    def _load_prefabs(self) -> SpawnTable:
+        """Point the scene's factory at the prefabs, and check every one.
 
-        Each is a prefab, or the boulder variant of the stone, picked from
-        `ground.spawn.json`; sprites name their textures by path, and the
-        registry loads them through `resources`.
+        The ground's boulder is a named variant, so the factory resolves
+        through the variant library. Each prefab is built once and
+        discarded, which loads its textures: a missing one fails here,
+        naming the prefab, before anything is spawned.
         """
-        registry = ComponentRegistry()
-        registry.register(Transform)
-        registry.register(Sprite)
-        registry.register_type_converter(
-            Texture,
-            lambda path: resources.load(path, Texture),  # type: ignore[type-abstract]
-        )
+        assert self.prefab_factory is not None and self.container is not None
         variants = load_variants(f"{PREFABS}/ground.variants.json")
-        factory = PrefabFactory(
-            self.entity_manager, registry, variants.resolver(PrefabCache().load)
+        self.prefab_factory.set_prefab_resolver(
+            variants.resolver(self.container.get(PrefabCache).load)
         )
+        table = load_spawn_table(f"{PREFABS}/ground.spawn.json")
+        for path in [PLAYER_PREFAB, *(choice.prefab for choice in table.choices)]:
+            self.prefab_factory.check_path(path)
+        return table
+
+    def _scatter_ground(self, table: SpawnTable, rng: RandomStream) -> None:
+        """Strew grass, stones and boulders over the world, most off screen."""
+        assert self.prefab_factory is not None
         points = [
             Vector2(
                 round(rng.uniform(0.0, WORLD_SIZE)), round(rng.uniform(0.0, WORLD_SIZE))
             )
             for _ in range(GROUND_DECALS)
         ]
-        table = load_spawn_table(f"{PREFABS}/ground.spawn.json")
-        factory.spawn(table, rng, count=GROUND_DECALS, positions=points)
+        self.prefab_factory.spawn(table, rng, count=GROUND_DECALS, positions=points)
 
     def _place_player(self, frames: list[Texture]) -> None:
-        """Create the calango's entity, which follows `self.player` each frame."""
-        entity = self.entity_manager.create_entity("calango")
-        entity.add_component(Transform(position=self.player.position))
-        sprite = Sprite(texture=frames[0], layer=20)
-        entity.add_component(sprite)
-        animator = Animator(sprite)
+        """Create the calango from its prefab, and animate its walk.
+
+        Its entity follows `self.player` each frame. The animator is added
+        here because it holds the loaded frames, which a prefab names only
+        one of.
+
+        Raises:
+            RuntimeError: If the calango's prefab does not load.
+        """
+        assert self.prefab_factory is not None
+        position = self.player.position
+        entity = self.prefab_factory.create_from_path(
+            PLAYER_PREFAB,
+            entity_id="calango",
+            overrides={"Transform": {"position": {"x": position.x, "y": position.y}}},
+        )
+        if entity is None:
+            raise RuntimeError(f"{PLAYER_PREFAB} did not load")
+        animator = Animator(entity.get_component(Sprite))
         add_clip(animator, AnimationClip(name="walk", frames=frames, frame_rate=6.0))
         play_clip(animator, "walk")
         entity.add_component(animator)
