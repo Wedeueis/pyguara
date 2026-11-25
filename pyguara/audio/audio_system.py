@@ -224,6 +224,30 @@ class IAudioSystem(Protocol):
         """
         ...
 
+    def duck_music(
+        self,
+        sound: SoundHandle,
+        depth: float,
+        attack_ms: int = 50,
+        release_ms: int = 500,
+    ) -> None:
+        """Dip the music while `sound` plays, and bring it back after it ends.
+
+        While several sounds duck the music, the deepest wins. A sound that
+        has already ended ducks nothing. Needs `AudioCapability.DUCKING`.
+
+        Args:
+            sound: The playing sound the music dips under.
+            depth: How far it dips: 0 not at all, 1 to silence.
+            attack_ms: How long the dip takes.
+            release_ms: How long coming back takes.
+
+        Raises:
+            UnsupportedAudioCapability: On a backend without it.
+            ValueError: If `depth` is outside 0 to 1.
+        """
+        ...
+
     def stop_music(self, fade_ms: int = 1000) -> None:
         """Stop the currently playing music.
 

@@ -153,6 +153,10 @@ impl Voice {
 
     /// Add this voice's next `out.len() / 2` frames into `out`.
     fn mix_into(&mut self, out: &mut [f32]) {
+        // A steady level folds into the gains once, rather than per frame.
+        let ramping = self.level.step != 0.0;
+        let steady = if ramping { 1.0 } else { self.level.gain };
+        let (gain_left, gain_right) = (self.gain_left * steady, self.gain_right * steady);
         for frame in out.chunks_exact_mut(2) {
             if self.cursor >= self.loop_end {
                 if self.loops == 0 {
@@ -165,13 +169,24 @@ impl Voice {
                 }
             }
             let (left, right) = self.sample_at(self.cursor);
-            let fade = match &mut self.fade {
+            let mut fade = match &mut self.fade {
                 Some(fade) => fade.next(),
                 None => 1.0,
-            } * self.level.next();
-            frame[0] += left * self.gain_left * fade;
-            frame[1] += right * self.gain_right * fade;
+            };
+            if ramping {
+                fade *= self.level.next();
+            }
+            frame[0] += left * gain_left * fade;
+            frame[1] += right * gain_right * fade;
             self.cursor += self.step;
+        }
+        if ramping && self.level.done() {
+            self.level = Fade::steady(self.level.gain);
+        }
+        // A voice whose last frame was this render's has ended now, not at
+        // the start of the next render.
+        if self.loops == 0 && self.cursor >= self.loop_end {
+            self.finished = true;
         }
         if let Some(fade) = self.fade {
             if fade.done() {
@@ -198,16 +213,59 @@ struct State {
     /// last asked for.
     music_track: u64,
     music_levels: Vec<f32>,
+    /// What ducks the music: each a playing voice, and how far and how
+    /// fast the music dips while it plays.
+    ducks: Vec<Duck>,
+    /// How far the music is dipped now: 0 not at all, 1 to silence.
+    duck: f32,
+    /// How fast the music comes back once nothing ducks it, per frame.
+    duck_release: f32,
+    /// The music's mix before the duck is applied, reused every render.
+    music_mix: Vec<f32>,
+}
+
+/// One playing voice the music dips under.
+struct Duck {
+    trigger: u64,
+    depth: f32,
+    /// The dip's rate going down and coming back, per frame.
+    attack: f32,
+    release: f32,
 }
 
 impl State {
     fn render(&mut self, out: &mut [f32]) {
         out.fill(0.0);
+        let (target, attack) = self.duck_target();
         let paused = self.paused;
-        for voice in &mut self.voices {
-            if !paused[voice.group as usize] {
-                voice.mix_into(out);
+        if target == 0.0 && self.duck == 0.0 {
+            // Nothing ducks the music: it mixes straight in.
+            for voice in &mut self.voices {
+                if !paused[voice.group as usize] {
+                    voice.mix_into(out);
+                }
             }
+        } else {
+            let mut music = std::mem::take(&mut self.music_mix);
+            music.clear();
+            music.resize(out.len(), 0.0);
+            for voice in &mut self.voices {
+                if !paused[voice.group as usize] {
+                    voice.mix_into(if voice.group == GROUP_MUSIC { &mut music } else { &mut *out });
+                }
+            }
+            // The duck moves a frame at a time, so a dip is a ramp, not a step.
+            for (frame, heard) in out.chunks_exact_mut(2).zip(music.chunks_exact(2)) {
+                if self.duck < target {
+                    self.duck = (self.duck + attack).min(target);
+                } else if self.duck > target {
+                    self.duck = (self.duck - self.duck_release).max(target);
+                }
+                let gain = 1.0 - self.duck;
+                frame[0] += heard[0] * gain;
+                frame[1] += heard[1] * gain;
+            }
+            self.music_mix = music;
         }
         self.voices.retain(|voice| !voice.finished);
         // A hard clip, as SDL's mixer has: a sum over full scale is
@@ -215,6 +273,28 @@ impl State {
         for sample in out.iter_mut() {
             *sample = sample.clamp(-1.0, 1.0);
         }
+    }
+
+    /// How far the music should be dipped, and how fast to get there.
+    ///
+    /// The deepest duck whose voice is still playing wins. A duck whose
+    /// voice has ended is dropped, and the music comes back at its release.
+    fn duck_target(&mut self) -> (f32, f32) {
+        let voices = &self.voices;
+        let mut release = self.duck_release;
+        self.ducks.retain(|duck| {
+            let playing = voices.iter().any(|voice| voice.id == duck.trigger && !voice.finished);
+            if !playing {
+                release = duck.release;
+            }
+            playing
+        });
+        self.duck_release = release;
+        self.ducks
+            .iter()
+            .fold((0.0, 1.0), |(depth, attack), duck| {
+                if duck.depth > depth { (duck.depth, duck.attack) } else { (depth, attack) }
+            })
     }
 
     fn music(&mut self) -> impl Iterator<Item = &mut Voice> {
@@ -845,6 +925,43 @@ impl NativeMixer {
         Ok(())
     }
 
+    /// Dip the music while a voice plays, and bring it back after.
+    ///
+    /// The music falls by `depth` over `attack_ms` once the voice starts and
+    /// rises back over `release_ms` once it ends. While several voices duck
+    /// it, the deepest wins. A voice that has already ended ducks nothing.
+    ///
+    /// Args:
+    ///     voice: The voice the music dips under, as `play` returned it.
+    ///     depth: How far it dips: 0 not at all, 1 to silence.
+    ///     attack_ms: How long the dip takes.
+    ///     release_ms: How long coming back takes.
+    ///
+    /// Raises:
+    ///     ValueError: If `depth` is outside 0 to 1.
+    #[pyo3(signature = (voice, depth, attack_ms=50, release_ms=500))]
+    fn duck_music(&self, voice: u64, depth: f32, attack_ms: u64, release_ms: u64) -> PyResult<()> {
+        if !(0.0..=1.0).contains(&depth) {
+            return Err(PyValueError::new_err(format!("a duck's depth must be from 0 to 1, got {depth}")));
+        }
+        let per_frame = |ms: u64| {
+            let frames = (ms * u64::from(self.rate) / 1000).max(1) as f32;
+            depth.max(f32::EPSILON) / frames
+        };
+        let (attack, release) = (per_frame(attack_ms), per_frame(release_ms));
+        let mut state = self.state();
+        if state.voices.iter().any(|v| v.id == voice) {
+            state.ducks.push(Duck { trigger: voice, depth, attack, release });
+        }
+        Ok(())
+    }
+
+    /// How far the music is dipped now: 0 not at all, 1 to silence.
+    #[getter]
+    fn music_duck(&self) -> f32 {
+        self.state().duck
+    }
+
     /// Whether a track is still being decoded to play.
     #[getter]
     fn music_decoding(&self) -> bool {
@@ -914,6 +1031,8 @@ impl NativeMixer {
             state.music_generation += 1;
             state.music_pending = false;
             state.music_levels.clear();
+            state.ducks.clear();
+            state.duck = 0.0;
         }
         if let Output::Silent { running } = &self.output {
             running.store(false, Ordering::Relaxed);

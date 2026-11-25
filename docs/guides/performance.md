@@ -1781,6 +1781,7 @@ explains a choice in the code.
 | `FlowFieldService.vector_at` in Python | 3.27 us, 97% of it four `Vector2` operations | The native path answers the whole lookup in one call |
 | The frame profiler, recording one frame (seven timestamps), 2026-11-16 | 2.2 us, against nothing when it is off | It can stay on in a shipped build: 0.013% of a 60 Hz frame |
 | The frame profiler's overlay, summarising 120 frames and laying out its rows every frame, before the summary was cached | 157 us a frame | The overlay shows one summary for 15 frames: 33 us a frame, before the renderer's own cost for the text |
+| The native mixer rendering 735 frames (one 60 Hz frame) of 32 looping voices and a music track, before and after layers and ducking, 2026-11-25 | 127 us before; 150 us with a scratch buffer and a level ramp on every frame of every voice; 135-137 us as shipped | With nothing ducking, music mixes straight into the output, and a steady layer level is folded into the voice's gains once per render. A ramp runs per frame only while it is moving |
 
 ## What the test suite guarantees
 

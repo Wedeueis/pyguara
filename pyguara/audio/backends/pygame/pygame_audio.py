@@ -545,6 +545,20 @@ class PygameAudioSystem:
         """
         require_capability(self, AudioCapability.INTERACTIVE_MUSIC)
 
+    def duck_music(
+        self,
+        sound: SoundHandle,
+        depth: float,
+        attack_ms: int = 50,
+        release_ms: int = 500,
+    ) -> None:
+        """Refuse: `pygame.mixer` has no envelope to dip the music with.
+
+        Raises:
+            UnsupportedAudioCapability: Always.
+        """
+        require_capability(self, AudioCapability.DUCKING)
+
     def stop_music(self, fade_ms: int = 1000) -> None:
         """Stop the currently playing music."""
         pygame.mixer.music.fadeout(fade_ms)

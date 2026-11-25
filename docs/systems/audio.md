@@ -95,8 +95,9 @@ MIT engine, but the wheel distributes it.
 
 ## Optional capabilities
 
-Four features cannot be expressed by every mixer: per-play **pitch**, **loop
-points** inside a clip, **DSP on a bus**, and **interactive music**.
+Five features cannot be expressed by every mixer: per-play **pitch**, **loop
+points** inside a clip, **DSP on a bus**, **interactive music** and
+**ducking**.
 `PygameAudioSystem` expresses none of them; `NativeAudioSystem` expresses all
 but bus effects. Each is
 declared through `AudioCapability` and
@@ -125,6 +126,7 @@ raise instead of returning `None`.
 | `LOOP_POINTS` | `loop_start=` / `loop_end=` | no — `Channel.play` takes a loop *count* and nothing else | yes |
 | `BUS_EFFECTS` | `set_bus_effects(bus, [...])` | no — a channel's only processing is a left/right gain pair | no — needs the device, see below |
 | `INTERACTIVE_MUSIC` | `crossfade=` on `play_music`, `play_music_layers`, `set_music_layer` | no — `mixer.music` plays one track | yes |
+| `DUCKING` | `set_sfx_ducking`, `duck_music` | no — `mixer.music` has no envelope | yes |
 
 **Loop points from a `.meta` sidecar warn instead of raising.** `AudioMeta`
 carries `loop_start` / `loop_end`, and those are the asset describing itself
@@ -181,6 +183,29 @@ audio.set_music_layer(2, 0.0, fade_ms=3000)  # and ends
   `get_current_music()` returns the first.
 - `set_music_layer` raises `IndexError` for a layer the music doesn't have,
   and `ValueError` for a level outside 0 to 1.
+
+### Ducking
+
+A boss roar, an explosion or a line of dialogue should not be buried under
+the score. Set a sound to duck the music, and it dips every time that sound
+plays:
+
+```python
+audio.set_sfx_ducking("sfx/boss_roar.wav", 0.6, attack_ms=40, release_ms=800)
+audio.play_sfx("sfx/boss_roar.wav")  # the music falls 60%, then comes back
+```
+
+- The music falls by `depth` over `attack_ms` once the sound starts, and
+  comes back over `release_ms` once it ends. The ramp runs per sample in the
+  mixer, so there is no step to hear. The release starts within one output
+  buffer of the sound's end.
+- While several sounds duck the music, the deepest wins.
+- `duck_music(handle, depth, ...)` ducks under one sound already playing.
+  `set_sfx_ducking(path, None)` stops ducking under a sound.
+- Only the music is ducked. Effects, including the one that triggered the
+  duck, are left alone.
+- Needs `AudioCapability.DUCKING`. A backend without it refuses
+  `set_sfx_ducking` when it is called, not when the sound first plays.
 
 ## Sound effects and handles
 
