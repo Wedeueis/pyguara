@@ -17,6 +17,7 @@ from typing import Any, Protocol, runtime_checkable
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.config.types import WindowConfig
 from pyguara.graphics.types import RenderBatch, ShapeBatch
+from pyguara.resources.font import Font
 from pyguara.resources.types import Texture
 
 
@@ -211,9 +212,15 @@ class ShapeRenderer(Protocol):
         ...
 
     def draw_text(
-        self, text: str, position: Vector2, color: Color, size: int = 16
+        self,
+        text: str,
+        position: Vector2,
+        color: Color,
+        size: int = 16,
+        *,
+        font: Font | None = None,
     ) -> None:
-        """Draw a text string."""
+        """Draw a text string, in `font` or the default face."""
         ...
 
 
@@ -383,7 +390,13 @@ class IRenderer(Protocol):
         ...
 
     def draw_text(
-        self, text: str, position: Vector2, color: Color, size: int = 16
+        self,
+        text: str,
+        position: Vector2,
+        color: Color,
+        size: int = 16,
+        *,
+        font: Font | None = None,
     ) -> None:
         """Draw a text string, like the other primitives, in screen space.
 
@@ -400,6 +413,7 @@ class IRenderer(Protocol):
             position (Vector2): Top-left of the text, in screen space.
             color (Color): Text color.
             size (int): Font size in pixels.
+            font (Font | None): A game's font, or None for the default face.
         """
         ...
 
@@ -613,8 +627,23 @@ class UIRenderer(Protocol):
         *,
         bold: bool = False,
         italic: bool = False,
+        font: Font | None = None,
     ) -> None:
-        """Draw text string."""
+        """Draw a text string, in `font` or the default face in a style.
+
+        Args:
+            text: The string to draw.
+            position: Top-left of the text, in screen pixels.
+            color: Text color.
+            size: Pixels per em.
+            bold: The default face's bold style. Not with `font`.
+            italic: The default face's italic style. Not with `font`.
+            font: A game's font, loaded through `ResourceManager`.
+
+        Raises:
+            ValueError: If `font` is given with `bold` or `italic`: a font
+                is one face, and that style is its own file.
+        """
         ...
 
     def draw_texture(
@@ -643,12 +672,18 @@ class UIRenderer(Protocol):
         ...
 
     def get_text_size(
-        self, text: str, size: int, *, bold: bool = False, italic: bool = False
+        self,
+        text: str,
+        size: int,
+        *,
+        bold: bool = False,
+        italic: bool = False,
+        font: Font | None = None,
     ) -> tuple[int, int]:
-        """Calculate dimensions of text in a style."""
+        """Calculate dimensions of text in a style or font, as `draw_text` takes them."""
         ...
 
-    def get_line_height(self, size: int) -> int:
+    def get_line_height(self, size: int, *, font: Font | None = None) -> int:
         """Return the step between the baselines of consecutive lines.
 
         Not the same as `get_text_size`'s height, which is how tall one line
@@ -656,6 +691,7 @@ class UIRenderer(Protocol):
 
         Args:
             size: The font size.
+            font: A game's font, or None for the default face.
 
         Returns:
             The line advance in pixels.

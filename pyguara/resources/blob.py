@@ -5,7 +5,7 @@ a fixture or any other file that should go through `ResourceManager`
 (its index, cache, reference counting and hot reload) without a
 backend.
 
-A font is not one of these: a usable font is a backend object.
+A font is not one of these: it loads as a `pyguara.resources.font.Font`.
 """
 
 from __future__ import annotations

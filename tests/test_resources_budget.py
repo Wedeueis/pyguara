@@ -318,19 +318,19 @@ def test_a_loader_can_be_given_its_own_extensions(tmp_path: Path):
 def test_a_blob_goes_through_the_whole_lifecycle(tmp_path: Path):
     """The point of putting these in the resource system at all: the index,
     the cache, the reference counting and the reload come with it."""
-    path = tmp_path / "font.ttf"
-    path.write_bytes(b"not really a font")
+    path = tmp_path / "table.bin"
+    path.write_bytes(b"one table")
     manager = ResourceManager()
     manager.register_loader(BlobLoader())
     manager.index_directory(str(tmp_path))
 
-    first = manager.load("font.ttf", BlobResource)
-    manager.acquire("font.ttf")
-    assert manager.load("font.ttf", BlobResource) is first
+    first = manager.load("table.bin", BlobResource)
+    manager.acquire("table.bin")
+    assert manager.load("table.bin", BlobResource) is first
 
-    path.write_bytes(b"a different font")
-    reloaded = manager.reload("font.ttf")
+    path.write_bytes(b"another table")
+    reloaded = manager.reload("table.bin")
 
     assert isinstance(reloaded, BlobResource)
-    assert reloaded.data == b"a different font"
-    manager.release("font.ttf")
+    assert reloaded.data == b"another table"
+    manager.release("table.bin")

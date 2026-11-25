@@ -13,6 +13,7 @@ from pyguara.graphics.backends.clipping import ClipStack
 from pyguara.graphics.backends.wgpu.frame import CIRCLE_SHRINK, GpuFrame, line_quad
 from pyguara.graphics.backends.wgpu.polygon import polygon_mesh
 from pyguara.log import get_logger
+from pyguara.resources.font import Font
 
 logger = get_logger(__name__)
 
@@ -122,11 +123,12 @@ class WgpuUIRenderer:
         *,
         bold: bool = False,
         italic: bool = False,
+        font: Font | None = None,
     ) -> None:
-        """Draw a text string."""
+        """Draw a text string, in `font` or the default face."""
         if not text or color.a == 0:
             return
-        run = self._frame.text(text, size, bold, italic)
+        run = self._frame.text(text, size, bold, italic, font)
         if run is None:
             return
         texture, width, height = run
@@ -166,15 +168,21 @@ class WgpuUIRenderer:
         )  # fmt: skip
 
     def get_text_size(
-        self, text: str, size: int, *, bold: bool = False, italic: bool = False
+        self,
+        text: str,
+        size: int,
+        *,
+        bold: bool = False,
+        italic: bool = False,
+        font: Font | None = None,
     ) -> tuple[int, int]:
         """Calculate the width and height of a string."""
-        width, height = self._frame.font(size, bold, italic).size(text)
+        width, height = self._frame.font(size, bold, italic, font).size(text)
         return (int(width), int(height))
 
-    def get_line_height(self, size: int) -> int:
+    def get_line_height(self, size: int, *, font: Font | None = None) -> int:
         """Return the font's own line advance, leading included."""
-        return int(self._frame.font(size).line_height)
+        return int(self._frame.font(size, face=font).line_height)
 
     def push_clip(self, rect: Rect) -> None:
         """Restrict drawing to `rect`, intersected with any active clip."""

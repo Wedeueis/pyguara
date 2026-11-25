@@ -16,6 +16,7 @@ from pyguara.graphics.backends.surface_blending import (
 )
 from pyguara.graphics.backends.surface_texture import as_surface, blit_texture
 from pyguara.log import get_logger
+from pyguara.resources.font import Font
 
 logger = get_logger(__name__)
 
@@ -29,27 +30,27 @@ class PygameUIRenderer:
     def __init__(self, target_surface: pygame.Surface) -> None:
         """Initialize the renderer."""
         self._surface = target_surface
-        self._font_cache: dict[tuple[int, bool, bool], FallbackFont] = {}
+        self._font_cache: dict[tuple[int, bool, bool, Font | None], FallbackFont] = {}
         self._clips = ClipStack()
         self._warned_about_clips = False
 
         if not pygame.font.get_init():
             pygame.font.init()
 
-    # ... (rest of the file remains the same, assuming other methods are correct)
-    # The previous turn's implementation was largely correct except for D205
-    # I will reprint the full file to be safe and ensure consistency.
-
     def _get_font(
-        self, size: int, bold: bool = False, italic: bool = False
+        self,
+        size: int,
+        bold: bool = False,
+        italic: bool = False,
+        font: Font | None = None,
     ) -> FallbackFont:
-        """Retrieve or create a font of the specified size and style."""
-        key = (size, bold, italic)
+        """Retrieve or create a font of the specified size, style and face."""
+        key = (size, bold, italic, font)
         if key not in self._font_cache:
-            # The engine's bundled face, in the asked-for style, so text
-            # matches the wgpu renderer, with the engine's fallback faces for
-            # what it lacks; see `pyguara.graphics.fonts`.
-            self._font_cache[key] = FallbackFont(size, bold, italic)
+            # The game's face, or the engine's bundled one in the asked-for
+            # style, so text matches the wgpu renderer, with the engine's
+            # fallback faces for what it lacks; see `pyguara.graphics.fonts`.
+            self._font_cache[key] = FallbackFont(size, bold, italic, font)
         return self._font_cache[key]
 
     def _to_pygame_color(self, color: Color) -> tuple[int, int, int, int]:
@@ -120,13 +121,14 @@ class PygameUIRenderer:
         *,
         bold: bool = False,
         italic: bool = False,
+        font: Font | None = None,
     ) -> None:
-        """Render text to the screen."""
+        """Render text to the screen, in `font` or the default face."""
         if not text:
             return
 
-        font = self._get_font(size, bold, italic)
-        texture = render_text(font, text, self._to_pygame_color(color))
+        face = self._get_font(size, bold, italic, font)
+        texture = render_text(face, text, self._to_pygame_color(color))
         self._surface.blit(texture, (int(position.x), int(position.y)))
 
     def draw_texture(
@@ -156,23 +158,29 @@ class PygameUIRenderer:
         )
 
     def get_text_size(
-        self, text: str, size: int, *, bold: bool = False, italic: bool = False
+        self,
+        text: str,
+        size: int,
+        *,
+        bold: bool = False,
+        italic: bool = False,
+        font: Font | None = None,
     ) -> tuple[int, int]:
         """Calculate the width/height of a string."""
-        font = self._get_font(size, bold, italic)
-        txt_size = font.size(text)
+        txt_size = self._get_font(size, bold, italic, font).size(text)
         return (txt_size[0], txt_size[1])
 
-    def get_line_height(self, size: int) -> int:
+    def get_line_height(self, size: int, *, font: Font | None = None) -> int:
         """Return the font's own line advance, leading included.
 
         Args:
             size: The font size.
+            font: A game's font, or None for the default face.
 
         Returns:
             The step between consecutive baselines, in pixels.
         """
-        return int(self._get_font(size).get_linesize())
+        return int(self._get_font(size, font=font).get_linesize())
 
     def push_clip(self, rect: Rect) -> None:
         """Restrict drawing to `rect`, intersected with any active clip.

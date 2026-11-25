@@ -193,18 +193,18 @@ region map raises `InvalidMetadataError` with line/column info.
 ## Files the engine does not interpret
 
 Not every asset is a texture, a sound or a parsed document. A shader is a
-string; a font file or a packed table is a pile of bytes. A game that wanted
+string; a packed table is a pile of bytes. A game that wanted
 one used to go around `ResourceManager` entirely, losing the index, the cache,
 the reference counting and the hot reload with it.
 
 ```python
 shader = manager.load("sprite.vert", TextResource).text
-font_bytes = manager.load("inter.ttf", BlobResource).data
+table = manager.load("loot.bin", BlobResource).data
 ```
 
 Both are registered by bootstrap. `TextLoader` claims the shader stages
-(`.vert`, `.frag`, `.geom`, `.comp`, `.glsl`); `BlobLoader` claims `.bin`,
-`.dat`, `.ttf` and `.otf`. Neither claims `.txt` or `.md` — a game's prose is
+(`.vert`, `.frag`, `.geom`, `.comp`, `.glsl`); `BlobLoader` claims `.bin`
+and `.dat`. Neither claims `.txt` or `.md` — a game's prose is
 content a game loads on purpose, and claiming those engine-wide would make the
 choice for it:
 
@@ -216,13 +216,28 @@ Neither claims an extension a real loader owns, either: a blob loader claiming
 `.png` would quietly win the registration race and hand a texture request a
 pile of bytes.
 
-!!! note "No font *resource* yet"
-    `BlobResource` gets a `.ttf` into the cache; it does not give you
-    something you can draw with. A usable font is a backend object (pygame's
-    `Font`, or a GL glyph atlas) and so needs a factory protocol the way a
-    texture does — and both UI renderers currently own private font caches
-    that would have to be unified first. That is a design, not a loader, and
-    it is still open on #272.
+## Fonts
+
+A `.ttf` or `.otf` loads as a `Font`, through `FontLoader`, which bootstrap
+registers. Every renderer's text calls take it:
+
+```python
+title = manager.load("fonts/Inter-Bold.ttf", Font)
+ui.draw_text("Wave 12", Vector2(16, 16), Color(255, 255, 255), 32, font=title)
+width, height = ui.get_text_size("Wave 12", 32, font=title)
+```
+
+The resource is the file's bytes, checked to be a font when it loads. Each
+renderer builds its own face at each size it is asked for and caches it
+against the `Font`, so one resource works on wgpu, pygame and headless alike.
+Characters the face lacks are drawn from the engine's fallback faces
+(`pyguara.graphics.fonts.set_fallback_fonts`), as they are for the default
+face.
+
+A `Font` is one face. Passing `bold=` or `italic=` with it raises
+`ValueError`: load the bold file as its own `Font`. The renderers would fake
+a missing style differently, so neither does. A `.ttc` collection is not
+claimed, since the pygame renderer opens only its first face.
 
 ## Packed assets: `pyguara.assets`
 

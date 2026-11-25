@@ -5,21 +5,24 @@ pygame does not say which those are. So the text is split into runs by the
 face that has each character -- the native extension reads the character
 maps, the same answer the wgpu renderer uses -- each run is rendered with
 its own `pygame.font.Font`, and the runs are set side by side on the
-default face's baseline.
+first face's baseline.
 
-With no fallbacks set, every call goes straight to the default face, so
+With no fallbacks set, every call goes straight to the first face, so
 text that needs none renders exactly as before.
 """
 
 from __future__ import annotations
 
 import io
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pygame
 
 from pyguara.graphics import fonts
 from pyguara.graphics.fonts import default_font_path
+
+if TYPE_CHECKING:
+    from pyguara.resources.font import Font
 
 __all__ = ["FallbackFont"]
 
@@ -27,23 +30,42 @@ Rgb = tuple[int, int, int] | tuple[int, int, int, int] | pygame.Color
 
 
 class FallbackFont:
-    """The default face at a size and style, with the engine's fallbacks.
+    """A face at a size and style, with the engine's fallbacks.
 
-    Answers the parts of `pygame.font.Font` the renderers use: `render`,
-    `size`, `get_height`, `get_linesize`, `get_ascent` and `get_descent`.
-    Metrics are the default face's.
+    The face is a game's `Font`, or the default face in the style asked
+    for. Answers the parts of `pygame.font.Font` the renderers use:
+    `render`, `size`, `get_height`, `get_linesize`, `get_ascent` and
+    `get_descent`. Metrics are that face's.
     """
 
-    def __init__(self, size: int, bold: bool = False, italic: bool = False) -> None:
-        """Open the default face for a size and style.
+    def __init__(
+        self,
+        size: int,
+        bold: bool = False,
+        italic: bool = False,
+        face: Font | None = None,
+    ) -> None:
+        """Open a face for a size and style.
 
         Args:
             size: Pixels per em.
-            bold: The bold face.
-            italic: The italic face.
+            bold: The bold face. Not with `face`.
+            italic: The italic face. Not with `face`.
+            face: A game's font, in place of the default face.
+
+        Raises:
+            ValueError: If `face` is given with `bold` or `italic`.
         """
+        from pyguara.resources.font import check_style
+
+        check_style(face, bold, italic)
         self._size, self._bold, self._italic = size, bold, italic
-        self.primary = pygame.font.Font(default_font_path(bold, italic), size)
+        self._face = face
+        self.primary = (
+            pygame.font.Font(default_font_path(bold, italic), size)
+            if face is None
+            else pygame.font.Font(io.BytesIO(face.data), size)
+        )
         self._generation = -1
         self._fallbacks: list[pygame.font.Font] = []
 
@@ -70,7 +92,12 @@ class FallbackFont:
         runs: list[tuple[pygame.font.Font, str]] = []
         current, start = -1, 0
         for position, face in enumerate(
-            fonts.faces_for(text, self._bold, self._italic)
+            fonts.faces_for(
+                text,
+                self._bold,
+                self._italic,
+                None if self._face is None else self._face.native_face,
+            )
         ):
             if face != current:
                 if current >= 0:
@@ -107,21 +134,21 @@ class FallbackFont:
         return surface
 
     def get_height(self) -> int:
-        """Return the default face's height."""
+        """Return the face's height."""
         return self.primary.get_height()
 
     def get_linesize(self) -> int:
-        """Return the default face's line advance."""
+        """Return the face's line advance."""
         return self.primary.get_linesize()
 
     def get_ascent(self) -> int:
-        """Return the default face's ascent."""
+        """Return the face's ascent."""
         return self.primary.get_ascent()
 
     def get_descent(self) -> int:
-        """Return the default face's descent."""
+        """Return the face's descent."""
         return self.primary.get_descent()
 
     def __getattr__(self, name: str) -> Any:
-        """Anything else is the default face's."""
+        """Anything else is the face's."""
         return getattr(self.primary, name)

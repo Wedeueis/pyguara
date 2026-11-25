@@ -11,6 +11,7 @@ from pyguara.resources.exceptions import (
     ResourceError,
     ResourceLoadError,
 )
+from pyguara.resources.font import Font, FontLoader
 from pyguara.resources.loader import IMetaAwareLoader, IResourceLoader
 from pyguara.resources.loaders.blob_loader import BlobLoader, TextLoader
 from pyguara.resources.loaders.data_loader import JsonLoader
@@ -32,6 +33,8 @@ __all__ = [
     "BlobLoader",
     "BlobResource",
     "DataResource",
+    "Font",
+    "FontLoader",
     "IMetaAwareLoader",
     "IResourceLoader",
     "InvalidMetadataError",
