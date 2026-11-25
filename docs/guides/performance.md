@@ -1201,6 +1201,31 @@ component it built, and that was 65% of a spawn. It now keeps each
 dataclass's hints and field names after the first time. A class's hints do
 not change once it is defined.
 
+### The cost of validating prefab data
+
+Making bad prefab data raise added checks to every spawn: the `Transform`
+data's keys and coordinates, `X | None` fields unwrapped to `X`, and the
+child tree checked before `create` builds anything. Then three changes won
+part of that cost back:
+
+- the unwrapped field types are cached with the rest of a class's hints;
+- the `Transform` and `Vector2` checks no longer build a set per call;
+- `create` skips the tree check for a prefab with no children and no
+  explicit id.
+
+Same probe and machine, best of five, five runs each, with the table's
+tufts and stones only (the boulder variant, added since, costs nothing
+measurable):
+
+| | 4,000 spawns |
+| --- | ---: |
+| Without validation | 212-216 ms |
+| With validation | 239-248 ms |
+| With validation, after the three changes | 222-231 ms |
+
+The rest, about 3 us a spawn, is mostly checking that each coordinate is a
+number, which is the validation itself.
+
 ## Rendering, CPU side
 
 These are the portable figures, and the surprise is where the time goes.
