@@ -123,11 +123,10 @@ class PlayerJoinedEvent(Event):
 class PlayerLeftEvent(Event):
     """Fired by `PlayerRouter` when an assigned device stops driving a player.
 
-    Currently only fires from a gamepad's `GamepadDisconnectedEvent` --
-    there is no "explicit leave" gesture (a leave-combo, say) yet, only
-    unplugging. `PlayerRouter.assign()` reassigning a device does not fire
-    this for whatever player it previously held; only a real device
-    disconnect does.
+    Fires when a gamepad is unplugged, presses the router's leave button,
+    or is taken off its slot with `PlayerRouter.release()`. Reassigning a
+    device with `PlayerRouter.assign()` does not fire it for the player
+    the device held before.
     """
 
     player: int

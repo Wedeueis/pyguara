@@ -4,6 +4,8 @@
 
 from typing import Any
 
+import pytest
+
 from pyguara.input.coop import PlayerRouter
 from pyguara.input.events import (
     GamepadButtonEvent,
@@ -405,3 +407,88 @@ def test_disconnect_during_play_stops_that_pads_actions_from_dispatching(
     manager.update()  # GamepadManager detects the unplug, fires the disconnect
 
     assert router.player_for(InputDevice.GAMEPAD, 0) is None
+
+
+# ========== PlayerRouter: leaving ==========
+
+
+def test_release_frees_the_slot_and_fires_player_left(event_dispatcher: Any) -> None:
+    router = PlayerRouter(event_dispatcher)
+    router.assign(InputDevice.GAMEPAD, 0, 1)
+    left: list[PlayerLeftEvent] = []
+    event_dispatcher.subscribe(PlayerLeftEvent, left.append)
+
+    assert router.release(InputDevice.GAMEPAD, 0) == 1
+
+    assert router.player_for(InputDevice.GAMEPAD, 0) is None
+    assert [(e.player, e.device, e.controller_id) for e in left] == [
+        (1, InputDevice.GAMEPAD, 0)
+    ]
+
+
+def test_release_of_an_unassigned_device_is_refused(event_dispatcher: Any) -> None:
+    router = PlayerRouter(event_dispatcher)
+    with pytest.raises(KeyError, match="drives no player"):
+        router.release(InputDevice.KEYBOARD)
+
+
+def test_the_leave_button_drops_an_assigned_pad_only(event_dispatcher: Any) -> None:
+    router = PlayerRouter(event_dispatcher, leave_button=GamepadButton.BACK)
+    left: list[PlayerLeftEvent] = []
+    event_dispatcher.subscribe(PlayerLeftEvent, left.append)
+    back = GamepadButtonEvent(
+        controller_id=0, button=GamepadButton.BACK, is_pressed=True
+    )
+
+    event_dispatcher.dispatch(back)
+    assert left == []
+
+    event_dispatcher.dispatch(
+        GamepadButtonEvent(controller_id=0, button=GamepadButton.START, is_pressed=True)
+    )
+    event_dispatcher.dispatch(back)
+    assert router.player_for(InputDevice.GAMEPAD, 0) is None
+    assert [e.player for e in left] == [0]
+
+
+def test_without_a_leave_button_nothing_leaves_on_a_press(
+    event_dispatcher: Any,
+) -> None:
+    router = PlayerRouter(event_dispatcher)
+    router.assign(InputDevice.GAMEPAD, 0, 0)
+    for button in GamepadButton:
+        event_dispatcher.dispatch(
+            GamepadButtonEvent(controller_id=0, button=button, is_pressed=True)
+        )
+    assert router.player_for(InputDevice.GAMEPAD, 0) == 0
+
+
+def test_the_leave_button_cannot_be_the_join_button(event_dispatcher: Any) -> None:
+    with pytest.raises(ValueError, match="join button"):
+        PlayerRouter(event_dispatcher, leave_button=GamepadButton.START)
+
+
+def test_a_player_who_leaves_holding_a_button_reads_released(
+    event_dispatcher: Any,
+) -> None:
+    router = PlayerRouter(event_dispatcher)
+    router.assign(InputDevice.GAMEPAD, 0, 1)
+    event_dispatcher.dispatch(OnActionEvent("fire", "gameplay", value=1.0, player=1))
+    assert router.is_pressed("fire", 1)
+
+    event_dispatcher.dispatch(GamepadDisconnectedEvent(controller_id=0))
+
+    assert not router.is_pressed("fire", 1)
+
+
+def test_a_player_still_driven_by_another_device_keeps_its_state(
+    event_dispatcher: Any,
+) -> None:
+    router = PlayerRouter(event_dispatcher)
+    router.assign(InputDevice.KEYBOARD, None, 0)
+    router.assign(InputDevice.GAMEPAD, 0, 0)
+    event_dispatcher.dispatch(OnActionEvent("fire", "gameplay", value=1.0, player=0))
+
+    router.release(InputDevice.GAMEPAD, 0)
+
+    assert router.is_pressed("fire", 0)

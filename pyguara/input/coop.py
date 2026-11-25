@@ -30,12 +30,15 @@ class PlayerRouter:
     Attributes:
         join_button: The gamepad button an unassigned controller presses to
             claim the next free player slot.
+        leave_button: The gamepad button an assigned controller presses to
+            give its slot up, or None for no leave button.
     """
 
     def __init__(
         self,
         dispatcher: EventDispatcher,
         join_button: GamepadButton = GamepadButton.START,
+        leave_button: GamepadButton | None = None,
     ) -> None:
         """Subscribe to the events this router needs to stay current.
 
@@ -45,9 +48,16 @@ class PlayerRouter:
                 for join/leave, and `OnActionEvent` to track per-player
                 action state for `is_pressed()`/`value_for()`.
             join_button: See `join_button` attribute.
+            leave_button: See `leave_button` attribute.
+
+        Raises:
+            ValueError: If `leave_button` is `join_button`.
         """
+        if leave_button is not None and leave_button == join_button:
+            raise ValueError("the leave button cannot also be the join button")
         self._dispatcher = dispatcher
         self.join_button = join_button
+        self.leave_button = leave_button
         self._device_to_player: dict[DeviceKey, int] = {}
         self._action_state: dict[tuple[int, str], float] = {}
 
@@ -82,6 +92,28 @@ class PlayerRouter:
             )
         )
 
+    def release(self, device: InputDevice, controller_id: int | None = None) -> int:
+        """Take a device off its player slot, as when that player drops out.
+
+        Fires `PlayerLeftEvent`. The player's action state is cleared once
+        no device drives it, so `is_pressed` reads False for a player who
+        left holding a button.
+
+        Args:
+            device: The device type.
+            controller_id: The gamepad's slot, or None for keyboard/mouse.
+
+        Returns:
+            The player slot the device held.
+
+        Raises:
+            KeyError: If the device drives no player.
+        """
+        key: DeviceKey = (device, controller_id)
+        if key not in self._device_to_player:
+            raise KeyError(f"{device.name} {controller_id} drives no player")
+        return self._leave(key)
+
     def player_for(
         self, device: InputDevice, controller_id: int | None = None
     ) -> int | None:
@@ -104,28 +136,38 @@ class PlayerRouter:
             candidate += 1
         return candidate
 
+    def _leave(self, key: DeviceKey) -> int:
+        """Free the slot an assigned device holds and announce it."""
+        player = self._device_to_player.pop(key)
+        if player not in self._device_to_player.values():
+            self._action_state = {
+                k: v for k, v in self._action_state.items() if k[0] != player
+            }
+        self._dispatcher.dispatch(
+            PlayerLeftEvent(
+                player=player, device=key[0], controller_id=key[1], source=self
+            )
+        )
+        return player
+
     def _on_gamepad_button(self, event: GamepadButtonEvent) -> None:
-        """Claim the next free player slot when an unassigned pad presses join."""
-        if event.button != self.join_button or not event.is_pressed:
+        """Join an unassigned pad on the join button; leave on the leave button."""
+        if not event.is_pressed:
             return
         key: DeviceKey = (InputDevice.GAMEPAD, event.controller_id)
-        if key in self._device_to_player:
-            return
-        self.assign(InputDevice.GAMEPAD, event.controller_id, self._next_free_player())
+        assigned = key in self._device_to_player
+        if event.button == self.join_button and not assigned:
+            self.assign(
+                InputDevice.GAMEPAD, event.controller_id, self._next_free_player()
+            )
+        elif event.button == self.leave_button and assigned:
+            self._leave(key)
 
     def _on_gamepad_disconnected(self, event: GamepadDisconnectedEvent) -> None:
         """Free the player slot a disconnected controller held, if any."""
         key: DeviceKey = (InputDevice.GAMEPAD, event.controller_id)
-        player = self._device_to_player.pop(key, None)
-        if player is not None:
-            self._dispatcher.dispatch(
-                PlayerLeftEvent(
-                    player=player,
-                    device=InputDevice.GAMEPAD,
-                    controller_id=event.controller_id,
-                    source=self,
-                )
-            )
+        if key in self._device_to_player:
+            self._leave(key)
 
     def _on_action(self, event: OnActionEvent) -> None:
         """Track the last value dispatched for each (player, action) pair."""

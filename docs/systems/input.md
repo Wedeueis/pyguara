@@ -142,6 +142,33 @@ with no window of its own sees nothing, and on Windows the focused terminal
 takes the input instead (Windows Terminal switches tabs on the bumpers). Open
 a window and keep it focused while probing a pad.
 
+## Local co-op
+
+A `PlayerRouter` decides which local player each device drives. Given one,
+`InputManager` stamps every `OnActionEvent` with that player, and drops
+input from a device with no player, so a second pad does nothing until it
+joins.
+
+```python
+from pyguara.input import GamepadButton, InputDevice, PlayerRouter
+
+router = PlayerRouter(dispatcher, leave_button=GamepadButton.BACK)
+input_manager = InputManager(dispatcher, backend, player_router=router)
+router.assign(InputDevice.KEYBOARD, None, 0)   # keyboard plays as player 0
+```
+
+| Way in or out | What happens |
+| --- | --- |
+| `assign(device, controller_id, player)` | the device drives that player; `PlayerJoinedEvent` |
+| an unassigned pad presses `join_button` (Start) | it takes the lowest free slot; `PlayerJoinedEvent` |
+| an assigned pad presses `leave_button` (none by default) | its slot is freed; `PlayerLeftEvent` |
+| `release(device, controller_id)` | the same, from code; raises `KeyError` for a device with no player |
+| a pad is unplugged | the same |
+
+`router.is_pressed(action, player)` and `value_for(action, player)` read
+each player's last action values. A player who leaves reads as released,
+unless another device still drives them.
+
 ## Rebinding and persistence
 
 `KeyBindingManager` supports runtime rebinding with conflict handling and
