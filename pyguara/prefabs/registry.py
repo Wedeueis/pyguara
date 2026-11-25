@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import dataclasses
 import enum
+import sys
+import types
 from collections.abc import Callable
-from typing import Any, get_type_hints
+from typing import Any, NamedTuple, Union, get_args, get_origin, get_type_hints
 
 from pyguara.common.modifiers import ModifiableValue
-from pyguara.common.types import Vector2
+from pyguara.common.types import Color, Vector2
 from pyguara.ecs.component import Component
 from pyguara.log import get_logger
 
@@ -38,11 +40,8 @@ class ComponentRegistry:
         """Initialize an empty registry."""
         self._components: dict[str, type[Component]] = {}
         self._deserializers: dict[str, Callable[[dict[str, Any]], Any]] = {}
-        self._field_cache: dict[type, tuple[dict[str, Any], frozenset[str]]] = {}
-        self._type_converters: dict[type, Callable[[Any], Any]] = {
-            Vector2: self._convert_vector2,
-            ModifiableValue: self._convert_modifiable,
-        }
+        self._field_cache: dict[type, _Fields] = {}
+        self._type_converters: dict[type, Callable[[Any], Any]] = self._builtins()
         # Register built-in deserializers for special components
         self._register_builtin_deserializers()
 
@@ -164,7 +163,15 @@ class ComponentRegistry:
         # Fallback: try direct instantiation
         return component_type(**data)
 
-    def _fields_of(self, cls: type[Component]) -> tuple[dict[str, Any], frozenset[str]]:
+    def _builtins(self) -> dict[type, Callable[[Any], Any]]:
+        """Return the type converters every registry starts with."""
+        return {
+            Vector2: _convert_vector2,
+            Color: _convert_color,
+            ModifiableValue: self._convert_modifiable,
+        }
+
+    def _fields_of(self, cls: type[Component]) -> _Fields:
         """A dataclass's type hints and assignable field names, worked out once.
 
         Resolving type hints evaluates every annotation, which costs far
@@ -172,16 +179,13 @@ class ComponentRegistry:
         """
         known = self._field_cache.get(cls)
         if known is None:
-            try:
-                hints = get_type_hints(cls)
-            except Exception:
-                hints = {}
+            hints, unresolved = _resolve_hints(cls)
             assignable = frozenset(
                 f.name
                 for f in dataclasses.fields(cls)  # type: ignore[arg-type]
                 if not f.name.startswith("_")
             )
-            known = (hints, assignable)
+            known = _Fields(hints, assignable, unresolved)
             self._field_cache[cls] = known
         return known
 
@@ -203,7 +207,7 @@ class ComponentRegistry:
             ValueError: If `data` names a field the component does not have.
         """
         converted_data: dict[str, Any] = {}
-        hints, assignable = self._fields_of(cls)
+        hints, assignable, unresolved = self._fields_of(cls)
 
         # A key that matches no field is an authoring mistake (a typo, a
         # renamed field, wrong component). Dropping it silently would hide
@@ -223,38 +227,42 @@ class ComponentRegistry:
                 continue
 
             if field_name in data:
+                if field_name in unresolved:
+                    raise ValueError(
+                        f"{cls.__name__}.{field_name} cannot be set from data: its "
+                        f"type annotation does not resolve "
+                        f"({unresolved[field_name]})"
+                    )
                 value = data[field_name]
-                field_type = hints.get(field_name, dc_field.type)
-                converted_data[field_name] = self._convert_value(value, field_type)
+                converted_data[field_name] = self._convert_value(
+                    value, hints[field_name]
+                )
 
         return cls(**converted_data)
 
     def _convert_value(self, value: Any, target_type: Any) -> Any:
         """Convert a value to the target type.
 
+        A field typed `X | None` converts through `X`. A type with no
+        converter takes the value as it is.
+
         Args:
             value: Raw value from serialized data.
-            target_type: Expected type.
+            target_type: The field's resolved type.
 
         Returns:
             Converted value.
         """
-        # None passthrough
         if value is None:
             return None
 
-        # Check for registered converter
+        if get_origin(target_type) in (Union, types.UnionType):
+            members = [t for t in get_args(target_type) if t is not type(None)]
+            if len(members) == 1:
+                target_type = members[0]
+
         if target_type in self._type_converters:
             return self._type_converters[target_type](value)
-
-        # Handle Optional types
-        origin = getattr(target_type, "__origin__", None)
-        if origin is type(None):
-            return value
-
-        # Handle dict that looks like Vector2
-        if isinstance(value, dict) and "x" in value and "y" in value:
-            return Vector2(value["x"], value["y"])
 
         # Handle enums: accept a member name (case-insensitive) or a raw value.
         if isinstance(target_type, type) and issubclass(target_type, enum.Enum):
@@ -315,21 +323,6 @@ class ComponentRegistry:
 
         return enum_type(value)
 
-    def _convert_vector2(self, value: Any) -> Vector2:
-        """Convert data to Vector2.
-
-        Args:
-            value: Dict with x/y or Vector2 instance.
-
-        Returns:
-            Vector2 instance.
-        """
-        if isinstance(value, Vector2):
-            return value
-        if isinstance(value, dict):
-            return Vector2(value.get("x", 0), value.get("y", 0))
-        return Vector2(0, 0)
-
     def _register_builtin_deserializers(self) -> None:
         """Register deserializers for built-in components."""
         # Transform has a custom __init__ and needs special handling
@@ -343,19 +336,33 @@ class ComponentRegistry:
 
         Returns:
             Transform component instance.
+
+        Raises:
+            ValueError: If `data` names a field Transform does not have, or
+                a field's value is not of its type.
         """
         from pyguara.common.components import Transform
 
+        unknown = set(data) - _TRANSFORM_FIELDS
+        if unknown:
+            raise ValueError(
+                f"Transform has no field(s) {sorted(unknown)}; "
+                f"valid fields: {sorted(_TRANSFORM_FIELDS)}"
+            )
         position = None
         rotation = 0.0
         scale = None
 
         if "position" in data:
-            position = self._convert_vector2(data["position"])
+            position = _convert_vector2(data["position"])
         if "rotation" in data:
+            if not _is_number(data["rotation"]):
+                raise ValueError(
+                    f"Transform.rotation is a number, not {data['rotation']!r}"
+                )
             rotation = float(data["rotation"])
         if "scale" in data:
-            scale = self._convert_vector2(data["scale"])
+            scale = _convert_vector2(data["scale"])
 
         transform = Transform(position=position, rotation=rotation, scale=scale)
         # Not a constructor argument, so it has to be assigned after. Omitting
@@ -363,7 +370,12 @@ class ComponentRegistry:
         # visibly juddered at any frame rate above the fixed tick --
         # `PhysicsSystem` sets this on every body it creates.
         if "interpolate" in data:
-            transform.interpolate = bool(data["interpolate"])
+            if not isinstance(data["interpolate"], bool):
+                raise ValueError(
+                    f"Transform.interpolate is true or false, "
+                    f"not {data['interpolate']!r}"
+                )
+            transform.interpolate = data["interpolate"]
         return transform
 
     def list_components(self) -> list[str]:
@@ -378,8 +390,9 @@ class ComponentRegistry:
         """Clear user registrations, restoring the registry's built-in state.
 
         Removes every component type and custom deserializer/type converter
-        added since construction, then re-seeds the built-ins (the ``Vector2``
-        type converter and the ``Transform`` deserializer). Without the
+        added since construction, then re-seeds the built-ins (the ``Vector2``,
+        ``Color`` and ``ModifiableValue`` converters and the ``Transform``
+        deserializer). Without the
         re-seed, a cleared registry could no longer round-trip ``Transform`` —
         it has a custom ``__init__`` and is not a dataclass, so the generic
         instantiation path cannot build it from raw dict data.
@@ -387,11 +400,106 @@ class ComponentRegistry:
         self._components.clear()
         self._deserializers.clear()
         self._field_cache.clear()
-        self._type_converters = {
-            Vector2: self._convert_vector2,
-            ModifiableValue: self._convert_modifiable,
-        }
+        self._type_converters = self._builtins()
         self._register_builtin_deserializers()
+
+
+_TRANSFORM_FIELDS = frozenset({"position", "rotation", "scale", "interpolate"})
+
+
+class _Fields(NamedTuple):
+    """What the registry needs to know about a dataclass's fields."""
+
+    hints: dict[str, Any]
+    assignable: frozenset[str]
+    unresolved: dict[str, str]
+
+
+def _resolve_hints(cls: type) -> tuple[dict[str, Any], dict[str, str]]:
+    """Resolve a dataclass's field types, field by field if need be.
+
+    An annotation naming a type imported only for type checking cannot be
+    resolved at run time. Only that field is left out: its name maps, in
+    the second result, to why it did not resolve.
+    """
+    fields = dataclasses.fields(cls)
+    try:
+        hints = get_type_hints(cls)
+    except (NameError, TypeError):
+        pass
+    else:
+        return {f.name: hints.get(f.name, f.type) for f in fields}, {}
+    resolved: dict[str, Any] = {}
+    unresolved: dict[str, str] = {}
+    for f in fields:
+        owner = next(
+            k for k in cls.__mro__ if f.name in getattr(k, "__annotations__", {})
+        )
+        annotation = owner.__annotations__[f.name]
+        if not isinstance(annotation, str):
+            resolved[f.name] = annotation
+            continue
+        namespace = vars(sys.modules[owner.__module__])
+        try:
+            # What `get_type_hints` does for the whole class, one field at a
+            # time, on annotations from the engine's or the game's own code.
+            resolved[f.name] = eval(annotation, namespace, dict(vars(owner)))  # noqa: S307
+        except (NameError, TypeError) as error:
+            unresolved[f.name] = str(error)
+    return resolved, unresolved
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def _convert_vector2(value: Any) -> Vector2:
+    """Build a `Vector2` from `{"x": .., "y": ..}` or `[x, y]`.
+
+    Raises:
+        ValueError: If the data is neither, or a coordinate is not a number.
+    """
+    if isinstance(value, Vector2):
+        return value
+    if isinstance(value, dict) and set(value) == {"x", "y"}:
+        x, y = value["x"], value["y"]
+    elif isinstance(value, list | tuple) and len(value) == 2:
+        x, y = value
+    else:
+        raise ValueError(f'a Vector2 is {{"x": .., "y": ..}} or [x, y], not {value!r}')
+    if not (_is_number(x) and _is_number(y)):
+        raise ValueError(f"a Vector2's coordinates are numbers, not {value!r}")
+    return Vector2(x, y)
+
+
+def _convert_color(value: Any) -> Color:
+    """Build a `Color` from a dict, a list of 3 or 4 channels, or hex.
+
+    Raises:
+        ValueError: If the data is none of those, or a channel is not a
+            number.
+    """
+    if isinstance(value, Color):
+        return value
+    if isinstance(value, str):
+        return Color.from_hex(value)
+    if isinstance(value, dict) and {"r", "g", "b"} <= set(value) <= {
+        "r",
+        "g",
+        "b",
+        "a",
+    }:
+        channels = [value[k] for k in ("r", "g", "b", "a") if k in value]
+    elif isinstance(value, list | tuple) and len(value) in (3, 4):
+        channels = list(value)
+    else:
+        raise ValueError(
+            f'a Color is {{"r", "g", "b"[, "a"]}}, [r, g, b(, a)] or "#rrggbb", '
+            f"not {value!r}"
+        )
+    if not all(_is_number(channel) for channel in channels):
+        raise ValueError(f"a Color's channels are numbers, not {value!r}")
+    return Color(*channels)
 
 
 # Global registry instance

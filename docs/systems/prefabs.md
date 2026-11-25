@@ -43,14 +43,25 @@ entity = self.prefab_factory.create(goblin)
 
 `registry.create(name, data)` builds one component:
 
-- **Dataclass components** are filled field by field. `{"x": ..., "y": ...}`
-  dicts become `Vector2`; an `Enum` field accepts a member name
-  (case-insensitive) or a raw member value.
+- **Dataclass components** are filled field by field, converting by the
+  field's type. A field typed `X | None` converts as `X`.
+  - **`Vector2`:** `{"x": ..., "y": ...}` or `[x, y]`.
+  - **`Color`:** `{"r", "g", "b"}` with an optional `"a"`, `[r, g, b]` or
+    `[r, g, b, a]`, or `"#rrggbb"` / `"#rrggbbaa"`.
+  - **`Enum`:** a member name (case-insensitive) or a raw member value.
+  - **Anything else** is taken as written.
+- **Data that does not fit its type raises `ValueError`**, naming the type:
+  a vector missing `"y"`, a colour with two channels, a channel that is a
+  string. Nothing falls back to zero or keeps the raw dict.
+- **A field whose annotation names a type imported only for type
+  checking** cannot be converted. Its other fields still work, and data
+  that sets it raises, naming the field.
 - **A key that matches no field raises `ValueError`.** A typo in a prefab
   (`"colour"` for `"color"`) is an authoring error, caught at instantiation
   rather than surfacing later as a missing value.
 - **`Transform`** has a custom `__init__` and is not a dataclass, so it goes
-  through a built-in deserializer. `clear()` wipes user registrations and
+  through a built-in deserializer, which holds its four fields to the same
+  rules. `clear()` wipes user registrations and
   **re-seeds the built-ins**, so a cleared registry can still round-trip
   `Transform` once it is re-registered.
 
