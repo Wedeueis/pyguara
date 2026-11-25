@@ -16,6 +16,7 @@ from pyguara.graphics.backends.surface_blending import (
     render_text,
 )
 from pyguara.graphics.types import RenderBatch
+from pyguara.resources.font import Font
 from pyguara.resources.types import Texture
 
 
@@ -49,7 +50,7 @@ class PygameBackend:
     def __init__(self, window_surface: pygame.Surface):
         """Initialize the backend with a target surface."""
         self._screen = window_surface
-        self._font_cache: dict[int, FallbackFont] = {}
+        self._font_cache: dict[tuple[int, Font | None], FallbackFont] = {}
         if not pygame.font.get_init():
             pygame.font.init()
 
@@ -272,24 +273,31 @@ class PygameBackend:
             width,
         )
 
-    def _get_font(self, size: int) -> FallbackFont:
-        """Retrieve or create a font of the given size."""
-        if size not in self._font_cache:
-            # The engine's bundled face, so text matches the wgpu renderer
-            # and every platform, with the engine's fallback faces for what
-            # it lacks; see `pyguara.graphics.fonts`.
-            self._font_cache[size] = FallbackFont(size)
-        return self._font_cache[size]
+    def _get_font(self, size: int, font: Font | None) -> FallbackFont:
+        """Retrieve or create a font of the given size and face."""
+        key = (size, font)
+        if key not in self._font_cache:
+            # The game's face or the engine's bundled one, so text matches
+            # the wgpu renderer and every platform, with the engine's
+            # fallback faces for what it lacks; see `pyguara.graphics.fonts`.
+            self._font_cache[key] = FallbackFont(size, face=font)
+        return self._font_cache[key]
 
     def draw_text(
-        self, text: str, position: Vector2, color: Color, size: int = 16
+        self,
+        text: str,
+        position: Vector2,
+        color: Color,
+        size: int = 16,
+        *,
+        font: Font | None = None,
     ) -> None:
         """Draw a text string, in screen space (see `IRenderer.draw_text`)."""
         if not text:
             return
         if color.a == 0:
             return
-        surf = render_text(self._get_font(size), text, _rgba(color))
+        surf = render_text(self._get_font(size, font), text, _rgba(color))
         self._screen.blit(surf, (int(position.x), int(position.y)))
 
     def resize(self, width: int, height: int) -> None:

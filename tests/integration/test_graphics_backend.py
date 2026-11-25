@@ -101,11 +101,11 @@ def test_draw_text_reuses_a_cached_font_for_the_same_size(
     renderer: PygameBackend,
 ) -> None:
     renderer.draw_text("a", Vector2(0, 0), Color(255, 255, 255), size=20)
-    first_font = renderer._font_cache[20]
+    first_font = renderer._font_cache[(20, None)]
 
     renderer.draw_text("b", Vector2(0, 0), Color(255, 255, 255), size=20)
 
-    assert renderer._font_cache[20] is first_font
+    assert renderer._font_cache[(20, None)] is first_font
 
 
 class MockTexture(Texture):

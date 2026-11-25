@@ -17,12 +17,15 @@ import math
 import sys
 import weakref
 from collections import OrderedDict
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pyguara import native
 from pyguara.graphics import fonts
 from pyguara.graphics.backends.wgpu.textures import ImageTexture
 from pyguara.log import get_logger
+
+if TYPE_CHECKING:
+    from pyguara.resources.font import Font
 
 logger = get_logger(__name__)
 
@@ -30,7 +33,7 @@ logger = get_logger(__name__)
 # full of damage numbers, each a different value, is a few hundred.
 TEXT_CACHE_LIMIT = 1024
 
-FontKey = tuple[int, bool, bool]
+FontKey = tuple[int, bool, bool, "Font | None"]
 """Size, bold, italic."""
 
 GlyphRun = tuple[int, int, int]
@@ -196,18 +199,33 @@ class GpuFrame:
 
     # -- fonts and text ----------------------------------------------------
 
-    def font(self, size: int, bold: bool = False, italic: bool = False) -> Any:
-        """Return the `NativeFont` for a size and style, made once.
+    def font(
+        self,
+        size: int,
+        bold: bool = False,
+        italic: bool = False,
+        face: Font | None = None,
+    ) -> Any:
+        """Return the `NativeFont` for a size, style and face, made once.
 
-        The engine's default face (`pyguara.graphics.fonts`), hinted and
-        rasterised in Rust; see `rust/src/text.rs` for how it follows
-        FreeType and SDL_ttf.
+        A game's `Font`, or the engine's default face
+        (`pyguara.graphics.fonts`), hinted and rasterised in Rust; see
+        `rust/src/text.rs` for how it follows FreeType and SDL_ttf.
+
+        Raises:
+            ValueError: If `face` is given with `bold` or `italic`.
         """
         self._follow_fallbacks()
-        key = (size, bold, italic)
+        key = (size, bold, italic, face)
         font = self._fonts.get(key)
         if font is None:
-            font = self._extension.NativeFont(max(1, size), bold, italic)
+            if face is None:
+                font = self._extension.NativeFont(max(1, size), bold, italic)
+            else:
+                from pyguara.resources.font import check_style
+
+                check_style(face, bold, italic)
+                font = self._extension.NativeFont.from_bytes(face.data, max(1, size))
             faces = fonts.native_fallback_faces()
             if faces:
                 font.set_fallbacks(faces)
@@ -230,7 +248,12 @@ class GpuFrame:
         self._text.clear()
 
     def text(
-        self, text: str, size: int, bold: bool = False, italic: bool = False
+        self,
+        text: str,
+        size: int,
+        bold: bool = False,
+        italic: bool = False,
+        face: Font | None = None,
     ) -> GlyphRun | None:
         """Return the texture holding a string, rasterising it if new.
 
@@ -239,18 +262,19 @@ class GpuFrame:
             size: Font size.
             bold: Bold style.
             italic: Italic style.
+            face: A game's font, or None for the default face.
 
         Returns:
             `(texture, width, height)`, or None for a string with no
             pixels -- empty, or all of it zero-width.
         """
         self._follow_fallbacks()
-        key = ((size, bold, italic), text)
+        key = ((size, bold, italic, face), text)
         found = self._text.get(key)
         if found is not None:
             self._text.move_to_end(key)
             return found
-        pixels, width, height = self.font(size, bold, italic).render(text)
+        pixels, width, height = self.font(size, bold, italic, face).render(text)
         if width == 0 or height == 0:
             return None
         texture = self.gpu.create_texture(width, height, pixels)

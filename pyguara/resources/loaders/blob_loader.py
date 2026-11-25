@@ -17,14 +17,15 @@ TEXT_EXTENSIONS = SHADER_EXTENSIONS
 
 # Nothing image-, audio- or data-shaped: those have loaders that know what
 # the bytes mean, and a blob loader claiming ".png" would quietly win the
-# registration race and hand a texture request a pile of bytes.
-BLOB_EXTENSIONS = (".bin", ".dat", ".ttf", ".otf")
+# registration race and hand a texture request a pile of bytes. Fonts have
+# their own loader too, `pyguara.resources.font.FontLoader`.
+BLOB_EXTENSIONS = (".bin", ".dat")
 
 
 class BlobLoader:
     """Reads a file as bytes, interpreting nothing.
 
-    What a font file, a binary fixture or a packed table needs to get into
+    What a binary fixture or a packed table needs to get into
     the cache. The bytes are the resource; turning them into something
     useful is the caller's business.
     """

@@ -20,6 +20,7 @@ from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.backends.wgpu.frame import CIRCLE_SHRINK, GpuFrame, line_quad
 from pyguara.graphics.types import RenderBatch, ShapeBatch
 from pyguara.log import get_logger
+from pyguara.resources.font import Font
 from pyguara.resources.types import Texture
 
 logger = get_logger(__name__)
@@ -160,12 +161,18 @@ class WgpuRenderer:
         self._gpu.lines(as_rows(rows, LINE_COLUMNS).tobytes())
 
     def draw_text(
-        self, text: str, position: Vector2, color: Color, size: int = 16
+        self,
+        text: str,
+        position: Vector2,
+        color: Color,
+        size: int = 16,
+        *,
+        font: Font | None = None,
     ) -> None:
         """Draw a text string, in screen space (see `IRenderer.draw_text`)."""
         if not text or color.a == 0:
             return
-        run = self._frame.text(text, size)
+        run = self._frame.text(text, size, face=font)
         if run is None:
             return
         texture, width, height = run

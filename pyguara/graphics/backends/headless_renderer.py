@@ -18,6 +18,7 @@ from pyguara.config.types import WindowConfig
 from pyguara.graphics.backends.clipping import ClipStack
 from pyguara.graphics.types import RenderBatch
 from pyguara.log import get_logger
+from pyguara.resources.font import Font, check_style
 from pyguara.resources.types import Texture
 
 logger = get_logger(__name__)
@@ -190,7 +191,13 @@ class HeadlessBackend:
         ...
 
     def draw_text(
-        self, text: str, position: Vector2, color: Color, size: int = 16
+        self,
+        text: str,
+        position: Vector2,
+        color: Color,
+        size: int = 16,
+        *,
+        font: Font | None = None,
     ) -> None:
         """No-op: discard the draw call."""
         ...
@@ -285,9 +292,14 @@ class HeadlessUIRenderer:
         *,
         bold: bool = False,
         italic: bool = False,
+        font: Font | None = None,
     ) -> None:
-        """No-op: discard the draw call."""
-        ...
+        """Discard the draw call, refusing a style `font` does not have.
+
+        Raises:
+            ValueError: If `font` is given with `bold` or `italic`.
+        """
+        check_style(font, bold, italic)
 
     def draw_texture(
         self,
@@ -300,16 +312,28 @@ class HeadlessUIRenderer:
         ...
 
     def get_text_size(
-        self, text: str, size: int, *, bold: bool = False, italic: bool = False
+        self,
+        text: str,
+        size: int,
+        *,
+        bold: bool = False,
+        italic: bool = False,
+        font: Font | None = None,
     ) -> tuple[int, int]:
-        """Return a zero size: no text is ever actually measured/rendered."""
+        """Return a zero size: no text is ever actually measured/rendered.
+
+        Raises:
+            ValueError: If `font` is given with `bold` or `italic`.
+        """
+        check_style(font, bold, italic)
         return (0, 0)
 
-    def get_line_height(self, size: int) -> int:
+    def get_line_height(self, size: int, *, font: Font | None = None) -> int:
         """Return zero: no text is ever actually laid out.
 
         Args:
             size: The font size. Ignored.
+            font: The font. Ignored.
 
         Returns:
             Always 0, matching `get_text_size`.

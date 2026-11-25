@@ -116,12 +116,15 @@ def native_fallback_faces() -> list[Any]:
     return list(_native_faces)
 
 
-def faces_for(text: str, bold: bool = False, italic: bool = False) -> list[int]:
-    """For each character, which face draws it: 0 the default, then each fallback.
+def faces_for(
+    text: str, bold: bool = False, italic: bool = False, primary: Any | None = None
+) -> list[int]:
+    """For each character, which face draws it: 0 the first, then each fallback.
 
-    A character no face has gets 0, the default face's missing-glyph box.
-    Without the native extension, which reads the faces' character maps,
-    every character gets 0 and a warning is logged once.
+    The first face is `primary`, a `NativeFace`, or the default face in the
+    style asked for. A character no face has gets 0, the first face's
+    missing-glyph box. Without the native extension, which reads the faces'
+    character maps, every character gets 0 and a warning is logged once.
     """
     if not _fallbacks:
         return [0] * len(text)
@@ -129,7 +132,10 @@ def faces_for(text: str, bold: bool = False, italic: bool = False) -> list[int]:
     if extension is None:
         _warn_without_extension()
         return [0] * len(text)
-    coverage = [extension.NativeFace.default(bold, italic).covers(text)]
+    first = (
+        primary if primary is not None else extension.NativeFace.default(bold, italic)
+    )
+    coverage = [first.covers(text)]
     coverage += [face.covers(text) for face in native_fallback_faces()]
     chosen = []
     for position in range(len(text)):
